@@ -46,7 +46,7 @@ documentation:
       target: null
       timeout-ms: null
       source: |-
-        [terrane-dependencies.http-server]
+        [terrane-dependencies.streaky/http-server]
         path = "../http-server"
 
         [profile]

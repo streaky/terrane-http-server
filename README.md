@@ -1,30 +1,24 @@
 # HTTP Server
 
-`http-server` is a Terrane-native application server for dynamic web applications and static content. Axum, Tower HTTP, and Tokio are implementation details; applications use only Terrane classes, interfaces, and functions.
+`streaky/http-server` is a Terrane-native application server for dynamic web applications and static content. Axum, Tower HTTP, and Tokio are implementation details; applications use only Terrane classes, interfaces, and functions.
 
 ## Documentation
 
 The [documentation publication](docs/src/manual.yaml) contains the [general documentation](docs/src/records/guides/introduction.yaml), a complete public API reference, and a [getting-started tutorial](docs/src/records/tutorials/first-server.yaml). These are YAML sources in the shared Terrane manual format; prose, declarations, code, and data examples retain their typed structure rather than being flattened into Markdown.
 
-The [annotation guide](docs/src/records/guides/annotations.yaml) describes the package's
-explicit native Terrane consumer. `endpoint`, `path`, `query`, and `body` metadata generate
-class-based route adapters, typed scalar and model-body extraction, JSON or HTML responses,
-and OpenAPI 3.1 JSON. `route-group` supplies a class mount prefix and controls schema
-inclusion; repeatable `static-directory` metadata mounts cwd-relative assets. Signatures
-determine types and query defaults; malformed inputs return 422.
+The [annotation guide](docs/src/records/guides/annotations.yaml) describes the package's explicit native Terrane consumer. `endpoint`, `path`, `query`, and `body` metadata generate class-based route adapters, typed scalar and model-body extraction, JSON or HTML responses, and OpenAPI 3.1 JSON. `route-group` supplies a class mount prefix and controls schema inclusion; repeatable `static-directory` metadata mounts cwd-relative assets. Signatures determine types and query defaults; malformed inputs return 422. Ordinary safe async handlers may throw `throwable`; handler and render failures return HTTP 500.
 
-The [catalog demo](demo/README.md) exercises these capabilities with typed catalog models,
-HTML pages, static Stoplight Elements docs, and a prefixed `/api` with OpenAPI at
-`/api/openapi.json`. Build the consumer first with
-`sh packages/http-server/build-consumer.sh`, then build or run the demo through Terrane.
+The [catalog demo](demo/README.md) exercises these capabilities with typed catalog models, AOT template-backed HTML pages, static Stoplight Elements docs, and a prefixed `/api` with OpenAPI at `/api/openapi.json`. Build both native consumers first with `sh packages/http-server/build-consumer.sh`, then build or run the demo through Terrane.
 
 ## Application model
 
 Create an application with `create-application`, add controllers with `application.mount`, add static content with `application.static-directory`, optionally replace the listen address with `application.with-address`, and start it with `application.serve`.
 
-A controller implements `controller.routes`. The framework passes that callback a `routes` value scoped to the controller's mount prefix. The callback registers relative handlers with `routes.get` and returns the routes. Handlers are ordinary reusable Terrane asynchronous functions returning `string`. Use a distinct parameter name such as `registered-routes` to avoid shadowing the `routes` type.
+A controller implements `controller.routes`. The framework passes that callback a `routes` value scoped to the controller's mount prefix. The callback registers relative handlers with `routes.get` and returns the routes. Handlers are ordinary reusable Terrane asynchronous functions returning `string`; safe handlers may declare `throws throwable`, which becomes HTTP 500 on failure. Use a distinct parameter name such as `registered-routes` to avoid shadowing the `routes` type.
 
 For handlers that need client identity, `routes.get-with-client` accepts an asynchronous function from `client-info` to `string`. `client-info.peer-ip` returns the TCP peer and `client-info.client-ip` returns the resolved client address, each as projected `ip-addr|none` (`IpAddr` imported with a kebab-case alias). Identity is resolved independently of the client allowlist, so logging does not require configuring that list.
+
+`routes.endpoint` accepts an asynchronous `http-request` to `http-response` callback with a `throws throwable` bound. Path, query, and body conversion failures are input errors and return HTTP 422 before the callback runs. Handler failures, including template-render failures, propagate to the HTTP boundary and return HTTP 500.
 
 The public model therefore exposes neither Axum's `Router` nor its move-and-return registration pattern. `application` and `routes` own that native state and preserve Terrane's ordinary consuming-builder semantics internally.
 
@@ -73,10 +67,4 @@ The current typed payload surface is text-first. Binary event payloads and expli
 
 ## Current boundary
 
-Text GET handlers and WebSockets remain available without consumers. `routes.endpoint` adds
-explicit request/response callbacks for GET, POST, PUT, PATCH, and DELETE. The annotation
-consumer supports class-based route groups, typed scalar and model request/response values,
-HTML and plain-text handlers, static directories, and OpenAPI generation. Dependency/state
-injection, general middleware, authentication metadata, and streaming responses remain
-outside this surface; applications use typed Terrane APIs rather than native extractor traits,
-service types, lifetimes, or borrowing.
+Text GET handlers and WebSockets remain available without consumers. `routes.endpoint` adds explicit request/response callbacks for GET, POST, PUT, PATCH, and DELETE. The annotation consumer supports class-based route groups, typed scalar and model request/response values, HTML and plain-text handlers, static directories, and OpenAPI generation. Dependency/state injection, general middleware, authentication metadata, and streaming responses remain outside this surface; applications use typed Terrane APIs rather than native extractor traits, service types, lifetimes, or borrowing.

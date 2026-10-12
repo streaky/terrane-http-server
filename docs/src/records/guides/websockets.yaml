@@ -51,7 +51,7 @@ documentation:
           source: |-
             namespace websocket-guide
 
-            from /http-server import controller, routes, websocket-session
+            from /streaky/http-server import controller, routes, websocket-session
             from /core/errors import dependency-error
 
             class chat implements controller

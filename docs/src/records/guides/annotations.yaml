@@ -25,13 +25,13 @@ documentation:
         the ordinary package pipeline. No HTTP-specific compiler behavior or runtime source
         reflection is involved.
 
-        Selected safe asynchronous non-throwing handlers may be standalone functions or
-        shared methods on selected classes. Path and query parameters are `string`, `int`,
-        or `bool`; query defaults must be compile-time scalar values of the declared type.
-        Results may be JSON-encoded scalars, `document-value`, selected ordinary model
-        classes, or `string` for `text/html` and `text/plain`. A body may be a decoded
-        `document-value` or a selected model class. Model schemas and codecs derive from
-        their actual class fields, including nested model values.
+        Selected safe asynchronous handlers may be standalone functions or shared methods on
+        selected classes and may declare `throws throwable`. Path and query parameters are
+        `string`, `int`, or `bool`; query defaults must be compile-time scalar values of the
+        declared type. Results may be JSON-encoded scalars, `document-value`, selected
+        ordinary model classes, or `string` for `text/html` and `text/plain`. A body may be a
+        decoded `document-value` or a selected model class. Model schemas and codecs derive
+        from their actual class fields, including nested model values.
 
         Explicit `operation-id` values remain unchanged. Otherwise the consumer derives a
         unique URL-safe ID from the canonical declaration identity, so documentation viewers
@@ -44,7 +44,7 @@ documentation:
       target: null
       timeout-ms: null
       source: |-
-        from /http-server/annotations import endpoint, path, query
+        from /streaky/http-server/annotations import endpoint, path, query
 
         /// Calculate a catalog quantity.
         @[endpoint; method = 'GET', path = '/items/{item-id}', summary = 'Read an item']
@@ -62,12 +62,12 @@ documentation:
       blocks:
         - type: markdown
           markdown: |-
-            Run `sh packages/http-server/build-consumer.sh` from the repository root.
-            The script builds a Terrane executable and stages it at the HTTP package's
-            `.trn/consumers/http-server`. Configure its command relative to the application
+            Run `sh packages/http-server/build-consumer.sh` from the repository root; it builds
+            and stages the native HTTP and template consumers. The HTTP executable is at
+            `.trn/consumers/http-server`; configure its command relative to the application
             package directory. Select every handler and each of its parameter declarations;
-            parameter identities append `::parameter-name` to the callable identity.
-            The command is trusted executable code, not a sandbox.
+            parameter identities append `::parameter-name` to the callable identity. The
+            command is trusted executable code, not a sandbox.
         - type: example
           id: consumer-manifest
           title: Manifest for an application beside the HTTP package
@@ -103,7 +103,7 @@ documentation:
       blocks:
         - type: markdown
           markdown: |-
-            Import annotations from `/http-server/annotations`. `endpoint` on a method supplies
+            Import annotations from `/streaky/http-server/annotations`. `endpoint` on a method supplies
             `path`, `method`, optional `summary`, `description`, and `operation-id`, plus
             `content-type` (default `application/json`). `path` and `query` supply an optional
             external `name`, defaulting to the parameter name. `body` identifies one JSON body
@@ -114,9 +114,11 @@ documentation:
             parameter is always required. A query parameter without a default is required;
             a default appears in both runtime extraction and OpenAPI. Integer conversion,
             strict boolean conversion, missing required values, and malformed JSON fail with
-            HTTP 422 before calling the handler. Generated responses default to
-            `application/json`. A returned string is a JSON string, not raw JSON text;
-            string endpoints may instead select `text/html` or `text/plain`.
+            HTTP 422 before calling the handler. The generated endpoint callback accepts the
+            ordinary `throws throwable` effect, so handler failures propagate to the HTTP
+            boundary as HTTP 500 rather than being converted into input errors. Generated
+            responses default to `application/json`. A returned string is a JSON string, not raw
+            JSON text; string endpoints may instead select `text/html` or `text/plain`.
 
             Body and result types may be explicitly selected public Terrane model classes
             with canonical default constructors. The consumer uses their public non-static
@@ -161,11 +163,21 @@ documentation:
           markdown: |-
             `packages/http-server/demo` is a runnable catalog service demonstrating
             class-based API and site route groups, typed item/search/order models, defaulted
-            query parameters, HTML pages, and relative static-directory mounts for
-            Stoplight Elements docs and assets. Its integration suite exercises real HTTP
-            requests and checks typed body/output failures, HTML and static files, and
-            mounted OpenAPI paths. Order quoting is stateless and does not create or persist
-            orders. See the demo README for run and test commands.
+            query parameters, and AOT template-backed HTML pages with shared header and footer.
+            Templates are compiled into the binary; deployment needs only public static assets.
+            Its integration suite exercises real HTTP requests and checks typed body/output
+            failures, HTML and static files, and mounted OpenAPI paths. Order quoting is
+            stateless and does not create or persist orders. See the demo README for run and
+            test commands.
+        - type: markdown
+          markdown: |-
+            Annotated handlers can render pages with AOT templates from the `template` package.
+            Templates are compiled into the application binary; deployments need no template
+            files or runtime roots and require only public static assets. Render `.html`
+            templates for automatic escaping, never use a safe filter on untrusted values, and
+            create a fresh context for each render. Render failures propagate through the
+            handler's `throws throwable` contract and produce HTTP 500; malformed request input
+            remains HTTP 422.
   see-also: [http-server.api.routes, http-server.api.controller]
 provenance:
   specification: null

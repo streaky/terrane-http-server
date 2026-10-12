@@ -39,7 +39,7 @@ documentation:
       target: null
       timeout-ms: null
       source: |-
-        from /http-server import http-request, http-response, create-response
+        from /streaky/http-server import http-request, http-response, create-response
 
         async function home http-response; request http-request
             return create-response; 200, 'text/plain; charset=utf-8', 'Hello'

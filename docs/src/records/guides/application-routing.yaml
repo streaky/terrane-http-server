@@ -62,7 +62,7 @@ documentation:
           source: |-
             namespace routing-example
 
-            from /http-server import controller, routes, create-application
+            from /streaky/http-server import controller, routes, create-application
             from /core/errors import throwable
 
             class site implements controller

@@ -23,20 +23,23 @@ documentation:
         Each registration consumes and returns the builder, so retain the returned value.
 
         `get(path: string, handler: async function to string) -> routes` registers a GET
-        handler. The handler receives no request arguments and returns response text. There
-        is no declared package-level error contract on the handler.
+        handler. The handler receives no request arguments and returns response text.
+        Ordinary asynchronous handlers may declare `throws throwable`; handler failures
+        propagate as HTTP 500.
 
         `get-with-client(path: string, handler: async function from client-info to string)
         -> routes` registers a GET handler supplied with peer and resolved-client addresses.
-        Address resolution follows the application's trust policy; see
+        Ordinary asynchronous handlers may declare `throws throwable`; handler failures
+        propagate as HTTP 500. Address resolution follows the application's trust policy; see
         [[http-server.guide.proxy-security]].
 
         `endpoint(method: http-method, path: string, handler: async function from http-request
-        to http-response) -> routes` registers a typed HTTP callback. The closed `http-method`
-        enum has `get`, `post`, `put`, `patch`, and `delete` variants.
+        to http-response throws throwable) -> routes` registers a typed HTTP callback. The
+        closed `http-method` enum has `get`, `post`, `put`, `patch`, and `delete` variants.
         The callback receives decoded path/query access and bounded JSON body decoding,
-        and returns an explicit status, content type, and encoded body. See
-        [[http-server.api.http-messages]] and
+        and returns an explicit status, content type, and encoded body. Path, query, and body
+        conversion failures return HTTP 422 before invocation; callback and render failures
+        return HTTP 500. See [[http-server.api.http-messages]] and
         [[http-server.guide.annotations]] for the generated adapter surface.
 
         `websocket(path: string, handler: async function from websocket-session to none
