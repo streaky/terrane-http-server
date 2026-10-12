@@ -1,4 +1,4 @@
-namespace http-server
+namespace streaky/http-server
 
 from /deps/ipnet import IpAddr as ip-addr, Ipv4Addr as ipv4-addr, Ipv6Addr as ipv6-addr
 from /core/collections import list

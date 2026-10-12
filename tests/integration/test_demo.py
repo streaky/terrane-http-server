@@ -3,11 +3,14 @@
 Run: python packages/http-server/tests/integration/test_demo.py /path/to/app
 """
 import http.client
+from html.parser import HTMLParser
 import json
 from pathlib import Path
 import socket
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import unittest
 
@@ -16,15 +19,41 @@ BINARY = Path(sys.argv.pop(1)).resolve() if len(sys.argv) > 1 else None
 DEMO = Path(__file__).resolve().parents[2] / "demo"
 
 
+class PageParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.titles = []
+        self.headings = []
+        self.links = []
+        self.active = None
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ("title", "h1"):
+            self.active = self.titles if tag == "title" else self.headings
+        if tag == "a":
+            self.links.append(dict(attrs).get("href"))
+
+    def handle_data(self, data):
+        if self.active is not None:
+            self.active.append(data)
+
+    def handle_endtag(self, tag):
+        if tag in ("title", "h1"):
+            self.active = None
+
+
 class CatalogHttpTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         if BINARY is None:
             raise RuntimeError("Pass the built demo executable as the first argument")
+        cls.runtime = tempfile.TemporaryDirectory(prefix="http-demo-runtime-")
+        cls.addClassCleanup(cls.runtime.cleanup)
+        shutil.copytree(DEMO / "public", Path(cls.runtime.name) / "public")
         with socket.socket() as listener:
             listener.bind(("127.0.0.1", 0))
             cls.port = listener.getsockname()[1]
-        cls.server = subprocess.Popen([str(BINARY), f"127.0.0.1:{cls.port}"], cwd=DEMO,
+        cls.server = subprocess.Popen([str(BINARY), f"127.0.0.1:{cls.port}"], cwd=cls.runtime.name,
             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         cls.addClassCleanup(cls.stop_server)
         deadline = time.monotonic() + 20
@@ -99,11 +128,18 @@ class CatalogHttpTests(unittest.TestCase):
         self.assertEqual(self.request("POST", "/api/orders/quote", b'{}' + b' ' * 2097151)[0], 422)
 
     def test_html_and_static_files(self):
-        for path, marker in [("/", "Terrane Catalog"), ("/about", "About this demo")]:
+        for path, title, heading, links in [
+            ("/", "Terrane Catalog", "Terrane Catalog", {"/docs/", "/about", "/api/health"}),
+            ("/about", "About — Terrane Catalog", "About this demo", {"/"}),
+        ]:
             status, content_type, page = self.request("GET", path)
             self.assertEqual(status, 200)
             self.assertTrue(content_type.startswith("text/html"))
-            self.assertIn(marker, page)
+            parsed = PageParser()
+            parsed.feed(page)
+            self.assertEqual("".join(parsed.titles), title)
+            self.assertEqual("".join(parsed.headings), heading)
+            self.assertTrue(links.issubset(parsed.links))
         status, content_type, page = self.request("GET", "/docs/")
         self.assertEqual(status, 200)
         self.assertTrue(content_type.startswith("text/html"))

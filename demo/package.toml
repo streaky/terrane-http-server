@@ -6,6 +6,12 @@ http-server-demo = "src"
 
 [terrane-dependencies]
 http-server = { path = ".." }
+template = { path = "../../template" }
+
+[consumers.template]
+command = "../../template/.trn/consumers/template"
+args = ["--namespace", "generated/template/http-server-demo", "--root", "templates", "--template", "home.html", "--template", "about.html"]
+declarations = ["/http-server-demo::main"]
 
 [consumers.http-server]
 command = "../.trn/consumers/http-server"

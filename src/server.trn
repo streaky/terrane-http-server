@@ -1,4 +1,4 @@
-namespace http-server
+namespace streaky/http-server
 
 from /deps/axum import Router as native-router, serve as native-serve
 from /deps/axum-core/extract import Request as native-request
@@ -43,7 +43,7 @@ public class routes
         router = router.route; path, move method-router
         return instance routes; move router
 
-    consuming function endpoint routes; method http-method, path string, handler async function from http-request to http-response
+    consuming function endpoint routes; method http-method, path string, handler async function from http-request to http-response throws throwable
         callback = async function native-response; request native-request
             try
                 typed-request = instance http-request; move request, path

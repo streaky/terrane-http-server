@@ -1,9 +1,9 @@
-package = "http-server"
+package = "streaky/http-server"
 artifact = "library"
 rust-toolchain = "pinned"
 
 [namespaces]
-http-server = "src"
+"streaky/http-server" = "src"
 
 [rust-dependencies.axum]
 version = "=0.8.9"

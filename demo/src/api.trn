@@ -1,6 +1,6 @@
 namespace http-server-demo
 
-from /http-server/annotations import endpoint, path, query, body, route-group
+from /streaky/http-server/annotations import endpoint, path, query, body, route-group
 from /core/collections import list
 
 @[route-group; prefix = '/api']

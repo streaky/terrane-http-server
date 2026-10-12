@@ -1,6 +1,6 @@
 namespace tests/http-server/routing
 
-from /http-server import application, controller, routes, websocket-session, create-application, parse-config-yaml
+from /streaky/http-server import application, controller, routes, websocket-session, create-application, parse-config-yaml
 from /core/errors import dependency-error
 from /core/testing import assert-equal-bool, assert-equal-string
 

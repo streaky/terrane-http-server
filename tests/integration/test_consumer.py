@@ -40,7 +40,7 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
         ])
         (self.directory / "package.toml").write_text(manifest)
         (self.directory / "src/main.trn").write_text(
-            "namespace http-annotation-test\nfrom /http-server/annotations import endpoint, path, query, body\n"
+            "namespace http-annotation-test\nfrom /streaky/http-server/annotations import endpoint, path, query, body\n"
             + source
             + "\nfunction main int;\n    return 0\n"
         )
@@ -72,7 +72,7 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
         self.check("@[endpoint; path = '/first', operation-id = 'same']\nasync function first string;\n    return 'a'\n@[endpoint; path = '/second', operation-id = 'same']\nasync function second string;\n    return 'b'\n", ["first", "second"], "duplicate HTTP operation ID")
 
     def test_synchronous_handler_rejected(self):
-        self.check("@[endpoint; path = '/sync']\nfunction sync string;\n    return 'sync'\n", ["sync"], "standalone safe asynchronous non-throwing")
+        self.check("@[endpoint; path = '/sync']\nfunction sync string;\n    return 'sync'\n", ["sync"])
 
     def test_unsupported_query_type(self):
         self.check("@[endpoint; path = '/values']\nasync function values string; @[query;] ratio float\n    return 'values'\n", ["values", "values::ratio"], "path/query parameters must be")
@@ -93,14 +93,16 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
             'declarations = ["/http-annotation-test::read", "/http-annotation-test::create", '
             '"/http-annotation-test::replace", "/http-annotation-test::change", "/http-annotation-test::remove", '
             '"/http-annotation-test::echo-model", "/http-annotation-test::echo-model::value", '
-            '"/http-annotation-test::data-model", "/http-annotation-test::tree-node"]',
+            '"/http-annotation-test::data-model", "/http-annotation-test::tree-node", '
+            '"/http-annotation-test::failing-handler", "/http-annotation-test::throwing-success"]',
         ]))
         (self.directory / "src/main.trn").write_text("""namespace http-annotation-test
-from /http-server/annotations import endpoint, body
-from /http-server import create-application
+from /streaky/http-server/annotations import endpoint, body
+from /streaky/http-server import create-application
 from /generated/http-server import annotated-controller
 from /core/process import arguments
 from /core/collections import list
+from /core/errors import throwable, coercion-error
 
 class tree-node
     name string
@@ -136,6 +138,14 @@ async function change bool;
 @[endpoint; path = '/method', method = 'DELETE']
 async function remove string;
     return 'deleted'
+
+@[endpoint; path = '/failure', content-type = 'text/html']
+async function failing-handler string throws throwable;
+    throw coercion-error
+
+@[endpoint; path = '/throwing-success']
+async function throwing-success string throws throwable;
+    return 'still works'
 
 async function main throws throwable;
     app = create-application;
@@ -182,6 +192,16 @@ main
                     actual = request(method, "/method")
                     self.assertIs(type(actual), type(value))
                     self.assertEqual(actual, value)
+            self.assertEqual(request("GET", "/throwing-success"), "still works")
+            connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+            try:
+                connection.request("GET", "/failure")
+                response = connection.getresponse()
+                self.assertEqual(response.status, 500)
+                self.assertNotIn(b"coercion-error", response.read())
+            finally:
+                connection.close()
+            self.assertEqual(request("GET", "/method"), 7)
             defaults = request("POST", "/models", "{}")
             self.assertEqual(defaults, {"active": True, "ratio": 1.5, "small": 0.5, "nickname": None,
                 "values": [], "count": 7, "children": [], "selected": None})

@@ -1,4 +1,4 @@
-namespace http-server
+namespace streaky/http-server
 
 from /deps/axum-core/body import Body as native-body
 from /deps/http import HeaderName as header-name, HeaderValue as header-value

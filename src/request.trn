@@ -1,4 +1,4 @@
-namespace http-server
+namespace streaky/http-server
 
 from /deps/axum/body import to_bytes as body-to-bytes
 from /deps/axum-core/extract import Request as native-request
@@ -29,8 +29,7 @@ public class http-request
         while index < pattern-segments.length and index < actual-segments.length
             segment = pattern-segments[index]
             if segment.contains.start; '{'
-                name = segment.replace; '{', ''
-                name = name.replace; '}', ''
+                name = segment.replace; (list; '{', '}'), ''
                 decoded = decode-path-component; actual-segments[index]
                 if not decoded.failed
                     this.names.append; move name
@@ -41,7 +40,7 @@ public class http-request
         target path-and-query|none = (uri.path_and_query;).cloned;
         address = 'http://localhost/'
         if target != none
-            address = 'http://localhost'.concat; (target.as_str;)
+            address = 'http://localhost' + (target.as_str;)
         parsed = parse-url; address
         if parsed.failed
             throw coercion-error

@@ -1,4 +1,4 @@
-namespace http-server
+namespace streaky/http-server
 
 from /deps/ipnet import IpNet as ip-net
 from /deps/ipnet import IpAddr as ip-addr
@@ -90,9 +90,9 @@ function compile-network-policy network-policy throws dependency-error; networks
         network string = networks[index]
         if not (network.contains; '/')
             if network.contains; ':'
-                network = network.concat; '/128'
+                network = network + '/128'
             else
-                network = network.concat; '/32'
+                network = network + '/32'
         parsed.append; (ip-net::from_str; network)
         index = index + 1
     return instance network-policy; move parsed

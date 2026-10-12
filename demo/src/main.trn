@@ -1,6 +1,6 @@
 namespace http-server-demo
 
-from /http-server import create-application
+from /streaky/http-server import create-application
 from /generated/http-server import mount-annotated
 from /core/errors import throwable
 from /core/process import arguments
@@ -13,5 +13,5 @@ async function main throws throwable;
     if supplied.length > 0
         address = supplied[0].text
     app = app.with-address; address
-    print; ('Catalog demo: http://'.concat; address, '/')
+    print; 'Catalog demo: http://' + address + '/'
     await app.serve;

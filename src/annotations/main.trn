@@ -1,4 +1,4 @@
-namespace http-server/annotations
+namespace streaky/http-server/annotations
 
 from /core/annotations import annotation, annotation-target
 from /core/collections import list

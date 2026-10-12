@@ -1,4 +1,4 @@
-namespace http-server
+namespace streaky/http-server
 
 from /deps/client-ip import rightmost_forwarded as rightmost-forwarded, rightmost_x_forwarded_for as rightmost-x-forwarded-for, Error as client-ip-error
 from /deps/ipnet import IpAddr as ip-addr

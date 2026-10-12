@@ -3,6 +3,7 @@ namespace http-server-consumer
 from /annotation-consumer-protocol import get, at, text, truth, scalar, annotation, quote, json-quote, read-request, emit-source, emit-error, error-origin, consumer-error
 from /core/collections import list, range
 from /core/documents import document-value, make-document-none
+from /core/errors import replace-error
 from /http-server-consumer/models import is-model, model-reference, model-schemas, model-codecs, model-encoder, model-decoder
 
 class operation
@@ -31,11 +32,11 @@ function fail; declaration document-value, message string
 function metadata-string string throws consumer-error; metadata document-value, key string, record document-value
     value = scalar; (get; metadata, key)
     if value.kind != 'string'
-        fail; record, ('HTTP metadata field '.concat; key, ' must be a string')
+        fail; record, ('HTTP metadata field ' + key + ' must be a string')
     return text; value
 
 function parameter-record document-value throws consumer-error; declarations document-value, identity string, name string, parent document-value
-    wanted = identity.concat; '::', name
+    wanted = identity + '::' + name
     result = make-document-none;
     count int = 0
     for index in (range; 0, (declarations.length;))
@@ -44,20 +45,21 @@ function parameter-record document-value throws consumer-error; declarations doc
             result = record
             count = count + 1
     if count != 1
-        fail; parent, ('handler parameter '.concat; (quote; wanted), ' must have exactly one selected declaration record')
+        fail; parent, ('handler parameter ' + (quote; wanted) + ' must have exactly one selected declaration record')
     return result
 
 function method-key string throws consumer-error; value string, record document-value
-    if value == 'GET'
-        return 'get'
-    if value == 'POST'
-        return 'post'
-    if value == 'PUT'
-        return 'put'
-    if value == 'PATCH'
-        return 'patch'
-    if value == 'DELETE'
-        return 'delete'
+    switch value
+        case 'GET'
+            return 'get'
+        case 'POST'
+            return 'post'
+        case 'PUT'
+            return 'put'
+        case 'PATCH'
+            return 'patch'
+        case 'DELETE'
+            return 'delete'
     throw (instance consumer-error; record, 'HTTP method must be GET, POST, PUT, PATCH, or DELETE')
 
 function schema-type string; kind string
@@ -79,13 +81,12 @@ function route-shape string throws consumer-error; path string, record document-
         if (segment.contains; '{') or (segment.contains; '}')
             if not (segment.contains.start; '{') or not (segment.contains.end; '}') or segment.length < 3
                 fail; record, 'path placeholders must occupy a complete nonempty segment'
-            name = segment.replace; '{', ''
-            name = name.replace; '}', ''
-            if segment != ('{'.concat; name, '}')
+            name = segment.replace; (list; '{', '}'), ''
+            if segment != ('{' + name + '}')
                 fail; record, 'malformed path placeholder'
-            shape = shape.concat; '/{}'
+            shape = shape + '/{}'
         else
-            shape = shape.concat; '/', segment
+            shape = shape + '/' + segment
     return shape
 
 function default-source string throws consumer-error; value document-value, kind string, record document-value
@@ -113,7 +114,7 @@ function route-group-record document-value throws consumer-error; declarations d
     for index in (range; 0, (declarations.length;))
         record = at; declarations, index
         if (text; (get; record, 'identity')) == identity and (text; (get; record, 'kind')) == 'class'
-            metadata = annotation; record, 'route-group', '/http-server/annotations'
+            metadata = annotation; record, 'route-group', '/streaky/http-server/annotations'
             if metadata.kind == 'none'
                 fail; record, 'HTTP endpoint method requires route-group metadata on its selected class'
             return record
@@ -121,7 +122,7 @@ function route-group-record document-value throws consumer-error; declarations d
     return make-document-none;
 
 function make-operation operation throws consumer-error; declaration document-value, declarations document-value, index int
-    metadata = annotation; declaration, 'endpoint', '/http-server/annotations'
+    metadata = annotation; declaration, 'endpoint', '/streaky/http-server/annotations'
     path = metadata-string; metadata, 'path', declaration
     method = metadata-string; metadata, 'method', declaration
     method-key; method, declaration
@@ -134,21 +135,21 @@ function make-operation operation throws consumer-error; declaration document-va
     owner string = ''
     prefix string = '/'
     documented bool = true
-    target = 'selected-handler'.concat; index
+    target = 'selected-handler' + index
     if pieces.length == 3
-        owner = pieces[0].concat; '::', pieces[1]
+        owner = pieces[0] + '::' + pieces[1]
         group = route-group-record; declarations, owner, declaration
-        group-meta = annotation; group, 'route-group', '/http-server/annotations'
+        group-meta = annotation; group, 'route-group', '/streaky/http-server/annotations'
         prefix = metadata-string; group-meta, 'prefix', group
         route-shape; prefix, group
         if prefix != '/' and (prefix.contains.end; '/')
             fail; group, 'HTTP route-group prefix must not have a trailing slash'
         documented = truth; (scalar; (get; group-meta, 'document'))
-        target = 'this.source.'.concat; pieces[2]
+        target = 'this.source.' + pieces[2]
     else if pieces.length != 2
         fail; declaration, 'HTTP handler must be a standalone function or a selected class method'
-    if not (truth; (get; signature, 'async')) or (truth; (get; signature, 'throws')) or (truth; (get; signature, 'unsafe')) or (truth; (get; signature, 'static'))
-        fail; declaration, 'HTTP handler must be a standalone safe asynchronous non-throwing function or shared class method'
+    if not (truth; (get; signature, 'async')) or (truth; (get; signature, 'unsafe')) or (truth; (get; signature, 'static'))
+        fail; declaration, 'HTTP handler must be a safe asynchronous function or shared class method'
     contracts = get; declaration, 'contracts'
     if owner != '' and (text; (get; contracts, 'invocation_mode')) != 'Shared'
         fail; declaration, 'HTTP endpoint methods must have shared invocation authority'
@@ -164,24 +165,28 @@ function make-operation operation throws consumer-error; declaration document-va
         fail; declaration, 'HTML and plain-text endpoints must return string'
     operation-id = metadata-string; metadata, 'operation-id', declaration
     if operation-id == ''
-        operation-id = identity.replace; '_', '_5f'
-        operation-id = operation-id.replace; '/', '_2f'
-        operation-id = operation-id.replace; ':', '_3a'
-        operation-id = 'operation'.concat; operation-id
+        try
+            operation-id = identity.replace; (list; '_', '/', ':'), (list; '_5f', '_2f', '_3a')
+        catch replace-error
+            fail; declaration, 'HTTP operation identity escape table has unequal search/replacement counts'
+        operation-id = 'operation' + operation-id
     summary = metadata-string; metadata, 'summary', declaration
     description = metadata-string; metadata, 'description', declaration
     if description == ''
         documentation = get; declaration, 'documentation'
         if documentation.kind == 'string'
             description = text; documentation
-    schema = '{"operationId":'.concat; (json-quote; operation-id), ',"summary":', (json-quote; summary), ',"description":', (json-quote; description), ',"parameters":['
-    adapter = '    async function adapt-handler'.concat; index, ' http-response; request http-request\n'
+    schema = '{"operationId":' + (json-quote; operation-id) + ',"summary":' + (json-quote; summary) + ',"description":' + (json-quote; description) + ',"parameters":['
+    adapter-throws string = ''
+    if (truth; (get; signature, 'throws'))
+        adapter-throws = ' throws throwable'
+    adapter = '    async function adapt-handler' + index + ' http-response' + adapter-throws + '; request http-request\n'
     arguments string = ''
     parameters = get; signature, 'parameters'
     if parameters.kind != 'list'
         fail; declaration, 'HTTP handler signature must expose parameters'
     if (parameters.length;) == 0
-        adapter = '    async function adapt-handler'.concat; index, ' http-response; _request http-request\n'
+        adapter = '    async function adapt-handler' + index + ' http-response' + adapter-throws + '; _request http-request\n'
     names list of string = list
     locations list of string = list
     path-names list of string = list
@@ -194,9 +199,9 @@ function make-operation operation throws consumer-error; declaration document-va
         if (truth; (get; parameter, 'mutable')) or (truth; (get; parameter, 'variadic'))
             fail; record, 'HTTP parameters cannot be mutable or variadic'
         kind = text; (get; parameter, 'type')
-        path-meta = annotation; record, 'path', '/http-server/annotations'
-        query-meta = annotation; record, 'query', '/http-server/annotations'
-        body-meta = annotation; record, 'body', '/http-server/annotations'
+        path-meta = annotation; record, 'path', '/streaky/http-server/annotations'
+        query-meta = annotation; record, 'query', '/streaky/http-server/annotations'
+        body-meta = annotation; record, 'body', '/streaky/http-server/annotations'
         count int = 0
         if path-meta.kind != 'none'
             count = count + 1
@@ -206,10 +211,10 @@ function make-operation operation throws consumer-error; declaration document-va
             count = count + 1
         if count != 1
             fail; record, 'HTTP parameter requires exactly one path, query, or body annotation'
-        variable = 'parameter-value'.concat; parameter-index
+        variable = 'parameter-value' + parameter-index
         if parameter-index > 0
-            arguments = arguments.concat; ', '
-        arguments = arguments.concat; variable
+            arguments = arguments + ', '
+        arguments = arguments + variable
         default = get; parameter, 'default'
         if body-meta.kind != 'none'
             if body-index != -1 or (not (is-document; kind) and not (is-model; kind, declarations)) or default.kind != 'none'
@@ -233,18 +238,18 @@ function make-operation operation throws consumer-error; declaration document-va
             locations.append; location
             optional = default.kind != 'none'
             if location == 'path'
-                if optional or not (path.contains; ('{'.concat; wire-name, '}'))
+                if optional or not (path.contains; ('{' + wire-name + '}'))
                     fail; record, 'path parameter must match a placeholder and cannot have a default'
                 path-names.append; wire-name
             if (truth; (get; parameter, 'optional')) and not optional
                 fail; record, 'optional HTTP parameter requires a compile-time default'
             if parameter-spec-count > 0
-                schema = schema.concat; ','
+                schema = schema + ','
             parameter-spec-count = parameter-spec-count + 1
             required = 'true'
             if optional
                 required = 'false'
-            schema = schema.concat; '{"name":', (json-quote; wire-name), ',"in":', (json-quote; location), ',"required":', required, ',"schema":{"type":', (json-quote; (schema-type; kind))
+            schema = schema + '{"name":' + (json-quote; wire-name) + ',"in":' + (json-quote; location) + ',"required":' + required + ',"schema":{"type":' + (json-quote; (schema-type; kind))
             initial = quote; ''
             if kind == 'int'
                 initial = '0'
@@ -252,23 +257,22 @@ function make-operation operation throws consumer-error; declaration document-va
                 initial = 'false'
             if optional
                 initial = default-source; default, kind, record
-                schema = schema.concat; ',"default":', (default-json; default, kind, record)
-            schema = schema.concat; '}}'
-            adapter = adapter.concat; '        ', variable, ' ', kind, ' = ', initial, '\n        raw-value', parameter-index, ' = request.', location, '-value; ', (quote; wire-name), '\n        if raw-value', parameter-index, ' != none\n'
+                schema = schema + ',"default":' + (default-json; default, kind, record)
+            schema = schema + '}}'
+            adapter = adapter + '        ' + variable + ' ' + kind + ' = ' + initial + '\n        raw-value' + parameter-index + ' = request.' + location + '-value; ' + (quote; wire-name) + '\n        if raw-value' + parameter-index + ' != none\n'
             if kind == 'string'
-                adapter = adapter.concat; '            ', variable, ' = raw-value', parameter-index, '\n'
+                adapter = adapter + '            ' + variable + ' = raw-value' + parameter-index + '\n'
             else if kind == 'int'
-                adapter = adapter.concat; '            try\n                ', variable, ' = raw-value', parameter-index, '.radix; 10\n            catch\n                return validation-response; ', (quote; ('Invalid integer '.concat; location, ' parameter: ', wire-name)), '\n'
+                adapter = adapter + '            try\n                ' + variable + ' = raw-value' + parameter-index + '.radix; 10\n            catch\n                return validation-response; ' + (quote; ('Invalid integer ' + location + ' parameter: ' + wire-name)) + '\n'
             else
-                adapter = adapter.concat; '            if raw-value', parameter-index, ' == \'true\'\n                ', variable, ' = true\n            else if raw-value', parameter-index, ' == \'false\'\n                ', variable, ' = false\n            else\n                return validation-response; ', (quote; ('Invalid boolean '.concat; location, ' parameter: ', wire-name)), '\n'
+                adapter = adapter + '            if raw-value' + parameter-index + ' == \'true\'\n                ' + variable + ' = true\n            else if raw-value' + parameter-index + ' == \'false\'\n                ' + variable + ' = false\n            else\n                return validation-response; ' + (quote; ('Invalid boolean ' + location + ' parameter: ' + wire-name)) + '\n'
             if not optional
-                adapter = adapter.concat; '        else\n            return validation-response; ', (quote; ('Missing required '.concat; location, ' parameter: ', wire-name)), '\n'
+                adapter = adapter + '        else\n            return validation-response; ' + (quote; ('Missing required ' + location + ' parameter: ' + wire-name)) + '\n'
     segments = path.split; '/'
     placeholders list of string = list
     for segment in segments
         if (segment.contains.start; '{')
-            name = segment.replace; '{', ''
-            name = name.replace; '}', ''
+            name = segment.replace; (list; '{', '}'), ''
             matches int = 0
             for bound in path-names
                 if bound == name
@@ -279,64 +283,64 @@ function make-operation operation throws consumer-error; declaration document-va
             placeholders.append; name
             if matches != 1
                 fail; declaration, 'each HTTP path placeholder requires exactly one matching parameter'
-    schema = schema.concat; ']'
+    schema = schema + ']'
     if body-index != -1
-        adapter = adapter.concat; '        try\n            body-value = await request.json-body;\n        catch\n            return validation-response; \'Invalid JSON request body\'\n'
+        adapter = adapter + '        try\n            body-value = await request.json-body;\n        catch\n            return validation-response; \'Invalid JSON request body\'\n'
         body-parameter = at; parameters, body-index
         body-kind = text; (get; body-parameter, 'type')
         body-schema = '{}'
         if (is-model; body-kind, declarations)
             decoder = model-decoder; body-kind, declarations
-            adapter = adapter.concat; '        try\n            parameter-value', body-index, ' = ', decoder, '; body-value\n        catch\n            return validation-response; \'Invalid request model\'\n'
+            adapter = adapter + '        try\n            parameter-value' + body-index + ' = ' + decoder + '; body-value\n        catch\n            return validation-response; \'Invalid request model\'\n'
             body-schema = model-reference; body-kind, declarations
         else
-            adapter = adapter.concat; '        parameter-value', body-index, ' = body-value\n'
-        schema = schema.concat; ',"requestBody":{"required":true,"content":{"application/json":{"schema":', body-schema, '}}}'
+            adapter = adapter + '        parameter-value' + body-index + ' = body-value\n'
+        schema = schema + ',"requestBody":{"required":true,"content":{"application/json":{"schema":' + body-schema + '}}}'
     response-schema = '{}'
     if result-model
         response-schema = model-reference; result-kind, declarations
     else if not result-document
-        response-schema = '{"type":'.concat; (json-quote; (schema-type; result-kind)), '}'
-    schema = schema.concat; ',"responses":{"200":{"description":"Successful response","content":{', (json-quote; content-type), ':{"schema":', response-schema, '}}},"422":{"description":"Request validation failed"},"500":{"description":"Response construction failed"}}}'
-    adapter = adapter.concat; '        result = await ', target, ';'
+        response-schema = '{"type":' + (json-quote; (schema-type; result-kind)) + '}'
+    schema = schema + ',"responses":{"200":{"description":"Successful response","content":{' + (json-quote; content-type) + ':{"schema":' + response-schema + '}}},"422":{"description":"Request validation failed"},"500":{"description":"Handler or response construction failed"}}}'
+    adapter = adapter + '        result = await ' + target + ';'
     if arguments != ''
-        adapter = adapter.concat; ' ', arguments
-    adapter = adapter.concat; '\n'
+        adapter = adapter + ' ' + arguments
+    adapter = adapter + '\n'
     if content-type != 'application/json'
-        adapter = adapter.concat; '        return create-response; 200, ', (quote; content-type), ', result\n'
+        adapter = adapter + '        return create-response; 200, ' + (quote; content-type) + ', result\n'
     else if result-document
-        adapter = adapter.concat; '        document = result\n'
+        adapter = adapter + '        document = result\n'
     else if result-model
-        adapter = adapter.concat; '        document = ', (model-encoder; result-kind, declarations), '; result\n'
+        adapter = adapter + '        document = ' + (model-encoder; result-kind, declarations) + '; result\n'
     else if result-kind == 'int'
-        adapter = adapter.concat; '        document = (make-document-integer; (\'\'.concat; result)).value\n'
+        adapter = adapter + '        document = (make-document-integer; (\'\' + result)).value\n'
     else
-        factory = 'make-document-'.concat; result-kind
-        adapter = adapter.concat; '        document = ', factory, '; result\n'
+        factory = 'make-document-' + result-kind
+        adapter = adapter + '        document = ' + factory + '; result\n'
     if content-type == 'application/json'
-        adapter = adapter.concat; '        encoded = canonical-json; document\n        if encoded.failed\n            return create-response; 500, \'application/json\', \'{"detail":"Response serialization failed"}\'\n        return create-response; 200, \'application/json\', encoded.value.encoded\n'
+        adapter = adapter + '        encoded = canonical-json; document\n        if encoded.failed\n            return create-response; 500, \'application/json\', \'{"detail":"Response serialization failed"}\'\n        return create-response; 200, \'application/json\', encoded.value.encoded\n'
     mounted-path = path
     if prefix != '/'
-        mounted-path = prefix.concat; path
+        mounted-path = prefix + path
     return instance operation; path, method, operation-id, schema, adapter, owner, mounted-path, documented
 
 function controller-source string throws consumer-error; name string, owner string, source-type string, operations list of operation, documented bool
-    code = '\npublic class '.concat; name, ' implements controller\n'
+    code = '\npublic class ' + name + ' implements controller\n'
     if owner != ''
-        code = code.concat; '    private source ', source-type, '\n\n    function construct; source ', source-type, '\n        this.source = move source\n\n'
-    code = code.concat; '    consuming function routes routes; registered-routes routes\n'
+        code = code + '    private source ' + source-type + '\n\n    function construct; source ' + source-type + '\n        this.source = move source\n\n'
+    code = code + '    consuming function routes routes; registered-routes routes\n'
     for index in (range; 0, operations.length)
         item = operations[index]
         if item.owner == owner
-            code = code.concat; '        registered-routes = registered-routes.endpoint; (instance http-method::', (method-key; item.method, (make-document-none;)), ';), ', (quote; item.path), ', this.adapt-handler', index, '\n'
+            code = code + '        registered-routes = registered-routes.endpoint; (instance http-method::' + (method-key; item.method, (make-document-none;)) + ';), ' + (quote; item.path) + ', this.adapt-handler' + index + '\n'
     if documented
-        code = code.concat; '        registered-routes = registered-routes.endpoint; (instance http-method::get;), \'/openapi.json\', this.openapi-handler\n'
-    code = code.concat; '        return registered-routes\n'
+        code = code + '        registered-routes = registered-routes.endpoint; (instance http-method::get;), \'/openapi.json\', this.openapi-handler\n'
+    code = code + '        return registered-routes\n'
     if documented
-        code = code.concat; '\n    async function openapi-handler http-response; _request http-request\n        return create-response; 200, \'application/json\', (openapi-json;)\n'
+        code = code + '\n    async function openapi-handler http-response; _request http-request\n        return create-response; 200, \'application/json\', (openapi-json;)\n'
     for item in operations
         if item.owner == owner
-            code = code.concat; '\n', item.adapter
+            code = code + '\n' + item.adapter
     return code
 
 function static-directory-source string throws consumer-error; declaration document-value, prefix string
@@ -344,7 +348,7 @@ function static-directory-source string throws consumer-error; declaration docum
     applications = get; declaration, 'annotations'
     for index in (range; 0, (applications.length;))
         application = at; applications, index
-        if (text; (get; application, 'identity')) == '/http-server/annotations::static-directory'
+        if (text; (get; application, 'identity')) == '/streaky/http-server/annotations::static-directory'
             payload = get; application, 'payload'
             pairs = get; payload, 'value'
             path string = ''
@@ -362,8 +366,8 @@ function static-directory-source string throws consumer-error; declaration docum
                 fail; declaration, 'static-directory must name a nonempty relative directory without parent traversal'
             mounted = path
             if prefix != '/'
-                mounted = prefix.concat; path
-            code = code.concat; '    app = app.static-directory; ', (quote; mounted), ', ', (quote; directory), '\n'
+                mounted = prefix + path
+            code = code + '    app = app.static-directory; ' + (quote; mounted) + ', ' + (quote; directory) + '\n'
     return code
 
 function generate string throws consumer-error; request document-value
@@ -374,27 +378,27 @@ function generate string throws consumer-error; request document-value
         declaration = at; declarations, index
         kind = text; (get; declaration, 'kind')
         if kind == 'callable'
-            metadata = annotation; declaration, 'endpoint', '/http-server/annotations'
+            metadata = annotation; declaration, 'endpoint', '/streaky/http-server/annotations'
             if metadata.kind != 'none'
                 endpoints.append; declaration
         else if kind == 'class'
-            metadata = annotation; declaration, 'route-group', '/http-server/annotations'
+            metadata = annotation; declaration, 'route-group', '/streaky/http-server/annotations'
             if metadata.kind != 'none'
                 groups.append; declaration
     if endpoints.length == 0
         fail; request, 'HTTP consumer requires at least one annotated endpoint'
-    generated = 'namespace generated/http-server\n\nfrom /core/documents import document-value, make-document-none, make-document-string, make-document-bool, make-document-integer, document-map-entries, make-document-map\nfrom /core/documents/json import canonical-json\nfrom /http-server import application, controller, routes, http-method, http-request, http-response, create-response\n'
+    generated = 'namespace generated/http-server\n\nfrom /core/documents import document-value, make-document-none, make-document-string, make-document-bool, make-document-integer, document-map-entries, make-document-map\nfrom /core/documents/json import canonical-json\nfrom /streaky/http-server import application, controller, routes, http-method, http-request, http-response, create-response\n'
     for index in (range; 0, groups.length)
         group = groups[index]
         identity = text; (get; group, 'identity')
         pieces = identity.split; '::'
-        generated = generated.concat; 'from ', pieces[0], ' import ', pieces[1], ' as route-source', index, '\n'
-        metadata = annotation; group, 'route-group', '/http-server/annotations'
+        generated = generated + 'from ' + pieces[0] + ' import ' + pieces[1] + ' as route-source' + index + '\n'
+        metadata = annotation; group, 'route-group', '/streaky/http-server/annotations'
         prefix = metadata-string; metadata, 'prefix', group
         route-shape; prefix, group
         for previous-index in (range; 0, index)
             previous = groups[previous-index]
-            previous-meta = annotation; previous, 'route-group', '/http-server/annotations'
+            previous-meta = annotation; previous, 'route-group', '/streaky/http-server/annotations'
             if (metadata-string; previous-meta, 'prefix', previous) == prefix
                 fail; group, 'duplicate HTTP route-group mount prefix'
     operations list of operation = list
@@ -414,8 +418,8 @@ function generate string throws consumer-error; request document-value
             standalone = true
             identity = text; (get; declaration, 'identity')
             pieces = identity.split; '::'
-            generated = generated.concat; 'from ', pieces[0], ' import ', pieces[1], ' as selected-handler', index, '\n'
-    generated = generated.concat; '\n', (model-codecs; declarations)
+            generated = generated + 'from ' + pieces[0] + ' import ' + pieces[1] + ' as selected-handler' + index + '\n'
+    generated = generated + '\n' + (model-codecs; declarations)
     openapi = '{"openapi":"3.1.0","info":{"title":"HTTP API","version":"1.0.0"},"servers":[{"url":"/"}],"paths":{'
     paths list of string = list
     for current in operations
@@ -425,37 +429,37 @@ function generate string throws consumer-error; request document-value
                 seen = true
         if current.documented and not seen
             if paths.length > 0
-                openapi = openapi.concat; ','
+                openapi = openapi + ','
             paths.append; current.mounted-path
-            openapi = openapi.concat; (json-quote; current.mounted-path), ':{'
+            openapi = openapi + (json-quote; current.mounted-path) + ':{'
             count int = 0
             for item in operations
                 if item.documented and item.mounted-path == current.mounted-path
                     if count > 0
-                        openapi = openapi.concat; ','
+                        openapi = openapi + ','
                     count = count + 1
-                    openapi = openapi.concat; (json-quote; (method-key; item.method, request)), ':', item.schema
-            openapi = openapi.concat; '}'
-    openapi = openapi.concat; '},"components":{"schemas":', (model-schemas; declarations), '}}'
-    generated = generated.concat; '\npublic function openapi-json string;\n    return ', (quote; openapi), '\n\nfunction validation-response http-response; message string\n    entries = instance document-map-entries;\n    entries.append; \'detail\', (make-document-string; message)\n    encoded = canonical-json; (make-document-map; entries).value\n    return create-response; 422, \'application/json\', encoded.value.encoded\n'
+                    openapi = openapi + (json-quote; (method-key; item.method, request)) + ':' + item.schema
+            openapi = openapi + '}'
+    openapi = openapi + '},"components":{"schemas":' + (model-schemas; declarations) + '}}'
+    generated = generated + '\npublic function openapi-json string;\n    return ' + (quote; openapi) + '\n\nfunction validation-response http-response; message string\n    entries = instance document-map-entries;\n    entries.append; \'detail\', (make-document-string; message)\n    encoded = canonical-json; (make-document-map; entries).value\n    return create-response; 422, \'application/json\', encoded.value.encoded\n'
     if standalone
-        generated = generated.concat; (controller-source; 'annotated-controller', '', '', operations, true)
+        generated = generated + (controller-source; 'annotated-controller', '', '', operations, true)
     for index in (range; 0, groups.length)
         group = groups[index]
         owner = text; (get; group, 'identity')
-        metadata = annotation; group, 'route-group', '/http-server/annotations'
+        metadata = annotation; group, 'route-group', '/streaky/http-server/annotations'
         documented = truth; (scalar; (get; metadata, 'document'))
-        generated = generated.concat; (controller-source; ('annotated-group'.concat; index), owner, ('route-source'.concat; index), operations, documented)
-    generated = generated.concat; '\npublic function mount-annotated application; app application\n'
+        generated = generated + (controller-source; 'annotated-group' + index, owner, 'route-source' + index, operations, documented)
+    generated = generated + '\npublic function mount-annotated application; app application\n'
     if standalone
-        generated = generated.concat; '    app = app.mount; \'/\', (instance annotated-controller;)\n'
+        generated = generated + '    app = app.mount; \'/\', (instance annotated-controller;)\n'
     for index in (range; 0, groups.length)
         group = groups[index]
-        metadata = annotation; group, 'route-group', '/http-server/annotations'
+        metadata = annotation; group, 'route-group', '/streaky/http-server/annotations'
         prefix = metadata-string; metadata, 'prefix', group
-        generated = generated.concat; '    app = app.mount; ', (quote; prefix), ', (instance annotated-group', index, '; (instance route-source', index, ';))\n'
-        generated = generated.concat; (static-directory-source; group, prefix)
-    generated = generated.concat; '    return app\n'
+        generated = generated + '    app = app.mount; ' + (quote; prefix) + ', (instance annotated-group' + index + '; (instance route-source' + index + ';))\n'
+        generated = generated + (static-directory-source; group, prefix)
+    generated = generated + '    return app\n'
     return generated
 
 function main;
