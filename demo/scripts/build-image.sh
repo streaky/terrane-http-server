@@ -3,7 +3,7 @@ set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../../.." && pwd)
 demo="$root/packages/http-server/demo"
-compiler=${TERRANE:-"$root/target/debug/terrane"}
+compiler=${TERRANE:-"$root/target/release/terrane"}
 
 if [ ! -x "$compiler" ]; then
     echo "Terrane CLI not found or not executable: $compiler (set TERRANE to override)" >&2
