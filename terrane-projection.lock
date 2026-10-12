@@ -4945,11 +4945,11 @@
       "current_version": "0.1.9"
     }
   ],
-  "cache_identity": "83c2c86dcfaa7eebd626d69c875b96e0cedc02139644f5b3aa451630462fb272",
+  "cache_identity": "d08c06d520a73eb8dfc64868c2257c87ddcfa931abff7981c43a5fe3c0d5e4e3",
   "source": "Local",
   "rustdoc_format": 61,
   "projection_schema": "260",
-  "content_hash": "cd2f5e28e98e169c1b9cc57277f459a3600c8522369c3b03bab29dc8f65e7ee4",
+  "content_hash": "16235c84ee89fbbfd0d8b3b63c75c0e36ed5692d229f9e62fa0dce1e4f84c574",
   "resolution": {
     "outcome": "LocalRustdoc",
     "events": [

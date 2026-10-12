@@ -327,7 +327,15 @@
           "InvalidUtf8InPathParam.status",
           "InvalidUtf8InPathParam.try_into",
           "InvalidUtf8InPathParam.vzip",
-          "InvalidUtf8InPathParam::from"
+          "InvalidUtf8InPathParam::from",
+          "RawPathParamsIter"
+        ],
+        "/deps/axum/extract/path/failedtodeserializepathparams": [
+          "into_kind",
+          "kind"
+        ],
+        "/deps/axum/extract/path/rawpathparams": [
+          "iter"
         ],
         "/deps/axum/extract/rejection": [
           "BytesRejection",
@@ -668,6 +676,10 @@
         ],
         "/deps/axum/extract/ws/utf8bytes/trait/core/convert/tryfrom-std/vec/vec-u8": [
           "try_from"
+        ],
+        "/deps/axum/extract/ws/websocketupgrade": [
+          "on_failed_upgrade",
+          "set_selected_protocol"
         ],
         "/deps/axum/handler": [
           "HandlerService",
@@ -1061,6 +1073,9 @@
           "borrowed-option.cloned",
           "borrowed-option.map"
         ],
+        "/deps/axum/http/request/request": [
+          "method"
+        ],
         "/deps/axum/http/response": [
           "Builder",
           "Builder.body",
@@ -1091,6 +1106,9 @@
           "InvalidStatusCode.into",
           "InvalidStatusCode.try_into",
           "InvalidStatusCode::from"
+        ],
+        "/deps/axum/http/status/statuscode": [
+          "is_success"
         ],
         "/deps/axum/http/statuscode/trait/core/cmp/partialeq": [
           "eq"
@@ -1515,6 +1533,9 @@
         "/deps/axum/response/sse/duration/trait/core/ops/arith/mul-u32": [
           "mul"
         ],
+        "/deps/axum/response/sse/eventdatawriter": [
+          "into_event"
+        ],
         "/deps/axum/router": [
           "into_make_service_with_connect_info"
         ],
@@ -1632,6 +1653,9 @@
         "/deps/axum/routing/methodrouter/trait/axum/serviceext-r": [
           "into_make_service_with_connect_info"
         ],
+        "/deps/axum/routing/router": [
+          "has_routes"
+        ],
         "/deps/axum/serve": [
           "Serve",
           "Serve.into",
@@ -1699,6 +1723,9 @@
           "SizeHint::default",
           "SizeHint::new",
           "SizeHint::with_exact"
+        ],
+        "/deps/axum-core/body/body": [
+          "into_data_stream"
         ],
         "/deps/axum-core/body/body/trait/core/convert/from": [
           "from"
@@ -2300,6 +2327,9 @@
           "borrowed-option.cloned",
           "borrowed-option.map"
         ],
+        "/deps/http/request/request": [
+          "method"
+        ],
         "/deps/http/response": [
           "Builder",
           "Builder.body",
@@ -2330,6 +2360,9 @@
           "InvalidStatusCode.into",
           "InvalidStatusCode.try_into",
           "InvalidStatusCode::from"
+        ],
+        "/deps/http/status/statuscode": [
+          "is_success"
         ],
         "/deps/http/statuscode/trait/core/cmp/partialeq": [
           "eq"
@@ -2922,6 +2955,20 @@
           "try_exists",
           "write"
         ],
+        "/deps/tokio/fs/file/file": [
+          "create",
+          "open",
+          "set_max_buf_size",
+          "sync_all"
+        ],
+        "/deps/tokio/fs/open-options/openoptions": [
+          "append",
+          "create",
+          "new",
+          "open",
+          "truncate",
+          "write"
+        ],
         "/deps/tokio/future/maybe-done": [
           "MaybeDone",
           "MaybeDone-Future",
@@ -2964,6 +3011,12 @@
           "Empty.into",
           "Empty.is_write_vectored",
           "Empty.try_into",
+          "Error",
+          "Error.into",
+          "Error.kind",
+          "Error.raw_os_error",
+          "Error.try_into",
+          "Error::from",
           "ErrorKind",
           "Interest",
           "Interest.add",
@@ -3020,6 +3073,8 @@
           "Repeat",
           "Repeat.into",
           "Repeat.try_into",
+          "Result",
+          "SeekFrom",
           "SimplexStream",
           "SimplexStream.into",
           "SimplexStream.is_write_vectored",
@@ -3051,11 +3106,22 @@
           "repeat",
           "sink"
         ],
+        "/deps/tokio/io/async-fd/asyncfdreadyguard": [
+          "clear_ready",
+          "clear_ready_matching"
+        ],
+        "/deps/tokio/io/async-fd/asyncfdreadymutguard": [
+          "clear_ready",
+          "clear_ready_matching"
+        ],
         "/deps/tokio/io/bufstream/trait/core/convert/from-tokio/io/bufreader-tokio/io/bufwriter-rw": [
           "from"
         ],
         "/deps/tokio/io/bufstream/trait/core/convert/from-tokio/io/bufwriter-tokio/io/bufreader-rw": [
           "from"
+        ],
+        "/deps/tokio/io/read-buf/readbuf": [
+          "assume_init"
         ],
         "/deps/tokio/io/unix": [
           "AsyncFd",
@@ -3091,6 +3157,12 @@
         ],
         "/deps/tokio/io/util/chain": [
           "Chain"
+        ],
+        "/deps/tokio/io/util/lines/lines": [
+          "next_line"
+        ],
+        "/deps/tokio/io/util/mem/simplexstream": [
+          "new_unsplit"
         ],
         "/deps/tokio/macros": [
           "join",
@@ -3455,8 +3527,59 @@
           "ReuniteError.into",
           "ReuniteError.try_into"
         ],
+        "/deps/tokio/net/tcp/listener/tcplistener": [
+          "from_std",
+          "set_ttl"
+        ],
+        "/deps/tokio/net/tcp/socket/tcpsocket": [
+          "set_linger",
+          "set_nodelay",
+          "set_tos"
+        ],
+        "/deps/tokio/net/tcp/split-owned/ownedreadhalf": [
+          "readable",
+          "ready"
+        ],
+        "/deps/tokio/net/tcp/split-owned/ownedwritehalf": [
+          "writable"
+        ],
+        "/deps/tokio/net/tcp/split/readhalf": [
+          "readable",
+          "ready"
+        ],
+        "/deps/tokio/net/tcp/split/writehalf": [
+          "writable"
+        ],
+        "/deps/tokio/net/tcp/stream/tcpstream": [
+          "connect",
+          "from_std",
+          "readable",
+          "ready",
+          "set_linger",
+          "set_nodelay",
+          "set_ttl",
+          "writable"
+        ],
         "/deps/tokio/net/tcplistener": [
           "local_addr"
+        ],
+        "/deps/tokio/net/udp/udpsocket": [
+          "bind",
+          "connect",
+          "from_std",
+          "join_multicast_v4",
+          "join_multicast_v6",
+          "peek_sender",
+          "readable",
+          "ready",
+          "set_broadcast",
+          "set_multicast_loop_v4",
+          "set_multicast_loop_v6",
+          "set_multicast_ttl_v4",
+          "set_tos",
+          "set_ttl",
+          "try_peek_sender",
+          "writable"
         ],
         "/deps/tokio/net/unix": [
           "OwnedReadHalf",
@@ -3505,6 +3628,10 @@
           "pid_t",
           "uid_t"
         ],
+        "/deps/tokio/net/unix/listener/unixlistener": [
+          "bind",
+          "from_std"
+        ],
         "/deps/tokio/net/unix/pipe": [
           "OpenOptions",
           "OpenOptions.clone",
@@ -3544,11 +3671,48 @@
           "Sender::from_owned_fd",
           "Sender::from_owned_fd_unchecked"
         ],
+        "/deps/tokio/net/unix/pipe/openoptions": [
+          "new",
+          "open_receiver",
+          "open_sender"
+        ],
+        "/deps/tokio/net/unix/pipe/receiver": [
+          "readable",
+          "ready"
+        ],
+        "/deps/tokio/net/unix/pipe/sender": [
+          "writable"
+        ],
+        "/deps/tokio/net/unix/socket/unixsocket": [
+          "new_datagram",
+          "new_stream"
+        ],
         "/deps/tokio/net/unix/socketaddr/trait/core/convert/from-std/os/unix/net/addr/socketaddr": [
           "from"
         ],
         "/deps/tokio/net/unix/socketaddr/trait/core/convert/from-tokio/net/unix/socketaddr": [
           "from"
+        ],
+        "/deps/tokio/net/unix/split-owned/ownedreadhalf": [
+          "readable",
+          "ready"
+        ],
+        "/deps/tokio/net/unix/split-owned/ownedwritehalf": [
+          "writable"
+        ],
+        "/deps/tokio/net/unix/split/readhalf": [
+          "readable",
+          "ready"
+        ],
+        "/deps/tokio/net/unix/split/writehalf": [
+          "writable"
+        ],
+        "/deps/tokio/net/unix/stream/unixstream": [
+          "connect",
+          "from_std",
+          "readable",
+          "ready",
+          "writable"
         ],
         "/deps/tokio/net/unixlistener": [
           "local_addr"
@@ -3617,6 +3781,40 @@
           "TryCurrentError.is_missing_context",
           "TryCurrentError.is_thread_local_destroyed",
           "TryCurrentError.try_into"
+        ],
+        "/deps/tokio/runtime/builder/builder": [
+          "build",
+          "new_current_thread",
+          "new_multi_thread"
+        ],
+        "/deps/tokio/runtime/handle/handle": [
+          "block_on",
+          "enter",
+          "runtime_flavor",
+          "spawn_blocking"
+        ],
+        "/deps/tokio/runtime/runtime/runtime": [
+          "block_on",
+          "enter",
+          "handle",
+          "metrics",
+          "new",
+          "shutdown_background",
+          "shutdown_timeout",
+          "spawn",
+          "spawn_blocking"
+        ],
+        "/deps/tokio/runtime/task/abort/aborthandle": [
+          "abort"
+        ],
+        "/deps/tokio/runtime/task/error/joinerror": [
+          "id",
+          "is_cancelled"
+        ],
+        "/deps/tokio/runtime/task/join/joinhandle": [
+          "abort",
+          "id",
+          "is_finished"
         ],
         "/deps/tokio/sync": [
           "AcquireError",
@@ -3780,6 +3978,12 @@
           "borrowed-option.cloned",
           "borrowed-option.map"
         ],
+        "/deps/tokio/sync/barrier/barrier": [
+          "wait"
+        ],
+        "/deps/tokio/sync/barrier/barrierwaitresult": [
+          "is_leader"
+        ],
         "/deps/tokio/sync/broadcast": [
           "Receiver",
           "Receiver.blocking_recv",
@@ -3826,6 +4030,9 @@
           "SendError.into",
           "SendError.try_into",
           "TryRecvError"
+        ],
+        "/deps/tokio/sync/broadcast/receiver": [
+          "len"
         ],
         "/deps/tokio/sync/futures": [
           "OwnedNotified",
@@ -3918,6 +4125,15 @@
           "WeakUnboundedSender.upgrade",
           "WeakUnboundedSender.weak_count"
         ],
+        "/deps/tokio/sync/mpsc/bounded/receiver": [
+          "capacity",
+          "close",
+          "max_capacity"
+        ],
+        "/deps/tokio/sync/mpsc/bounded/sender": [
+          "capacity",
+          "max_capacity"
+        ],
         "/deps/tokio/sync/mpsc/error": [
           "SendError",
           "SendError.clone",
@@ -3928,6 +4144,14 @@
           "SendTimeoutError",
           "TryRecvError",
           "TrySendError"
+        ],
+        "/deps/tokio/sync/mpsc/unbounded/unboundedreceiver": [
+          "close"
+        ],
+        "/deps/tokio/sync/notify/notify": [
+          "new",
+          "notify_one",
+          "notify_waiters"
         ],
         "/deps/tokio/sync/oneshot": [
           "Receiver",
@@ -3954,6 +4178,19 @@
           "RecvError.into",
           "RecvError.try_into",
           "TryRecvError"
+        ],
+        "/deps/tokio/sync/oneshot/receiver": [
+          "close",
+          "is_terminated"
+        ],
+        "/deps/tokio/sync/semaphore/semaphore": [
+          "acquire",
+          "add_permits",
+          "close",
+          "try_acquire"
+        ],
+        "/deps/tokio/sync/semaphore/semaphorepermit": [
+          "forget"
         ],
         "/deps/tokio/sync/watch": [
           "Receiver",
@@ -3998,6 +4235,14 @@
           "SendError.eq",
           "SendError.into",
           "SendError.try_into"
+        ],
+        "/deps/tokio/sync/watch/receiver": [
+          "changed",
+          "has_changed"
+        ],
+        "/deps/tokio/sync/watch/sender": [
+          "closed",
+          "is_closed"
         ],
         "/deps/tokio/task": [
           "AbortHandle",
@@ -4087,11 +4332,17 @@
           "has_budget_remaining",
           "unconstrained"
         ],
+        "/deps/tokio/task/coop/restoreonpending": [
+          "made_progress"
+        ],
         "/deps/tokio/task/futures": [
           "TaskLocalFuture",
           "TaskLocalFuture.drop",
           "TaskLocalFuture.into",
           "TaskLocalFuture.try_into"
+        ],
+        "/deps/tokio/task/join-set/joinset": [
+          "abort_all"
         ],
         "/deps/tokio/task/task-local": [
           "AccessError"
@@ -4232,6 +4483,10 @@
         ],
         "/deps/tokio/time/instant/trait/core/ops/arith/sub-core/time/duration": [
           "sub"
+        ],
+        "/deps/tokio/time/interval/interval": [
+          "set_missed_tick_behavior",
+          "tick"
         ]
       }
     },
@@ -4451,6 +4706,10 @@
         "/deps/tower-http/services/fs/serve-dir": [
           "InfallibleResponseFuture"
         ],
+        "/deps/tower-http/services/fs/serve-dir/servedir": [
+          "not_found_service",
+          "try_call"
+        ],
         "/deps/tower-http/services/mime/trait/core/cmp/partialeq": [
           "eq"
         ],
@@ -4546,12 +4805,361 @@
       "version": "=0.3.3"
     }
   ],
-  "removed": [],
-  "cache_identity": "7358df9b7cbfcb5a199baf138b7a76279ddf3491aa6e837676813fc5b89529f0",
+  "removed": [
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.abs_diff",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.add",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.add_assign",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.as_micros",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.as_millis",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.as_millis_f32",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.as_millis_f64",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.as_nanos",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.as_secs",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.as_secs_f32",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.as_secs_f64",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.checked_add",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.checked_div",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.checked_mul",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.checked_sub",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.clone",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.cmp",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.div",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.div_assign",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.div_duration_ceil",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.div_duration_f32",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.div_duration_f64",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.div_duration_floor",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.div_f32",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.div_f64",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.eq",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.into",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.is_zero",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.mul_assign",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.mul_f32",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.mul_f64",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.partial_cmp",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.saturating_add",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.saturating_mul",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.saturating_sub",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.sub",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.sub_assign",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.subsec_micros",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.subsec_millis",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.subsec_nanos",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration.try_into",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration::default",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration::from_days",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration::from_hours",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration::from_micros",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration::from_millis",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration::from_mins",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration::from_nanos",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration::from_nanos_u128",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration::from_secs",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration::from_secs_f32",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration::from_secs_f64",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration::from_weeks",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration::new",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration::try_from_secs_f32",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net",
+      "name": "Duration::try_from_secs_f64",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/net/duration/trait/core/ops/arith/mul-u32",
+      "name": "mul",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    }
+  ],
+  "cache_identity": "4c3d1a136b70883a1236a9f97f32fbc8ac2bb99ff47c3dd87e2eb4c8c1479c9b",
   "source": "Local",
-  "rustdoc_format": 57,
-  "projection_schema": "259",
-  "content_hash": "ac36a8eeb6c6a5ab188c8ef538cb67d91b1e2433925ce2b0b3d14d3d548fca0d",
+  "rustdoc_format": 61,
+  "projection_schema": "260",
+  "content_hash": "236394b6e7b016dfcff11b57029e64b8da993c6619cc5cda6f4587966fc3c243",
   "resolution": {
     "outcome": "LocalRustdoc",
     "events": [
