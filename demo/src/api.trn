@@ -1,6 +1,7 @@
 namespace http-server-demo
 
 from /streaky/http-server/annotations import endpoint, path, query, body, route-group
+from /streaky/http-server import http-error
 from /core/collections import list
 
 @[route-group; prefix = '/api']
@@ -17,7 +18,7 @@ class catalog-api
         @[query;] detailed bool = false,
     )
         if item-id != 1
-            return create-item-response; item-id, 'Unknown item', 0, false
+            throw http-error; 404, 'Catalog item not found'
         available = false
         if detailed
             available = true
@@ -41,5 +42,5 @@ class catalog-api
         @[body;] order order-input,
     )
         if order.item-id != 1
-            return create-quote-output; order.item-id, order.quantity, 0
+            throw http-error; 404, 'Catalog item not found'
         return create-quote-output; 1, order.quantity, order.quantity * 1200

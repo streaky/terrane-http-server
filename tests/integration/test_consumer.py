@@ -94,15 +94,22 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
             '"/http-annotation-test::replace", "/http-annotation-test::change", "/http-annotation-test::remove", '
             '"/http-annotation-test::echo-model", "/http-annotation-test::echo-model::value", '
             '"/http-annotation-test::data-model", "/http-annotation-test::tree-node", '
-            '"/http-annotation-test::failing-handler", "/http-annotation-test::throwing-success"]',
+            '"/http-annotation-test::failing-handler", "/http-annotation-test::throwing-success", '
+            '"/http-annotation-test::created", "/http-annotation-test::redirect", "/http-annotation-test::empty", '
+            '"/http-annotation-test::denied", "/http-annotation-test::custom-error", '
+            '"/http-annotation-test::invalid-code", "/http-annotation-test::invalid-header", '
+            '"/http-annotation-test::tampered-error", "/http-annotation-test::quoted-default", '
+            '"/http-annotation-test::quoted-default::label"]',
         ]))
-        (self.directory / "src/main.trn").write_text("""namespace http-annotation-test
-from /streaky/http-server/annotations import endpoint, body
-from /streaky/http-server import create-application
+        (self.directory / "src/main.trn").write_text(r"""namespace http-annotation-test
+from /streaky/http-server/annotations import endpoint, body, query
+from /streaky/http-server import create-application, http-response, create-response, create-json-response, create-redirect-response, http-error, create-http-error, controller, routes, client-info
+from /streaky/http-server import http-response as explicit-response
 from /generated/http-server import annotated-controller
 from /core/process import arguments
 from /core/collections import list
 from /core/errors import throwable, coercion-error
+from /core/documents import document-map-entries, make-document-string, make-document-map
 
 class tree-node
     name string
@@ -117,6 +124,7 @@ class data-model
     count uint8 = 7
     children list of tree-node
     selected tree-node|none
+    related list of (tree-node)|none
     private internal string = 'not-public'
 
 @[endpoint; path = '/models', method = 'POST']
@@ -147,9 +155,74 @@ async function failing-handler string throws throwable;
 async function throwing-success string throws throwable;
     return 'still works'
 
+@[endpoint; path = '/created', summary = 'A "quoted" café\nand a backslash \\']
+async function created explicit-response;
+    entries = instance document-map-entries;
+    entries.append; 'value', (make-document-string; 'say "hello" \\ café\n\t')
+    payload = make-document-map; entries
+    if payload.failed
+        throw coercion-error
+    response = create-json-response; 201, payload.value
+    response = response.with-header; 'location', '/created/1'
+    response = response.with-header; 'set-cookie', 'first=1'
+    return response.with-header; 'set-cookie', 'second=2'
+
+@[endpoint; path = '/redirect']
+async function redirect http-response;
+    return create-redirect-response; '/method', 307
+
+@[endpoint; path = '/empty']
+async function empty http-response;
+    return create-response; 204, 'text/plain', ''
+
+@[endpoint; path = '/denied']
+async function denied string;
+    throw http-error; 403
+
+@[endpoint; path = '/custom-error']
+async function custom-error http-response;
+    entries = instance document-map-entries;
+    entries.append; 'detail', (make-document-string; 'No café "seat"\nleft')
+    payload = make-document-map; entries
+    if payload.failed
+        throw coercion-error
+    response = create-json-response; 409, payload.value
+    response = response.with-header; 'x-error', 'capacity'
+    throw (create-http-error; response)
+
+@[endpoint; path = '/invalid-code']
+async function invalid-code http-response;
+    return create-response; 999, 'text/plain', 'must not escape'
+
+@[endpoint; path = '/invalid-header']
+async function invalid-header http-response;
+    return (create-response; 200, 'text/plain', 'must not escape').with-header; 'x-invalid', 'a\r\nb'
+
+@[endpoint; path = '/tampered-error']
+async function tampered-error string;
+    error = instance http-error; 403
+    error.message = 'not-json'
+    throw error
+
+@[endpoint; path = '/quoted-default']
+async function quoted-default string; @[query;] label string = 'say "hello" \\ café\n\t'
+    return label
+
+async function text-denied string;
+    throw http-error; 401
+
+async function client-denied string; _client client-info
+    throw http-error; 403
+
+class text-controller implements controller
+    consuming function routes routes; registered-routes routes
+        registered-routes = registered-routes.get; '/denied', text-denied
+        return registered-routes.get-with-client; '/client-denied', client-denied
+
 async function main throws throwable;
     app = create-application;
     app = app.mount; '/', (instance annotated-controller;)
+    app = app.mount; '/text', (instance text-controller;)
     supplied = arguments;
     address = supplied[0].text
     app = app.with-address; address
@@ -202,16 +275,69 @@ main
             finally:
                 connection.close()
             self.assertEqual(request("GET", "/method"), 7)
+            def raw_request(path):
+                connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+                try:
+                    connection.request("GET", path)
+                    response = connection.getresponse()
+                    return response.status, response.getheaders(), response.read()
+                finally:
+                    connection.close()
+            status, headers, payload = raw_request("/created")
+            self.assertEqual(status, 201)
+            self.assertEqual(dict(headers)["content-type"], "application/json")
+            self.assertEqual(dict(headers)["location"], "/created/1")
+            self.assertEqual([value for name, value in headers if name.lower() == "set-cookie"], ["first=1", "second=2"])
+            special = 'say "hello" \\ café\n\t'
+            self.assertEqual(json.loads(payload), {"value": special})
+            status, headers, payload = raw_request("/redirect")
+            self.assertEqual(status, 307)
+            self.assertEqual(dict(headers)["location"], "/method")
+            self.assertEqual(payload, b"")
+            status, _, payload = raw_request("/empty")
+            self.assertEqual((status, payload), (204, b""))
+            for path, code, body in [("/denied", 403, b"Forbidden"),
+                                     ("/text/denied", 401, b"Unauthorized"),
+                                     ("/text/client-denied", 403, b"Forbidden")]:
+                with self.subTest(path=path):
+                    status, _, payload = raw_request(path)
+                    self.assertEqual((status, payload), (code, body))
+            status, headers, payload = raw_request("/custom-error")
+            self.assertEqual(status, 409)
+            self.assertEqual(dict(headers)["content-type"], "application/json")
+            self.assertEqual(dict(headers)["x-error"], "capacity")
+            self.assertEqual(json.loads(payload), {"detail": 'No café "seat"\nleft'})
+            for path in ("/invalid-code", "/invalid-header", "/tampered-error"):
+                with self.subTest(path=path):
+                    status, _, payload = raw_request(path)
+                    self.assertEqual(status, 500)
+                    self.assertNotIn(b"must not escape", payload)
+            self.assertEqual(request("GET", "/quoted-default"), special)
+            schema = request("GET", "/openapi.json")
+            self.assertEqual(schema["paths"]["/created"]["get"]["summary"], 'A "quoted" café\nand a backslash \\')
+            responses = schema["paths"]["/created"]["get"]["responses"]
+            self.assertNotIn("200", responses)
+            self.assertIn("default", responses)
+            default = schema["paths"]["/quoted-default"]["get"]["parameters"][0]
+            self.assertEqual(default["schema"]["default"], special)
+            self.assertFalse(default["required"])
+            self.assertEqual(request("GET", "/method"), 7)
             defaults = request("POST", "/models", "{}")
             self.assertEqual(defaults, {"active": True, "ratio": 1.5, "small": 0.5, "nickname": None,
-                "values": [], "count": 7, "children": [], "selected": None})
+                "values": [], "count": 7, "children": [], "selected": None, "related": None})
             model = {"active": False, "ratio": 2, "small": 1.5, "nickname": "Ada",
                 "values": [-32768, 32767], "count": 255,
                 "children": [{"name": "nested", "children": [{"name": "leaf", "children": []}]}],
-                "selected": {"name": "selected", "children": []}}
+                "selected": {"name": "selected", "children": []},
+                "related": [{"name": special, "children": []}]}
+            self.assertEqual(request("POST", "/models", json.dumps(model)), model)
+            model["related"] = None
+            self.assertEqual(request("POST", "/models", json.dumps(model)), model)
+            model["related"] = []
             self.assertEqual(request("POST", "/models", json.dumps(model)), model)
             for invalid in ['{"active":1}', '{"nickname":1}', '{"values":["bad"]}', '{"values":[32768]}',
                     '{"children":[1]}', '{"children":{}}', '{"children":[{"extra":true}]}',
+                    '{"related":{}}', '{"related":[1]}', '{"related":[{"extra":true}]}',
                     '{"count":256}', '{"count":-1}', '{"ratio":1e10000}', '{"small":1e40}', '{"internal":"leak"}', '{"selected":1}']:
                 with self.subTest(invalid=invalid):
                     request("POST", "/models", invalid, status=422)

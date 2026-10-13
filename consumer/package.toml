@@ -6,3 +6,21 @@ http-server-consumer = "src"
 
 [terrane-dependencies]
 annotation-consumer-protocol = { path = "../../../tools/annotation-consumers/protocol" }
+template = { path = "../../template" }
+
+[consumers.template]
+command = "../../template/.trn/consumers/template"
+args = [
+    "--namespace", "generated/template/http-server-consumer",
+    "--root", "templates",
+    "--template", "http/controller-source.trn.tpl",
+    "--template", "http/preamble.trn.tpl",
+    "--template", "http/openapi-json.trn.tpl",
+    "--template", "http/validation-response.trn.tpl",
+    "--template", "models/encode-model.trn.tpl",
+    "--template", "models/decode-model.trn.tpl",
+    "--template", "models/decode-field.trn.tpl",
+    "--template", "models/decode-list-assignment.trn.tpl",
+    "--template", "models/encode-list-field.trn.tpl",
+]
+declarations = ["/http-server-consumer::main"]

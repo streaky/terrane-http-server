@@ -101,10 +101,18 @@ class CatalogHttpTests(unittest.TestCase):
         self.assertEqual((status, content_type), (200, "application/json"))
         self.assertEqual(item, {"id": 1, "name": "Terrane notebook", "price-cents": 1200, "in-stock": False})
         self.assertTrue(self.request("GET", "/api/items/1?detailed=true")[2]["in-stock"])
-        self.assertEqual(self.request("GET", "/api/items/9")[2]["name"], "Unknown item")
         self.assertEqual(self.request("GET", "/api/search?term=Terrane+notebook")[2],
             {"term": "Terrane notebook", "limit": 10, "matches": True, "items": [{"id": 1, "name": "Terrane notebook", "price-cents": 1200, "in-stock": True}]})
         self.assertEqual(self.request("GET", "/api/search?term=notebook&limit=0")[2]["matches"], False)
+
+    def test_missing_catalog_items_return_http_error_status(self):
+        status, content_type, body = self.request("GET", "/api/items/99")
+        self.assertEqual(status, 404)
+        self.assertTrue(content_type.startswith("text/plain"))
+        self.assertEqual(body, "Catalog item not found")
+        status, _, body = self.request("POST", "/api/orders/quote", '{"item-id":99,"quantity":1}')
+        self.assertEqual(status, 404)
+        self.assertEqual(body, "Catalog item not found")
 
     def test_invalid_parameters_and_typed_bodies_return_422(self):
         for path in ["/api/items/not-an-int", "/api/items/1?detailed=maybe", "/api/search", "/api/search?term=x&limit=oops"]:
@@ -118,13 +126,12 @@ class CatalogHttpTests(unittest.TestCase):
         status, _, quote = self.request("POST", "/api/orders/quote", '{"item-id":1,"quantity":3}')
         self.assertEqual(status, 200)
         self.assertEqual(quote, {"item-id": 1, "quantity": 3, "total-cents": 3600})
-        self.assertEqual(self.request("POST", "/api/orders/quote", '{"item-id":9,"quantity":3}')[2]["total-cents"], 0)
         self.assertEqual(self.request("POST", "/api/orders/quote", '{"item-id":1}')[2],
             {"item-id": 1, "quantity": 0, "total-cents": 0})
 
     def test_json_utf8_and_body_size_boundary(self):
         self.assertEqual(self.request("POST", "/api/orders/quote", b'{"item-id":1,"quantity":1,"invalid":"\xff"}')[0], 422)
-        self.assertEqual(self.request("POST", "/api/orders/quote", b'{}' + b' ' * 2097100)[0], 200)
+        self.assertEqual(self.request("POST", "/api/orders/quote", b'{"item-id":1}' + b' ' * 2097100)[0], 200)
         self.assertEqual(self.request("POST", "/api/orders/quote", b'{}' + b' ' * 2097151)[0], 422)
 
     def test_html_and_static_files(self):

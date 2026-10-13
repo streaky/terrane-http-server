@@ -79,18 +79,27 @@ public class http-response
     status int = 200
     content-type string = 'text/plain; charset=utf-8'
     body string = ''
+    headers list of http-header
 
     function construct; status int, content-type string, body string
         this.status = status
         this.content-type = content-type
         this.body = body
 
+    consuming function with-header http-response; name string, value string
+        this.headers.append; (instance http-header; name, value)
+        return move this
+
 
 function into-native-response native-response throws throwable; response http-response
+    if response.status < 100 or response.status > 599
+        throw coercion-error
     code = status-code::from_u16; response.status
     builder = response-builder::new;
     builder = builder.status; code
     builder = builder.header; 'content-type', move response.content-type
+    for header in response.headers
+        builder = builder.header; header.name, header.value
     return builder.body; (body-from-text; move response.body)
 
 public function create-response http-response; status int, content-type string, body string

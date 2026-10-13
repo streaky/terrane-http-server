@@ -1,22 +1,46 @@
 namespace http-server-consumer
 
-from /annotation-consumer-protocol import get, at, text, truth, scalar, annotation, quote, json-quote, read-request, emit-source, emit-error, error-origin, consumer-error
-from /core/collections import list, range
-from /core/documents import document-value, make-document-none
+from /annotation-consumer-protocol import get, at, text, truth, scalar, annotation, read-request, emit-source, emit-error, error-origin, consumer-error
+from /core/collections import list, range, map
+from /core/documents import document-value, document-map-entries, make-document-none, make-document-string, make-document-bool, make-document-integer
 from /core/errors import replace-error
+from /http-server-consumer/rendering import make-code-engine, render-code
+from /streaky/template import template-engine, template-value, text-value, bool-value, list-value as template-list-value, object-value as template-object-value
+from /http-server-consumer/documents import object-value, list-value, encode-document, type-schema, source-quote
 from /http-server-consumer/models import is-model, model-reference, model-schemas, model-codecs, model-encoder, model-decoder
 
+function template-operations list of template-value throws consumer-error; operations list of operation, owner string
+    values list of template-value = list
+    for index in (range; 0, operations.length)
+        item = operations[index]
+        fields map of string, template-value = map;
+        fields.set; 'index', (text-value; (index.to-string;))
+        fields.set; 'method-key', (text-value; (method-key; item.method, (make-document-none;)))
+        fields.set; 'path-source', (text-value; (source-quote; item.path))
+        fields.set; 'adapter', (text-value; item.adapter)
+        fields.set; 'selected', (bool-value; item.owner == owner)
+        values.append; (template-object-value; fields)
+    return values
+
+function controller-source string throws consumer-error; engine ref template-engine, name string, owner string, source-type string, operations list of operation, documented bool
+    values map of string, template-value = map;
+    values.set; 'name', (text-value; name)
+    values.set; 'owner', (bool-value; owner != '')
+    values.set; 'source-type', (text-value; source-type)
+    values.set; 'operations', (template-list-value; (template-operations; operations, owner))
+    values.set; 'documented', (bool-value; documented)
+    return render-code; ref engine, 'http/controller-source.trn.tpl', values
 class operation
     path string
     method string
     identity string
-    schema string
+    schema document-value
     adapter string
     owner string
     mounted-path string
     documented bool
 
-    function construct; path string, method string, identity string, schema string, adapter string, owner string = '', mounted-path string = '', documented bool = true
+    function construct; path string, method string, identity string, schema document-value, adapter string, owner string = '', mounted-path string = '', documented bool = true
         this.path = path
         this.method = method
         this.identity = identity
@@ -45,7 +69,7 @@ function parameter-record document-value throws consumer-error; declarations doc
             result = record
             count = count + 1
     if count != 1
-        fail; parent, ('handler parameter ' + (quote; wanted) + ' must have exactly one selected declaration record')
+        fail; parent, ('handler parameter ' + (source-quote; wanted) + ' must have exactly one selected declaration record')
     return result
 
 function method-key string throws consumer-error; value string, record document-value
@@ -100,15 +124,31 @@ function default-source string throws consumer-error; value document-value, kind
         fail; record, 'HTTP query default must be a compile-time scalar of its declared type'
     raw = scalar; value
     if kind == 'string'
-        return quote; (text; raw)
+        return source-quote; (text; raw)
     return text; raw
 
-function default-json string throws consumer-error; value document-value, kind string, record document-value
+function default-json document-value throws consumer-error; value document-value, kind string, record document-value
     default-source; value, kind, record
     raw = scalar; value
     if kind == 'string'
-        return json-quote; (text; raw)
-    return text; raw
+        return make-document-string; (text; raw)
+    if kind == 'int'
+        result = make-document-integer; (text; raw)
+        if result.failed
+            fail; record, result.message
+        return result.value
+    return make-document-bool; (text; raw) == 'true'
+
+function response-description document-value throws consumer-error; description string, origin document-value
+    entries = instance document-map-entries;
+    entries.append; 'description', (make-document-string; description)
+    return (object-value; entries, origin)
+
+function response-with-content document-value throws consumer-error; description string, content document-value, origin document-value
+    entries = instance document-map-entries;
+    entries.append; 'description', (make-document-string; description)
+    entries.append; 'content', content
+    return (object-value; entries, origin)
 
 function route-group-record document-value throws consumer-error; declarations document-value, identity string, declaration document-value
     for index in (range; 0, (declarations.length;))
@@ -154,14 +194,17 @@ function make-operation operation throws consumer-error; declaration document-va
     if owner != '' and (text; (get; contracts, 'invocation_mode')) != 'Shared'
         fail; declaration, 'HTTP endpoint methods must have shared invocation authority'
     result-kind = text; (get; signature, 'result')
+    result-explicit = result-kind == 'http-response' or result-kind == '/streaky/http-server::http-response'
     result-document = is-document; result-kind
-    result-model = is-model; result-kind, declarations
-    if result-kind != 'string' and result-kind != 'int' and result-kind != 'bool' and not result-document and not result-model
-        fail; declaration, 'HTTP result must be a scalar, document-value, or a selected Terrane model class'
+    result-model = false
+    if not result-explicit
+        result-model = is-model; result-kind, declarations
+    if result-kind != 'string' and result-kind != 'int' and result-kind != 'bool' and not result-document and not result-model and not result-explicit
+        fail; declaration, 'HTTP result must be a scalar, document-value, http-response, or a selected Terrane model class'
     content-type = metadata-string; metadata, 'content-type', declaration
     if content-type != 'application/json' and content-type != 'text/html' and content-type != 'text/plain'
         fail; declaration, 'HTTP response content-type must be application/json, text/html, or text/plain'
-    if content-type != 'application/json' and result-kind != 'string'
+    if not result-explicit and content-type != 'application/json' and result-kind != 'string'
         fail; declaration, 'HTML and plain-text endpoints must return string'
     operation-id = metadata-string; metadata, 'operation-id', declaration
     if operation-id == ''
@@ -176,22 +219,22 @@ function make-operation operation throws consumer-error; declaration document-va
         documentation = get; declaration, 'documentation'
         if documentation.kind == 'string'
             description = text; documentation
-    schema = '{"operationId":' + (json-quote; operation-id) + ',"summary":' + (json-quote; summary) + ',"description":' + (json-quote; description) + ',"parameters":['
-    adapter-throws string = ''
-    if (truth; (get; signature, 'throws'))
-        adapter-throws = ' throws throwable'
-    adapter = '    async function adapt-handler' + index + ' http-response' + adapter-throws + '; request http-request\n'
+    entries = instance document-map-entries;
+    entries.append; 'operationId', (make-document-string; operation-id)
+    entries.append; 'summary', (make-document-string; summary)
+    entries.append; 'description', (make-document-string; description)
+    parameter-values list of document-value = list
+    adapter = '    async function adapt-handler' + index + ' http-response throws throwable; request http-request\n'
     arguments string = ''
     parameters = get; signature, 'parameters'
     if parameters.kind != 'list'
         fail; declaration, 'HTTP handler signature must expose parameters'
     if (parameters.length;) == 0
-        adapter = '    async function adapt-handler' + index + ' http-response' + adapter-throws + '; _request http-request\n'
+        adapter = '    async function adapt-handler' + index + ' http-response throws throwable; _request http-request\n'
     names list of string = list
     locations list of string = list
     path-names list of string = list
     body-index int = -1
-    parameter-spec-count int = 0
     for parameter-index in (range; 0, (parameters.length;))
         parameter = at; parameters, parameter-index
         name = text; (get; parameter, 'name')
@@ -243,31 +286,31 @@ function make-operation operation throws consumer-error; declaration document-va
                 path-names.append; wire-name
             if (truth; (get; parameter, 'optional')) and not optional
                 fail; record, 'optional HTTP parameter requires a compile-time default'
-            if parameter-spec-count > 0
-                schema = schema + ','
-            parameter-spec-count = parameter-spec-count + 1
-            required = 'true'
-            if optional
-                required = 'false'
-            schema = schema + '{"name":' + (json-quote; wire-name) + ',"in":' + (json-quote; location) + ',"required":' + required + ',"schema":{"type":' + (json-quote; (schema-type; kind))
-            initial = quote; ''
+            parameter-entries = instance document-map-entries;
+            parameter-entries.append; 'name', (make-document-string; wire-name)
+            parameter-entries.append; 'in', (make-document-string; location)
+            parameter-entries.append; 'required', (make-document-bool; not optional)
+            parameter-schema-entries = instance document-map-entries;
+            parameter-schema-entries.append; 'type', (make-document-string; (schema-type; kind))
+            initial = source-quote; ''
             if kind == 'int'
                 initial = '0'
             else if kind == 'bool'
                 initial = 'false'
             if optional
                 initial = default-source; default, kind, record
-                schema = schema + ',"default":' + (default-json; default, kind, record)
-            schema = schema + '}}'
-            adapter = adapter + '        ' + variable + ' ' + kind + ' = ' + initial + '\n        raw-value' + parameter-index + ' = request.' + location + '-value; ' + (quote; wire-name) + '\n        if raw-value' + parameter-index + ' != none\n'
+                parameter-schema-entries.append; 'default', (default-json; default, kind, record)
+            parameter-entries.append; 'schema', (object-value; parameter-schema-entries, record)
+            parameter-values.append; (object-value; parameter-entries, record)
+            adapter = adapter + '        ' + variable + ' ' + kind + ' = ' + initial + '\n        raw-value' + parameter-index + ' = request.' + location + '-value; ' + (source-quote; wire-name) + '\n        if raw-value' + parameter-index + ' != none\n'
             if kind == 'string'
                 adapter = adapter + '            ' + variable + ' = raw-value' + parameter-index + '\n'
             else if kind == 'int'
-                adapter = adapter + '            try\n                ' + variable + ' = raw-value' + parameter-index + '.radix; 10\n            catch\n                return validation-response; ' + (quote; ('Invalid integer ' + location + ' parameter: ' + wire-name)) + '\n'
+                adapter = adapter + '            try\n                ' + variable + ' = raw-value' + parameter-index + '.radix; 10\n            catch\n                return validation-response; ' + (source-quote; ('Invalid integer ' + location + ' parameter: ' + wire-name)) + '\n'
             else
-                adapter = adapter + '            if raw-value' + parameter-index + ' == \'true\'\n                ' + variable + ' = true\n            else if raw-value' + parameter-index + ' == \'false\'\n                ' + variable + ' = false\n            else\n                return validation-response; ' + (quote; ('Invalid boolean ' + location + ' parameter: ' + wire-name)) + '\n'
+                adapter = adapter + '            if raw-value' + parameter-index + ' == \'true\'\n                ' + variable + ' = true\n            else if raw-value' + parameter-index + ' == \'false\'\n                ' + variable + ' = false\n            else\n                return validation-response; ' + (source-quote; ('Invalid boolean ' + location + ' parameter: ' + wire-name)) + '\n'
             if not optional
-                adapter = adapter + '        else\n            return validation-response; ' + (quote; ('Missing required ' + location + ' parameter: ' + wire-name)) + '\n'
+                adapter = adapter + '        else\n            return validation-response; ' + (source-quote; ('Missing required ' + location + ' parameter: ' + wire-name)) + '\n'
     segments = path.split; '/'
     placeholders list of string = list
     for segment in segments
@@ -283,65 +326,75 @@ function make-operation operation throws consumer-error; declaration document-va
             placeholders.append; name
             if matches != 1
                 fail; declaration, 'each HTTP path placeholder requires exactly one matching parameter'
-    schema = schema + ']'
+    parameter-list = list-value; parameter-values, declaration
+    entries.append; 'parameters', parameter-list
     if body-index != -1
         adapter = adapter + '        try\n            body-value = await request.json-body;\n        catch\n            return validation-response; \'Invalid JSON request body\'\n'
         body-parameter = at; parameters, body-index
         body-kind = text; (get; body-parameter, 'type')
-        body-schema = '{}'
+        body-schema = object-value; (instance document-map-entries;), declaration
         if (is-model; body-kind, declarations)
             decoder = model-decoder; body-kind, declarations
             adapter = adapter + '        try\n            parameter-value' + body-index + ' = ' + decoder + '; body-value\n        catch\n            return validation-response; \'Invalid request model\'\n'
             body-schema = model-reference; body-kind, declarations
         else
             adapter = adapter + '        parameter-value' + body-index + ' = body-value\n'
-        schema = schema + ',"requestBody":{"required":true,"content":{"application/json":{"schema":' + body-schema + '}}}'
-    response-schema = '{}'
-    if result-model
-        response-schema = model-reference; result-kind, declarations
-    else if not result-document
-        response-schema = '{"type":' + (json-quote; (schema-type; result-kind)) + '}'
-    schema = schema + ',"responses":{"200":{"description":"Successful response","content":{' + (json-quote; content-type) + ':{"schema":' + response-schema + '}}},"422":{"description":"Request validation failed"},"500":{"description":"Handler or response construction failed"}}}'
+        media-entries = instance document-map-entries;
+        media-entries.append; 'schema', body-schema
+        media-value = object-value; media-entries, declaration
+        media-entries = instance document-map-entries;
+        media-entries.append; 'application/json', media-value
+        content-value = object-value; media-entries, declaration
+        request-entries = instance document-map-entries;
+        request-entries.append; 'required', (make-document-bool; true)
+        request-entries.append; 'content', content-value
+        entries.append; 'requestBody', (object-value; request-entries, declaration)
+    response-entries = instance document-map-entries;
+    if result-explicit
+        response-entries.append; 'default', (response-description; 'Explicit response status; HTTP error responses may also occur', declaration)
+    else
+        response-schema = object-value; (instance document-map-entries;), declaration
+        if result-model
+            response-schema = model-reference; result-kind, declarations
+        else if not result-document
+            response-schema = type-schema; (schema-type; result-kind)
+        media-entries = instance document-map-entries;
+        media-entries.append; 'schema', response-schema
+        media-value = object-value; media-entries, declaration
+        content-entries = instance document-map-entries;
+        content-entries.append; content-type, media-value
+        content-value = object-value; content-entries, declaration
+        response-entries.append; '200', (response-with-content; 'Successful response', content-value, declaration)
+    response-entries.append; '422', (response-description; 'Request validation failed', declaration)
+    response-entries.append; '500', (response-description; 'Handler or response construction failed', declaration)
+    if not result-explicit
+        response-entries.append; 'default', (response-description; 'HTTP error response', declaration)
+    entries.append; 'responses', (object-value; response-entries, declaration)
+    schema = object-value; entries, declaration
     adapter = adapter + '        result = await ' + target + ';'
     if arguments != ''
         adapter = adapter + ' ' + arguments
     adapter = adapter + '\n'
-    if content-type != 'application/json'
-        adapter = adapter + '        return create-response; 200, ' + (quote; content-type) + ', result\n'
-    else if result-document
-        adapter = adapter + '        document = result\n'
-    else if result-model
-        adapter = adapter + '        document = ' + (model-encoder; result-kind, declarations) + '; result\n'
-    else if result-kind == 'int'
-        adapter = adapter + '        document = (make-document-integer; (\'\' + result)).value\n'
+    if result-explicit
+        adapter = adapter + '        return result\n'
+    else if content-type != 'application/json'
+        adapter = adapter + '        return create-response; 200, ' + (source-quote; content-type) + ', result\n'
     else
-        factory = 'make-document-' + result-kind
-        adapter = adapter + '        document = ' + factory + '; result\n'
-    if content-type == 'application/json'
-        adapter = adapter + '        encoded = canonical-json; document\n        if encoded.failed\n            return create-response; 500, \'application/json\', \'{"detail":"Response serialization failed"}\'\n        return create-response; 200, \'application/json\', encoded.value.encoded\n'
+        if result-document
+            adapter = adapter + '        document = result\n'
+        else if result-model
+            adapter = adapter + '        document = ' + (model-encoder; result-kind, declarations) + '; result\n'
+        else if result-kind == 'int'
+            adapter = adapter + '        document-result = make-document-integer; (\'\' + result)\n        if document-result.failed\n            throw coercion-error\n        document = document-result.value\n'
+        else
+            factory = 'make-document-' + result-kind
+            adapter = adapter + '        document = ' + factory + '; result\n'
+        adapter = adapter + '        return create-json-response; 200, document\n'
     mounted-path = path
     if prefix != '/'
         mounted-path = prefix + path
     return instance operation; path, method, operation-id, schema, adapter, owner, mounted-path, documented
 
-function controller-source string throws consumer-error; name string, owner string, source-type string, operations list of operation, documented bool
-    code = '\npublic class ' + name + ' implements controller\n'
-    if owner != ''
-        code = code + '    private source ' + source-type + '\n\n    function construct; source ' + source-type + '\n        this.source = move source\n\n'
-    code = code + '    consuming function routes routes; registered-routes routes\n'
-    for index in (range; 0, operations.length)
-        item = operations[index]
-        if item.owner == owner
-            code = code + '        registered-routes = registered-routes.endpoint; (instance http-method::' + (method-key; item.method, (make-document-none;)) + ';), ' + (quote; item.path) + ', this.adapt-handler' + index + '\n'
-    if documented
-        code = code + '        registered-routes = registered-routes.endpoint; (instance http-method::get;), \'/openapi.json\', this.openapi-handler\n'
-    code = code + '        return registered-routes\n'
-    if documented
-        code = code + '\n    async function openapi-handler http-response; _request http-request\n        return create-response; 200, \'application/json\', (openapi-json;)\n'
-    for item in operations
-        if item.owner == owner
-            code = code + '\n' + item.adapter
-    return code
 
 function static-directory-source string throws consumer-error; declaration document-value, prefix string
     code string = ''
@@ -367,10 +420,11 @@ function static-directory-source string throws consumer-error; declaration docum
             mounted = path
             if prefix != '/'
                 mounted = prefix + path
-            code = code + '    app = app.static-directory; ' + (quote; mounted) + ', ' + (quote; directory) + '\n'
+            code = code + '    app = app.static-directory; ' + (source-quote; mounted) + ', ' + (source-quote; directory) + '\n'
     return code
 
 function generate string throws consumer-error; request document-value
+    engine = make-code-engine;
     declarations = get; request, 'declarations'
     endpoints list of document-value = list
     groups list of document-value = list
@@ -387,12 +441,12 @@ function generate string throws consumer-error; request document-value
                 groups.append; declaration
     if endpoints.length == 0
         fail; request, 'HTTP consumer requires at least one annotated endpoint'
-    generated = 'namespace generated/http-server\n\nfrom /core/documents import document-value, make-document-none, make-document-string, make-document-bool, make-document-integer, document-map-entries, make-document-map\nfrom /core/documents/json import canonical-json\nfrom /streaky/http-server import application, controller, routes, http-method, http-request, http-response, create-response\n'
+    imports string = ''
     for index in (range; 0, groups.length)
         group = groups[index]
         identity = text; (get; group, 'identity')
         pieces = identity.split; '::'
-        generated = generated + 'from ' + pieces[0] + ' import ' + pieces[1] + ' as route-source' + index + '\n'
+        imports = imports + 'from ' + pieces[0] + ' import ' + pieces[1] + ' as route-source' + index + '\n'
         metadata = annotation; group, 'route-group', '/streaky/http-server/annotations'
         prefix = metadata-string; metadata, 'prefix', group
         route-shape; prefix, group
@@ -418,38 +472,60 @@ function generate string throws consumer-error; request document-value
             standalone = true
             identity = text; (get; declaration, 'identity')
             pieces = identity.split; '::'
-            generated = generated + 'from ' + pieces[0] + ' import ' + pieces[1] + ' as selected-handler' + index + '\n'
-    generated = generated + '\n' + (model-codecs; declarations)
-    openapi = '{"openapi":"3.1.0","info":{"title":"HTTP API","version":"1.0.0"},"servers":[{"url":"/"}],"paths":{'
-    paths list of string = list
+            imports = imports + 'from ' + pieces[0] + ' import ' + pieces[1] + ' as selected-handler' + index + '\n'
+    generated-values map of string, template-value = map;
+    generated-values.set; 'imports', (text-value; imports)
+    generated-values.set; 'model-codecs', (text-value; (model-codecs; ref engine, declarations))
+    generated = render-code; ref engine, 'http/preamble.trn.tpl', generated-values
+    paths-entries = instance document-map-entries;
+    path-names list of string = list
     for current in operations
         seen bool = false
-        for previous in paths
+        for previous in path-names
             if previous == current.mounted-path
                 seen = true
         if current.documented and not seen
-            if paths.length > 0
-                openapi = openapi + ','
-            paths.append; current.mounted-path
-            openapi = openapi + (json-quote; current.mounted-path) + ':{'
-            count int = 0
+            path-names.append; current.mounted-path
+            method-entries = instance document-map-entries;
             for item in operations
                 if item.documented and item.mounted-path == current.mounted-path
-                    if count > 0
-                        openapi = openapi + ','
-                    count = count + 1
-                    openapi = openapi + (json-quote; (method-key; item.method, request)) + ':' + item.schema
-            openapi = openapi + '}'
-    openapi = openapi + '},"components":{"schemas":' + (model-schemas; declarations) + '}}'
-    generated = generated + '\npublic function openapi-json string;\n    return ' + (quote; openapi) + '\n\nfunction validation-response http-response; message string\n    entries = instance document-map-entries;\n    entries.append; \'detail\', (make-document-string; message)\n    encoded = canonical-json; (make-document-map; entries).value\n    return create-response; 422, \'application/json\', encoded.value.encoded\n'
+                    method-entries.append; (method-key; item.method, request), (item.schema.to-document;)
+            paths-entries.append; current.mounted-path, (object-value; method-entries, request)
+    path-value = object-value; paths-entries, request
+    info-entries = instance document-map-entries;
+    info-entries.append; 'title', (make-document-string; 'HTTP API')
+    info-entries.append; 'version', (make-document-string; '1.0.0')
+    info-value = object-value; info-entries, request
+    server-entries = instance document-map-entries;
+    server-entries.append; 'url', (make-document-string; '/')
+    server-value = object-value; server-entries, request
+    server-values list of document-value = list
+    server-values.append; server-value
+    servers-value = list-value; server-values, request
+    component-entries = instance document-map-entries;
+    component-entries.append; 'schemas', (model-schemas; declarations)
+    components-value = object-value; component-entries, request
+    openapi-entries = instance document-map-entries;
+    openapi-entries.append; 'openapi', (make-document-string; '3.1.0')
+    openapi-entries.append; 'info', info-value
+    openapi-entries.append; 'servers', servers-value
+    openapi-entries.append; 'paths', path-value
+    openapi-entries.append; 'components', components-value
+    openapi-value = object-value; openapi-entries, request
+    encoded-openapi = encode-document; openapi-value, request
+    openapi-values map of string, template-value = map;
+    openapi-values.set; 'source', (text-value; (source-quote; encoded-openapi))
+    generated = generated + (render-code; ref engine, 'http/openapi-json.trn.tpl', openapi-values)
+    validation-values map of string, template-value = map;
+    generated = generated + (render-code; ref engine, 'http/validation-response.trn.tpl', validation-values)
     if standalone
-        generated = generated + (controller-source; 'annotated-controller', '', '', operations, true)
+        generated = generated + (controller-source; ref engine, 'annotated-controller', '', '', operations, true)
     for index in (range; 0, groups.length)
         group = groups[index]
         owner = text; (get; group, 'identity')
         metadata = annotation; group, 'route-group', '/streaky/http-server/annotations'
         documented = truth; (scalar; (get; metadata, 'document'))
-        generated = generated + (controller-source; 'annotated-group' + index, owner, 'route-source' + index, operations, documented)
+        generated = generated + (controller-source; ref engine, 'annotated-group' + index, owner, 'route-source' + index, operations, documented)
     generated = generated + '\npublic function mount-annotated application; app application\n'
     if standalone
         generated = generated + '    app = app.mount; \'/\', (instance annotated-controller;)\n'
@@ -457,7 +533,7 @@ function generate string throws consumer-error; request document-value
         group = groups[index]
         metadata = annotation; group, 'route-group', '/streaky/http-server/annotations'
         prefix = metadata-string; metadata, 'prefix', group
-        generated = generated + '    app = app.mount; ' + (quote; prefix) + ', (instance annotated-group' + index + '; (instance route-source' + index + ';))\n'
+        generated = generated + '    app = app.mount; ' + (source-quote; prefix) + ', (instance annotated-group' + index + '; (instance route-source' + index + ';))\n'
         generated = generated + (static-directory-source; group, prefix)
     generated = generated + '    return app\n'
     return generated

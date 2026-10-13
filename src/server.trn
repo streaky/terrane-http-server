@@ -25,18 +25,32 @@ public class routes
     private function construct; router native-router
         this.router = move router
 
-    consuming function get routes; path string, handler async function to string
+    consuming function get routes; path string, handler async function to string throws throwable
+        callback = async function native-response;
+            try
+                body = await handler;
+                return into-native-response; (create-response; 200, 'text/plain; charset=utf-8', body)
+            catch http-error as error
+                return into-native-http-error; error
+            catch
+                return (status-code::INTERNAL-SERVER-ERROR).into_response;
         method-router native-method-router = native-method-router::new;
-        method-router = method-router.get; handler
+        method-router = method-router.get; callback
         router = move this.router
         router = router.route; path, move method-router
         return instance routes; move router
 
-    consuming function get-with-client routes; path string, handler async function from client-info to string
-        native-handler = async function string; request native-request
+    consuming function get-with-client routes; path string, handler async function from client-info to string throws throwable
+        native-handler = async function native-response; request native-request
             peer = direct-address; ref request
             client = client-address; ref request
-            return await handler; (instance client-info; peer, client)
+            try
+                body = await handler; (instance client-info; peer, client)
+                return into-native-response; (create-response; 200, 'text/plain; charset=utf-8', body)
+            catch http-error as error
+                return into-native-http-error; error
+            catch
+                return (status-code::INTERNAL-SERVER-ERROR).into_response;
         method-router native-method-router = native-method-router::new;
         method-router = method-router.get; native-handler
         router = move this.router
@@ -52,6 +66,8 @@ public class routes
             try
                 response = await handler; move typed-request
                 return into-native-response; move response
+            catch http-error as error
+                return into-native-http-error; error
             catch
                 return (status-code::INTERNAL-SERVER-ERROR).into_response;
         method-router native-method-router = native-method-router::new;
