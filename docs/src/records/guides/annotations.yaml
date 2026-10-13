@@ -29,13 +29,22 @@ documentation:
         selected classes and may declare `throws throwable`. Path and query parameters are
         `string`, `int`, or `bool`; query defaults must be compile-time scalar values of the
         declared type. Results may be JSON-encoded scalars, `document-value`, selected
-        ordinary model classes, or `string` for `text/html` and `text/plain`. A body may be a
-        decoded `document-value` or a selected model class. Model schemas and codecs derive
-        from their actual class fields, including nested model values.
+        ordinary model classes, or `string` for `text/html` and `text/plain`. Returning
+        `http-response` bypasses the automatic 200 response and encoding: the handler owns
+        status, headers, content type, and body. A body may be a decoded `document-value`
+        or a selected model class. Model schemas and codecs derive from their actual fields,
+        including nested model values. Schemas are assembled as document trees and encoded
+        with Terrane's built-in canonical JSON encoder, not JSON string concatenation.
 
         Explicit `operation-id` values remain unchanged. Otherwise the consumer derives a
         unique URL-safe ID from the canonical declaration identity, so documentation viewers
         can navigate operations without treating namespace separators as URL path segments.
+
+        Throw `http-error` with an error status or an explicit error response for an early
+        exit. The server preserves it instead of converting it to a generic 500. OpenAPI
+        uses a default response for handler-defined statuses; explicit response handlers do
+        not claim a fixed 200/content schema. Other handlers retain their automatic 200
+        schema, and all document request validation and internal error boundaries.
     - type: example
       id: annotated-handler
       title: A typed path parameter and optional query parameter
@@ -156,6 +165,38 @@ documentation:
             boundary around the standard finite floating-point parser. Numeric coercion does
             not parse document text. This boundary supplies no HTTP behavior or model schema
             rules and requires no Rust code in the application's model classes.
+    - id: consumer-source-templates
+      title: Maintaining generated source templates
+      blocks:
+        - type: markdown
+          markdown: |-
+            The HTTP consumer itself uses the `template` package for readable multiline
+            Terrane source generation. Templates under `consumer/templates/http/` describe
+            controller declarations, route registration, the generated preamble, OpenAPI
+            access, and validation responses. Templates under `consumer/templates/models/`
+            describe model encoders, decoders, field-presence branches, and list loops.
+            Metadata validation, schema construction, source quoting, and small expression
+            builders remain ordinary Terrane code.
+
+            `consumer/package.toml` explicitly selects these `.trn.tpl` entries for AOT
+            compilation. `build-consumer.sh` builds the template consumer before building the
+            HTTP consumer. The installed HTTP consumer contains compiled renderers and needs
+            no template directory or runtime template parsing; annotated applications likewise
+            need no code-generation template files.
+
+            Each generation request creates one compiled engine and shares it by reference
+            across its fragments. The rendering boundary supplies an independent named
+            `data` context to `fetch-context` for each fragment, without changing the engine's
+            stored context. HTML autoescaping is explicitly disabled for Terrane source.
+            Metadata interpolated as a source literal must first pass through `source-quote`;
+            inserting a code fragment does not quote or escape it. JSON documents still use
+            the built-in JSON encoder, not templates.
+
+            Template failures become structured consumer diagnostics naming the failing
+            template. When adding an entry, update the consumer manifest's explicit template
+            list and exercise the generated code through the live consumer integration suite.
+            Preserve indentation in optional-field and nested-list branches; test absent,
+            null, empty, populated, and malformed values rather than matching generated text.
     - id: demo
       title: Runnable catalog demo and behavioral tests
       blocks:

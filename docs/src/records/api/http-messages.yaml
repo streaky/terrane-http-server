@@ -13,7 +13,7 @@ documentation:
   status: complete
   title: HTTP requests and responses
   title-style: text
-  summary: Typed request extraction and explicit HTTP responses for endpoint adapters.
+  summary: Typed requests, explicit status/body/header responses, redirects, JSON encoding, and HTTP error exceptions.
   tags: [http-server, requests, responses]
   blocks:
     - type: markdown
@@ -26,11 +26,32 @@ documentation:
         Generated annotation adapters convert input failures to HTTP 422 before calling
         the selected handler.
 
-        `http-response` holds `status`, `content-type`, and `body`. `create-response` constructs
-        it from those three values. The body is already-encoded HTTP text, not an arbitrary
-        value automatically serialized by this low-level API. Annotation adapters perform
-        JSON serialization before creating responses. Existing text GET and WebSocket APIs
-        remain independent of annotation consumers.
+        `http-response` is the general response value. It holds `status`, `content-type`,
+        an already-encoded text `body`, and an ordered list of `http-header` values.
+        `create-response(status, content-type, body)` constructs it; retain the result of
+        `response.with-header(name, value)` to add a header. Repeated values such as
+        `Set-Cookie` are preserved. Native conversion validates status (100–599) and header
+        syntax; failures produce HTTP 500 rather than an invalid response.
+
+        `create-json-response(status, document)` uses the built-in canonical JSON encoder
+        and throws if encoding fails. `create-redirect-response(location, status = 303)`
+        creates an empty response with a `Location` header; supported codes are 301, 302,
+        303, 307, and 308. Annotated handlers may return `http-response` directly: adapters
+        preserve its status, headers, content type, and body without encoding it again.
+
+        `create-error-response(status, detail = '')` accepts 400–599 and uses the standard
+        reason phrase when detail is omitted. `throw http-error; 403` therefore returns
+        HTTP 403 with `Forbidden` as its text body. Use `create-http-error(response)` instead
+        to wrap an explicit error response and preserve JSON or custom headers. Non-error
+        codes are rejected. The typed route,
+        text GET, and client-aware GET boundaries catch `http-error` by descriptor; unrelated
+        failures remain HTTP 500 without disclosing internal exception details.
+
+        This package-only exception mechanism uses a private built-in-JSON response payload
+        in the throwable's preserved `message`, because caught Terrane envelopes do not
+        expose the original object's fields. `render` remains human-readable. Do not edit
+        `http-error.message` or depend on its encoding; malformed payloads yield HTTP 500.
+        Ordinary returned responses do not pass through this exception codec.
     - type: example
       id: response-factory
       title: Creating a text response
@@ -46,6 +67,26 @@ documentation:
       response: null
       diagnostic: null
       markdown: null
+    - type: example
+      id: explicit-status-and-errors
+      title: Returning JSON, redirecting, or denying access
+      language: terrane
+      mode: illustrative
+      source: |-
+        from /streaky/http-server import http-response, http-error, create-http-error, create-json-response, create-redirect-response
+        from /core/documents import make-document-string
+
+        async function created http-response;
+            return (create-json-response; 201, (make-document-string; 'Created')).with-header; 'location', '/items/1'
+
+        async function moved http-response;
+            return create-redirect-response; '/items/1', 307
+
+        async function restricted string;
+            throw http-error; 403
+
+        async function conflict http-response;
+            throw (create-http-error; (create-json-response; 409, (make-document-string; 'Already exists')))
   sections: []
   see-also: [http-server.api.routes, http-server.guide.annotations]
 provenance:
