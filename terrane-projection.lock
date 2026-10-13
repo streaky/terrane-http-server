@@ -6,11 +6,6 @@
       "version": "0.8.9",
       "members": {
         "/deps/axum": [
-          "BoxError",
-          "Error",
-          "Error.into",
-          "Error.try_into",
-          "Error::new",
           "Extension",
           "Extension.clone",
           "Extension.deref",
@@ -80,11 +75,6 @@
           "Body::empty",
           "Body::from_stream",
           "Body::new",
-          "BodyDataStream",
-          "BodyDataStream.into",
-          "BodyDataStream.is_end_stream",
-          "BodyDataStream.size_hint",
-          "BodyDataStream.try_into",
           "Bytes",
           "Bytes.advance",
           "Bytes.clear",
@@ -185,13 +175,6 @@
           "ConnectInfo.into",
           "ConnectInfo.try_into",
           "ConnectInfo.vzip",
-          "DefaultBodyLimit",
-          "DefaultBodyLimit.apply",
-          "DefaultBodyLimit.clone",
-          "DefaultBodyLimit.into",
-          "DefaultBodyLimit.try_into",
-          "DefaultBodyLimit::disable",
-          "DefaultBodyLimit::max",
           "MatchedPath",
           "MatchedPath.as_str",
           "MatchedPath.clone",
@@ -237,27 +220,6 @@
           "RawQuery.into",
           "RawQuery.try_into",
           "RawQuery.vzip",
-          "Request",
-          "Request.body",
-          "Request.body_mut",
-          "Request.clone",
-          "Request.extensions",
-          "Request.extensions_mut",
-          "Request.headers",
-          "Request.headers_mut",
-          "Request.into",
-          "Request.into_body",
-          "Request.map",
-          "Request.method",
-          "Request.method_mut",
-          "Request.try_into",
-          "Request.uri",
-          "Request.uri_mut",
-          "Request.version",
-          "Request.version_mut",
-          "Request::default",
-          "Request::from_parts",
-          "Request::new",
           "State",
           "State.clone",
           "State.deref",
@@ -340,7 +302,6 @@
         "/deps/axum/extract/rejection": [
           "BytesRejection",
           "ExtensionRejection",
-          "FailedToBufferBody",
           "FailedToDeserializeForm",
           "FailedToDeserializeForm.body_text",
           "FailedToDeserializeForm.into",
@@ -374,13 +335,6 @@
           "InvalidFormContentType.try_into",
           "InvalidFormContentType.vzip",
           "InvalidFormContentType::default",
-          "InvalidUtf8",
-          "InvalidUtf8.body_text",
-          "InvalidUtf8.into",
-          "InvalidUtf8.into_response",
-          "InvalidUtf8.status",
-          "InvalidUtf8.try_into",
-          "InvalidUtf8::from",
           "JsonDataError",
           "JsonDataError.body_text",
           "JsonDataError.into",
@@ -398,13 +352,6 @@
           "JsonSyntaxError.try_into",
           "JsonSyntaxError.vzip",
           "JsonSyntaxError::from",
-          "LengthLimitError",
-          "LengthLimitError.body_text",
-          "LengthLimitError.into",
-          "LengthLimitError.into_response",
-          "LengthLimitError.status",
-          "LengthLimitError.try_into",
-          "LengthLimitError::from",
           "MatchedPathMissing",
           "MatchedPathMissing.body_text",
           "MatchedPathMissing.into",
@@ -451,21 +398,7 @@
           "PathRejection",
           "QueryRejection",
           "RawFormRejection",
-          "RawPathParamsRejection",
-          "StringRejection",
-          "UnknownBodyError",
-          "UnknownBodyError.body_text",
-          "UnknownBodyError.into",
-          "UnknownBodyError.into_response",
-          "UnknownBodyError.status",
-          "UnknownBodyError.try_into",
-          "UnknownBodyError::from"
-        ],
-        "/deps/axum/extract/rejection/failedtobufferbody/trait/core/convert/from-axum/extract/rejection/lengthlimiterror": [
-          "from"
-        ],
-        "/deps/axum/extract/rejection/failedtobufferbody/trait/core/convert/from-axum/extract/rejection/unknownbodyerror": [
-          "from"
+          "RawPathParamsRejection"
         ],
         "/deps/axum/extract/rejection/formrejection/trait/core/convert/from-axum-core/extract/rejection/bytesrejection": [
           "from"
@@ -507,12 +440,6 @@
           "from"
         ],
         "/deps/axum/extract/rejection/rawpathparamsrejection/trait/core/convert/from-axum/extract/rejection/missingpathparams": [
-          "from"
-        ],
-        "/deps/axum/extract/rejection/stringrejection/trait/core/convert/from-axum/extract/rejection/failedtobufferbody": [
-          "from"
-        ],
-        "/deps/axum/extract/rejection/stringrejection/trait/core/convert/from-axum/extract/rejection/invalidutf8": [
           "from"
         ],
         "/deps/axum/extract/ws": [
@@ -714,550 +641,6 @@
         "/deps/axum/handler/private": [
           "IntoResponseHandler"
         ],
-        "/deps/axum/http": [
-          "Error",
-          "Error.into",
-          "Error.is",
-          "Error.try_into",
-          "Extensions",
-          "Extensions.clear",
-          "Extensions.clone",
-          "Extensions.extend",
-          "Extensions.get",
-          "Extensions.get_mut",
-          "Extensions.get_or_insert",
-          "Extensions.get_or_insert_default",
-          "Extensions.get_or_insert_with",
-          "Extensions.insert",
-          "Extensions.into",
-          "Extensions.into_response",
-          "Extensions.into_response_parts",
-          "Extensions.is_empty",
-          "Extensions.len",
-          "Extensions.remove",
-          "Extensions.try_into",
-          "Extensions::default",
-          "Extensions::new",
-          "HeaderMap",
-          "HeaderMap.append",
-          "HeaderMap.capacity",
-          "HeaderMap.clear",
-          "HeaderMap.clone",
-          "HeaderMap.contains_key",
-          "HeaderMap.drain",
-          "HeaderMap.entry",
-          "HeaderMap.eq",
-          "HeaderMap.get",
-          "HeaderMap.get_all",
-          "HeaderMap.get_mut",
-          "HeaderMap.insert",
-          "HeaderMap.into",
-          "HeaderMap.into_response",
-          "HeaderMap.into_response_parts",
-          "HeaderMap.is_empty",
-          "HeaderMap.iter",
-          "HeaderMap.iter_mut",
-          "HeaderMap.keys",
-          "HeaderMap.keys_len",
-          "HeaderMap.len",
-          "HeaderMap.remove",
-          "HeaderMap.reserve",
-          "HeaderMap.try_append",
-          "HeaderMap.try_entry",
-          "HeaderMap.try_insert",
-          "HeaderMap.try_into",
-          "HeaderMap.try_reserve",
-          "HeaderMap.values",
-          "HeaderMap.values_mut",
-          "HeaderMap::default",
-          "HeaderMap::from_iter",
-          "HeaderMap::new",
-          "HeaderMap::try_with_capacity",
-          "HeaderMap::with_capacity",
-          "HeaderName",
-          "HeaderName.as_ref",
-          "HeaderName.as_str",
-          "HeaderName.assert_fields_are_eq",
-          "HeaderName.borrow",
-          "HeaderName.clone",
-          "HeaderName.into",
-          "HeaderName.try_into",
-          "HeaderName::from_str",
-          "HeaderValue",
-          "HeaderValue.clone",
-          "HeaderValue.cmp",
-          "HeaderValue.into",
-          "HeaderValue.is_empty",
-          "HeaderValue.is_sensitive",
-          "HeaderValue.len",
-          "HeaderValue.set_sensitive",
-          "HeaderValue.to_str",
-          "HeaderValue.try_into",
-          "HeaderValue::from_maybe_shared",
-          "HeaderValue::from_maybe_shared_unchecked",
-          "HeaderValue::from_name",
-          "HeaderValue::from_str",
-          "Method",
-          "Method.as_ref",
-          "Method.as_str",
-          "Method.assert_fields_are_eq",
-          "Method.clone",
-          "Method.cmp",
-          "Method.into",
-          "Method.is_idempotent",
-          "Method.is_safe",
-          "Method.partial_cmp",
-          "Method.try_into",
-          "Method::default",
-          "Method::from",
-          "Method::from_str",
-          "Method::try_from",
-          "Request",
-          "Request.body",
-          "Request.body_mut",
-          "Request.clone",
-          "Request.extensions",
-          "Request.extensions_mut",
-          "Request.headers",
-          "Request.headers_mut",
-          "Request.into",
-          "Request.into_body",
-          "Request.map",
-          "Request.method",
-          "Request.method_mut",
-          "Request.try_into",
-          "Request.uri",
-          "Request.uri_mut",
-          "Request.version",
-          "Request.version_mut",
-          "Request::builder",
-          "Request::connect",
-          "Request::default",
-          "Request::delete",
-          "Request::from_parts",
-          "Request::get",
-          "Request::head",
-          "Request::new",
-          "Request::options",
-          "Request::patch",
-          "Request::post",
-          "Request::put",
-          "Request::trace",
-          "Response",
-          "Response.body",
-          "Response.body_mut",
-          "Response.clone",
-          "Response.extensions",
-          "Response.extensions_mut",
-          "Response.headers",
-          "Response.headers_mut",
-          "Response.into",
-          "Response.into_body",
-          "Response.map",
-          "Response.status",
-          "Response.status_mut",
-          "Response.try_into",
-          "Response.version",
-          "Response.version_mut",
-          "Response::builder",
-          "Response::default",
-          "Response::from_parts",
-          "Response::new",
-          "Result",
-          "StatusCode",
-          "StatusCode.as_str",
-          "StatusCode.as_u16",
-          "StatusCode.assert_fields_are_eq",
-          "StatusCode.canonical_reason",
-          "StatusCode.clone",
-          "StatusCode.cmp",
-          "StatusCode.into",
-          "StatusCode.into_response",
-          "StatusCode.is_client_error",
-          "StatusCode.is_informational",
-          "StatusCode.is_redirection",
-          "StatusCode.is_server_error",
-          "StatusCode.is_success",
-          "StatusCode.partial_cmp",
-          "StatusCode.try_into",
-          "StatusCode::default",
-          "StatusCode::from_str",
-          "StatusCode::from_u16",
-          "Uri",
-          "Uri.authority",
-          "Uri.clone",
-          "Uri.host",
-          "Uri.into",
-          "Uri.into_parts",
-          "Uri.path",
-          "Uri.path_and_query",
-          "Uri.port",
-          "Uri.port_u16",
-          "Uri.query",
-          "Uri.scheme",
-          "Uri.scheme_str",
-          "Uri.try_into",
-          "Uri::builder",
-          "Uri::default",
-          "Uri::from_maybe_shared",
-          "Uri::from_parts",
-          "Uri::from_str",
-          "Version",
-          "Version.assert_fields_are_eq",
-          "Version.clone",
-          "Version.cmp",
-          "Version.eq",
-          "Version.into",
-          "Version.partial_cmp",
-          "Version.try_into",
-          "Version::default",
-          "borrowed-option",
-          "borrowed-option.and_then",
-          "borrowed-option.cloned",
-          "borrowed-option.map"
-        ],
-        "/deps/axum/http/error/trait/core/convert/from-axum/http/header/invalidheadername": [
-          "from"
-        ],
-        "/deps/axum/http/error/trait/core/convert/from-axum/http/header/invalidheadervalue": [
-          "from"
-        ],
-        "/deps/axum/http/error/trait/core/convert/from-axum/http/header/maxsizereached": [
-          "from"
-        ],
-        "/deps/axum/http/error/trait/core/convert/from-axum/http/method/invalidmethod": [
-          "from"
-        ],
-        "/deps/axum/http/error/trait/core/convert/from-axum/http/status/invalidstatuscode": [
-          "from"
-        ],
-        "/deps/axum/http/error/trait/core/convert/from-axum/http/uri/invaliduri": [
-          "from"
-        ],
-        "/deps/axum/http/error/trait/core/convert/from-axum/http/uri/invaliduriparts": [
-          "from"
-        ],
-        "/deps/axum/http/error/trait/core/convert/from-core/convert/infallible": [
-          "from"
-        ],
-        "/deps/axum/http/header": [
-          "IntoIter",
-          "IntoIter.drop",
-          "IntoIter.into",
-          "IntoIter.try_into",
-          "InvalidHeaderName",
-          "InvalidHeaderName.into",
-          "InvalidHeaderName.try_into",
-          "InvalidHeaderName::from",
-          "InvalidHeaderValue",
-          "InvalidHeaderValue.into",
-          "InvalidHeaderValue.try_into",
-          "InvalidHeaderValue::from",
-          "MaxSizeReached",
-          "MaxSizeReached.into",
-          "MaxSizeReached.try_into",
-          "MaxSizeReached::from",
-          "ToStrError",
-          "ToStrError.into",
-          "ToStrError.try_into"
-        ],
-        "/deps/axum/http/header/map/as-header-name": [
-          "TryEntryError"
-        ],
-        "/deps/axum/http/headermap/trait/core/iter/traits/collect/extend-axum/http/headername-t": [
-          "extend"
-        ],
-        "/deps/axum/http/headermap/trait/core/iter/traits/collect/extend-core/option/option-axum/http/headername-t": [
-          "extend"
-        ],
-        "/deps/axum/http/headername/trait/core/cmp/partialeq": [
-          "eq"
-        ],
-        "/deps/axum/http/headername/trait/core/convert/tryfrom-std/vec/vec-u8": [
-          "try_from"
-        ],
-        "/deps/axum/http/headername/trait/core/convert/tryfrom-str": [
-          "try_from"
-        ],
-        "/deps/axum/http/headervalue": [
-          "from_str"
-        ],
-        "/deps/axum/http/headervalue/trait/core/cmp/partialeq": [
-          "eq"
-        ],
-        "/deps/axum/http/headervalue/trait/core/cmp/partialeq-std/string/string": [
-          "eq"
-        ],
-        "/deps/axum/http/headervalue/trait/core/cmp/partialeq-str": [
-          "eq"
-        ],
-        "/deps/axum/http/headervalue/trait/core/cmp/partialord": [
-          "partial_cmp"
-        ],
-        "/deps/axum/http/headervalue/trait/core/cmp/partialord-std/string/string": [
-          "partial_cmp"
-        ],
-        "/deps/axum/http/headervalue/trait/core/cmp/partialord-str": [
-          "partial_cmp"
-        ],
-        "/deps/axum/http/headervalue/trait/core/convert/from-axum/http/headername": [
-          "from"
-        ],
-        "/deps/axum/http/headervalue/trait/core/convert/from-axum/http/headervalue": [
-          "from"
-        ],
-        "/deps/axum/http/headervalue/trait/core/convert/from-i16": [
-          "from"
-        ],
-        "/deps/axum/http/headervalue/trait/core/convert/from-i32": [
-          "from"
-        ],
-        "/deps/axum/http/headervalue/trait/core/convert/from-i64": [
-          "from"
-        ],
-        "/deps/axum/http/headervalue/trait/core/convert/from-isize": [
-          "from"
-        ],
-        "/deps/axum/http/headervalue/trait/core/convert/from-u16": [
-          "from"
-        ],
-        "/deps/axum/http/headervalue/trait/core/convert/from-u32": [
-          "from"
-        ],
-        "/deps/axum/http/headervalue/trait/core/convert/from-u64": [
-          "from"
-        ],
-        "/deps/axum/http/headervalue/trait/core/convert/from-usize": [
-          "from"
-        ],
-        "/deps/axum/http/headervalue/trait/core/convert/tryfrom-std/vec/vec-u8": [
-          "try_from"
-        ],
-        "/deps/axum/http/headervalue/trait/core/convert/tryfrom-str": [
-          "try_from"
-        ],
-        "/deps/axum/http/method": [
-          "InvalidMethod",
-          "InvalidMethod.into",
-          "InvalidMethod.try_into",
-          "InvalidMethod::from"
-        ],
-        "/deps/axum/http/method/trait/core/cmp/partialeq": [
-          "eq"
-        ],
-        "/deps/axum/http/request": [
-          "Builder",
-          "Builder.body",
-          "Builder.extension",
-          "Builder.extensions_mut",
-          "Builder.extensions_ref",
-          "Builder.header",
-          "Builder.headers_mut",
-          "Builder.headers_ref",
-          "Builder.into",
-          "Builder.method",
-          "Builder.method_ref",
-          "Builder.try_into",
-          "Builder.uri",
-          "Builder.uri_ref",
-          "Builder.version",
-          "Builder.version_ref",
-          "Builder::default",
-          "Builder::new",
-          "Parts",
-          "Parts.clone",
-          "Parts.into",
-          "Parts.try_into",
-          "borrowed-option",
-          "borrowed-option.and_then",
-          "borrowed-option.cloned",
-          "borrowed-option.map"
-        ],
-        "/deps/axum/http/request/request": [
-          "method"
-        ],
-        "/deps/axum/http/response": [
-          "Builder",
-          "Builder.body",
-          "Builder.extension",
-          "Builder.extensions_mut",
-          "Builder.extensions_ref",
-          "Builder.header",
-          "Builder.headers_mut",
-          "Builder.headers_ref",
-          "Builder.into",
-          "Builder.status",
-          "Builder.try_into",
-          "Builder.version",
-          "Builder::default",
-          "Builder::new",
-          "Parts",
-          "Parts.clone",
-          "Parts.into",
-          "Parts.into_response",
-          "Parts.try_into",
-          "borrowed-option",
-          "borrowed-option.and_then",
-          "borrowed-option.cloned",
-          "borrowed-option.map"
-        ],
-        "/deps/axum/http/status": [
-          "InvalidStatusCode",
-          "InvalidStatusCode.into",
-          "InvalidStatusCode.try_into",
-          "InvalidStatusCode::from"
-        ],
-        "/deps/axum/http/status/statuscode": [
-          "is_success"
-        ],
-        "/deps/axum/http/statuscode/trait/core/cmp/partialeq": [
-          "eq"
-        ],
-        "/deps/axum/http/statuscode/trait/core/cmp/partialeq-u16": [
-          "eq"
-        ],
-        "/deps/axum/http/statuscode/trait/core/convert/tryfrom-str": [
-          "try_from"
-        ],
-        "/deps/axum/http/statuscode/trait/core/convert/tryfrom-u16": [
-          "try_from"
-        ],
-        "/deps/axum/http/uri": [
-          "Authority",
-          "Authority.as_ref",
-          "Authority.as_str",
-          "Authority.clone",
-          "Authority.host",
-          "Authority.into",
-          "Authority.port",
-          "Authority.port_u16",
-          "Authority.try_into",
-          "Authority::from",
-          "Authority::from_maybe_shared",
-          "Authority::from_str",
-          "Builder",
-          "Builder.authority",
-          "Builder.build",
-          "Builder.into",
-          "Builder.path_and_query",
-          "Builder.scheme",
-          "Builder.try_into",
-          "Builder::default",
-          "Builder::from",
-          "Builder::new",
-          "InvalidUri",
-          "InvalidUri.into",
-          "InvalidUri.try_into",
-          "InvalidUri::from",
-          "InvalidUriParts",
-          "InvalidUriParts.into",
-          "InvalidUriParts.try_into",
-          "InvalidUriParts::from",
-          "Parts",
-          "Parts.into",
-          "Parts.try_into",
-          "Parts::default",
-          "Parts::from",
-          "Parts::try_from",
-          "PathAndQuery",
-          "PathAndQuery.as_str",
-          "PathAndQuery.clone",
-          "PathAndQuery.into",
-          "PathAndQuery.path",
-          "PathAndQuery.query",
-          "PathAndQuery.try_into",
-          "PathAndQuery::from",
-          "PathAndQuery::from_maybe_shared",
-          "PathAndQuery::from_str",
-          "Port",
-          "Port.as_ref",
-          "Port.as_str",
-          "Port.as_u16",
-          "Port.into",
-          "Port.try_into",
-          "Port::from",
-          "Scheme",
-          "Scheme.as_ref",
-          "Scheme.as_str",
-          "Scheme.clone",
-          "Scheme.into",
-          "Scheme.try_into",
-          "Scheme::from_str",
-          "Scheme::try_from",
-          "borrowed-option",
-          "borrowed-option.and_then",
-          "borrowed-option.cloned",
-          "borrowed-option.map"
-        ],
-        "/deps/axum/http/uri/authority/trait/core/cmp/partialeq": [
-          "eq"
-        ],
-        "/deps/axum/http/uri/authority/trait/core/cmp/partialeq-std/string/string": [
-          "eq"
-        ],
-        "/deps/axum/http/uri/authority/trait/core/cmp/partialord": [
-          "partial_cmp"
-        ],
-        "/deps/axum/http/uri/authority/trait/core/cmp/partialord-std/string/string": [
-          "partial_cmp"
-        ],
-        "/deps/axum/http/uri/authority/trait/core/convert/tryfrom-std/string/string": [
-          "try_from"
-        ],
-        "/deps/axum/http/uri/authority/trait/core/convert/tryfrom-std/vec/vec-u8": [
-          "try_from"
-        ],
-        "/deps/axum/http/uri/authority/trait/core/convert/tryfrom-str": [
-          "try_from"
-        ],
-        "/deps/axum/http/uri/pathandquery/trait/core/cmp/partialeq": [
-          "eq"
-        ],
-        "/deps/axum/http/uri/pathandquery/trait/core/cmp/partialeq-std/string/string": [
-          "eq"
-        ],
-        "/deps/axum/http/uri/pathandquery/trait/core/cmp/partialord": [
-          "partial_cmp"
-        ],
-        "/deps/axum/http/uri/pathandquery/trait/core/cmp/partialord-std/string/string": [
-          "partial_cmp"
-        ],
-        "/deps/axum/http/uri/pathandquery/trait/core/convert/tryfrom-std/vec/vec-u8": [
-          "try_from"
-        ],
-        "/deps/axum/http/uri/pathandquery/trait/core/convert/tryfrom-str": [
-          "try_from"
-        ],
-        "/deps/axum/http/uri/port/trait/core/cmp/partialeq-u16": [
-          "eq"
-        ],
-        "/deps/axum/http/uri/scheme/trait/core/cmp/partialeq": [
-          "eq"
-        ],
-        "/deps/axum/http/uri/scheme/trait/core/cmp/partialeq-str": [
-          "eq"
-        ],
-        "/deps/axum/http/uri/trait/core/cmp/partialeq": [
-          "eq"
-        ],
-        "/deps/axum/http/uri/trait/core/convert/from-axum/http/uri/authority": [
-          "from"
-        ],
-        "/deps/axum/http/uri/trait/core/convert/from-axum/http/uri/pathandquery": [
-          "from"
-        ],
-        "/deps/axum/http/uri/trait/core/convert/tryfrom-axum/http/uri": [
-          "try_from"
-        ],
-        "/deps/axum/http/uri/trait/core/convert/tryfrom-axum/http/uri/parts": [
-          "try_from"
-        ],
-        "/deps/axum/http/uri/trait/core/convert/tryfrom-std/vec/vec-u8": [
-          "try_from"
-        ],
-        "/deps/axum/http/uri/trait/core/convert/tryfrom-str": [
-          "try_from"
-        ],
         "/deps/axum/middleware": [
           "AddExtension",
           "AddExtension.clone",
@@ -1359,15 +742,6 @@
           "MapResponseResponseFuture.vzip"
         ],
         "/deps/axum/response": [
-          "AppendHeaders",
-          "AppendHeaders.clone",
-          "AppendHeaders.into",
-          "AppendHeaders.into_response",
-          "AppendHeaders.into_response_parts",
-          "AppendHeaders.try_into",
-          "ErrorResponse",
-          "ErrorResponse.into",
-          "ErrorResponse.try_into",
           "Html",
           "Html.clone",
           "Html.into",
@@ -1376,7 +750,6 @@
           "Html.try_into",
           "Html.vzip",
           "Html::from",
-          "IntoResponse",
           "NoContent",
           "NoContent.clone",
           "NoContent.into",
@@ -1400,33 +773,6 @@
           "Redirect::permanent",
           "Redirect::temporary",
           "Redirect::to",
-          "Response",
-          "Response.body",
-          "Response.body_mut",
-          "Response.clone",
-          "Response.extensions",
-          "Response.extensions_mut",
-          "Response.headers",
-          "Response.headers_mut",
-          "Response.into",
-          "Response.into_body",
-          "Response.map",
-          "Response.status",
-          "Response.status_mut",
-          "Response.try_into",
-          "Response.version",
-          "Response.version_mut",
-          "Response::default",
-          "Response::from_parts",
-          "Response::new",
-          "ResponseParts",
-          "ResponseParts.extensions",
-          "ResponseParts.extensions_mut",
-          "ResponseParts.headers",
-          "ResponseParts.headers_mut",
-          "ResponseParts.into",
-          "ResponseParts.try_into",
-          "Result",
           "Sse",
           "Sse.clone",
           "Sse.into",
@@ -3011,13 +2357,6 @@
           "Empty.into",
           "Empty.is_write_vectored",
           "Empty.try_into",
-          "Error",
-          "Error.into",
-          "Error.kind",
-          "Error.raw_os_error",
-          "Error.try_into",
-          "Error::from",
-          "ErrorKind",
           "Interest",
           "Interest.add",
           "Interest.bitor",
@@ -3073,8 +2412,6 @@
           "Repeat",
           "Repeat.into",
           "Repeat.try_into",
-          "Result",
-          "SeekFrom",
           "SimplexStream",
           "SimplexStream.into",
           "SimplexStream.is_write_vectored",
@@ -3172,6 +2509,63 @@
           "try_join"
         ],
         "/deps/tokio/net": [
+          "Duration",
+          "Duration.abs_diff",
+          "Duration.add",
+          "Duration.add_assign",
+          "Duration.as_micros",
+          "Duration.as_millis",
+          "Duration.as_millis_f32",
+          "Duration.as_millis_f64",
+          "Duration.as_nanos",
+          "Duration.as_secs",
+          "Duration.as_secs_f32",
+          "Duration.as_secs_f64",
+          "Duration.checked_add",
+          "Duration.checked_div",
+          "Duration.checked_mul",
+          "Duration.checked_sub",
+          "Duration.clone",
+          "Duration.cmp",
+          "Duration.div",
+          "Duration.div_assign",
+          "Duration.div_duration_ceil",
+          "Duration.div_duration_f32",
+          "Duration.div_duration_f64",
+          "Duration.div_duration_floor",
+          "Duration.div_f32",
+          "Duration.div_f64",
+          "Duration.eq",
+          "Duration.into",
+          "Duration.is_zero",
+          "Duration.mul_assign",
+          "Duration.mul_f32",
+          "Duration.mul_f64",
+          "Duration.partial_cmp",
+          "Duration.saturating_add",
+          "Duration.saturating_mul",
+          "Duration.saturating_sub",
+          "Duration.sub",
+          "Duration.sub_assign",
+          "Duration.subsec_micros",
+          "Duration.subsec_millis",
+          "Duration.subsec_nanos",
+          "Duration.try_into",
+          "Duration::default",
+          "Duration::from_days",
+          "Duration::from_hours",
+          "Duration::from_micros",
+          "Duration::from_millis",
+          "Duration::from_mins",
+          "Duration::from_nanos",
+          "Duration::from_nanos_u128",
+          "Duration::from_secs",
+          "Duration::from_secs_f32",
+          "Duration::from_secs_f64",
+          "Duration::from_weeks",
+          "Duration::new",
+          "Duration::try_from_secs_f32",
+          "Duration::try_from_secs_f64",
           "Ipv4Addr",
           "Ipv4Addr.clone",
           "Ipv4Addr.cmp",
@@ -3380,6 +2774,9 @@
         ],
         "/deps/tokio/net/addr/sealed": [
           "Internal"
+        ],
+        "/deps/tokio/net/duration/trait/core/ops/arith/mul-u32": [
+          "mul"
         ],
         "/deps/tokio/net/ipv4addr/trait/core/cmp/partialeq": [
           "eq"
@@ -4348,63 +3745,6 @@
           "AccessError"
         ],
         "/deps/tokio/time": [
-          "Duration",
-          "Duration.abs_diff",
-          "Duration.add",
-          "Duration.add_assign",
-          "Duration.as_micros",
-          "Duration.as_millis",
-          "Duration.as_millis_f32",
-          "Duration.as_millis_f64",
-          "Duration.as_nanos",
-          "Duration.as_secs",
-          "Duration.as_secs_f32",
-          "Duration.as_secs_f64",
-          "Duration.checked_add",
-          "Duration.checked_div",
-          "Duration.checked_mul",
-          "Duration.checked_sub",
-          "Duration.clone",
-          "Duration.cmp",
-          "Duration.div",
-          "Duration.div_assign",
-          "Duration.div_duration_ceil",
-          "Duration.div_duration_f32",
-          "Duration.div_duration_f64",
-          "Duration.div_duration_floor",
-          "Duration.div_f32",
-          "Duration.div_f64",
-          "Duration.eq",
-          "Duration.into",
-          "Duration.is_zero",
-          "Duration.mul_assign",
-          "Duration.mul_f32",
-          "Duration.mul_f64",
-          "Duration.partial_cmp",
-          "Duration.saturating_add",
-          "Duration.saturating_mul",
-          "Duration.saturating_sub",
-          "Duration.sub",
-          "Duration.sub_assign",
-          "Duration.subsec_micros",
-          "Duration.subsec_millis",
-          "Duration.subsec_nanos",
-          "Duration.try_into",
-          "Duration::default",
-          "Duration::from_days",
-          "Duration::from_hours",
-          "Duration::from_micros",
-          "Duration::from_millis",
-          "Duration::from_mins",
-          "Duration::from_nanos",
-          "Duration::from_nanos_u128",
-          "Duration::from_secs",
-          "Duration::from_secs_f32",
-          "Duration::from_secs_f64",
-          "Duration::from_weeks",
-          "Duration::new",
-          "Duration::try_from_secs_f32",
-          "Duration::try_from_secs_f64",
           "Instant",
           "Instant.add",
           "Instant.add_assign",
@@ -4451,9 +3791,6 @@
           "interval_at",
           "timeout",
           "timeout_at"
-        ],
-        "/deps/tokio/time/duration/trait/core/ops/arith/mul-u32": [
-          "mul"
         ],
         "/deps/tokio/time/error": [
           "Elapsed",
@@ -4807,6 +4144,3042 @@
   ],
   "removed": [
     {
+      "namespace": "/deps/axum",
+      "name": "BoxError",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum",
+      "name": "Error",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum",
+      "name": "Error.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum",
+      "name": "Error.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum",
+      "name": "Error::new",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/body",
+      "name": "BodyDataStream",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/body",
+      "name": "BodyDataStream.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/body",
+      "name": "BodyDataStream.is_end_stream",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/body",
+      "name": "BodyDataStream.size_hint",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/body",
+      "name": "BodyDataStream.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract",
+      "name": "DefaultBodyLimit",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract",
+      "name": "DefaultBodyLimit.apply",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract",
+      "name": "DefaultBodyLimit.clone",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract",
+      "name": "DefaultBodyLimit.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract",
+      "name": "DefaultBodyLimit.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract",
+      "name": "DefaultBodyLimit::disable",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract",
+      "name": "DefaultBodyLimit::max",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract",
+      "name": "Request",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract",
+      "name": "Request.body",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract",
+      "name": "Request.body_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract",
+      "name": "Request.clone",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract",
+      "name": "Request.extensions",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract",
+      "name": "Request.extensions_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract",
+      "name": "Request.headers",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract",
+      "name": "Request.headers_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract",
+      "name": "Request.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract",
+      "name": "Request.into_body",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract",
+      "name": "Request.map",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract",
+      "name": "Request.method",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract",
+      "name": "Request.method_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract",
+      "name": "Request.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract",
+      "name": "Request.uri",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract",
+      "name": "Request.uri_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract",
+      "name": "Request.version",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract",
+      "name": "Request.version_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract",
+      "name": "Request::default",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract",
+      "name": "Request::from_parts",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract",
+      "name": "Request::new",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract/rejection",
+      "name": "FailedToBufferBody",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract/rejection",
+      "name": "InvalidUtf8",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract/rejection",
+      "name": "InvalidUtf8.body_text",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract/rejection",
+      "name": "InvalidUtf8.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract/rejection",
+      "name": "InvalidUtf8.into_response",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract/rejection",
+      "name": "InvalidUtf8.status",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract/rejection",
+      "name": "InvalidUtf8.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract/rejection",
+      "name": "InvalidUtf8::from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract/rejection",
+      "name": "LengthLimitError",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract/rejection",
+      "name": "LengthLimitError.body_text",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract/rejection",
+      "name": "LengthLimitError.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract/rejection",
+      "name": "LengthLimitError.into_response",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract/rejection",
+      "name": "LengthLimitError.status",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract/rejection",
+      "name": "LengthLimitError.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract/rejection",
+      "name": "LengthLimitError::from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract/rejection",
+      "name": "StringRejection",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract/rejection",
+      "name": "UnknownBodyError",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract/rejection",
+      "name": "UnknownBodyError.body_text",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract/rejection",
+      "name": "UnknownBodyError.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract/rejection",
+      "name": "UnknownBodyError.into_response",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract/rejection",
+      "name": "UnknownBodyError.status",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract/rejection",
+      "name": "UnknownBodyError.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract/rejection",
+      "name": "UnknownBodyError::from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract/rejection/failedtobufferbody/trait/core/convert/from-axum/extract/rejection/lengthlimiterror",
+      "name": "from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract/rejection/failedtobufferbody/trait/core/convert/from-axum/extract/rejection/unknownbodyerror",
+      "name": "from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract/rejection/stringrejection/trait/core/convert/from-axum/extract/rejection/failedtobufferbody",
+      "name": "from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/extract/rejection/stringrejection/trait/core/convert/from-axum/extract/rejection/invalidutf8",
+      "name": "from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Error",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Error.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Error.is",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Error.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Extensions",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Extensions.clear",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Extensions.clone",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Extensions.extend",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Extensions.get",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Extensions.get_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Extensions.get_or_insert",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Extensions.get_or_insert_default",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Extensions.get_or_insert_with",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Extensions.insert",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Extensions.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Extensions.into_response",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Extensions.into_response_parts",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Extensions.is_empty",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Extensions.len",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Extensions.remove",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Extensions.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Extensions::default",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Extensions::new",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap.append",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap.capacity",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap.clear",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap.clone",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap.contains_key",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap.drain",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap.entry",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap.eq",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap.get",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap.get_all",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap.get_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap.insert",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap.into_response",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap.into_response_parts",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap.is_empty",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap.iter",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap.iter_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap.keys",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap.keys_len",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap.len",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap.remove",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap.reserve",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap.try_append",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap.try_entry",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap.try_insert",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap.try_reserve",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap.values",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap.values_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap::default",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap::from_iter",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap::new",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap::try_with_capacity",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderMap::with_capacity",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderName",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderName.as_ref",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderName.as_str",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderName.assert_fields_are_eq",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderName.borrow",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderName.clone",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderName.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderName.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderName::from_str",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderValue",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderValue.clone",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderValue.cmp",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderValue.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderValue.is_empty",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderValue.is_sensitive",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderValue.len",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderValue.set_sensitive",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderValue.to_str",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderValue.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderValue::from_maybe_shared",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderValue::from_maybe_shared_unchecked",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderValue::from_name",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "HeaderValue::from_str",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Method",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Method.as_ref",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Method.as_str",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Method.assert_fields_are_eq",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Method.clone",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Method.cmp",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Method.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Method.is_idempotent",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Method.is_safe",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Method.partial_cmp",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Method.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Method::default",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Method::from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Method::from_str",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Method::try_from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Request",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Request.body",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Request.body_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Request.clone",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Request.extensions",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Request.extensions_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Request.headers",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Request.headers_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Request.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Request.into_body",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Request.map",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Request.method",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Request.method_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Request.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Request.uri",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Request.uri_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Request.version",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Request.version_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Request::builder",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Request::connect",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Request::default",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Request::delete",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Request::from_parts",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Request::get",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Request::head",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Request::new",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Request::options",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Request::patch",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Request::post",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Request::put",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Request::trace",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Response",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Response.body",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Response.body_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Response.clone",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Response.extensions",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Response.extensions_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Response.headers",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Response.headers_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Response.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Response.into_body",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Response.map",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Response.status",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Response.status_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Response.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Response.version",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Response.version_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Response::builder",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Response::default",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Response::from_parts",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Response::new",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Result",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "StatusCode",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "StatusCode.as_str",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "StatusCode.as_u16",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "StatusCode.assert_fields_are_eq",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "StatusCode.canonical_reason",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "StatusCode.clone",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "StatusCode.cmp",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "StatusCode.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "StatusCode.into_response",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "StatusCode.is_client_error",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "StatusCode.is_informational",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "StatusCode.is_redirection",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "StatusCode.is_server_error",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "StatusCode.is_success",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "StatusCode.partial_cmp",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "StatusCode.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "StatusCode::default",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "StatusCode::from_str",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "StatusCode::from_u16",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Uri",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Uri.authority",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Uri.clone",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Uri.host",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Uri.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Uri.into_parts",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Uri.path",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Uri.path_and_query",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Uri.port",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Uri.port_u16",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Uri.query",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Uri.scheme",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Uri.scheme_str",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Uri.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Uri::builder",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Uri::default",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Uri::from_maybe_shared",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Uri::from_parts",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Uri::from_str",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Version",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Version.assert_fields_are_eq",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Version.clone",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Version.cmp",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Version.eq",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Version.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Version.partial_cmp",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Version.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "Version::default",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "borrowed-option",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "borrowed-option.and_then",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "borrowed-option.cloned",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http",
+      "name": "borrowed-option.map",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/error/trait/core/convert/from-axum/http/header/invalidheadername",
+      "name": "from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/error/trait/core/convert/from-axum/http/header/invalidheadervalue",
+      "name": "from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/error/trait/core/convert/from-axum/http/header/maxsizereached",
+      "name": "from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/error/trait/core/convert/from-axum/http/method/invalidmethod",
+      "name": "from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/error/trait/core/convert/from-axum/http/status/invalidstatuscode",
+      "name": "from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/error/trait/core/convert/from-axum/http/uri/invaliduri",
+      "name": "from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/error/trait/core/convert/from-axum/http/uri/invaliduriparts",
+      "name": "from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/error/trait/core/convert/from-core/convert/infallible",
+      "name": "from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/header",
+      "name": "IntoIter",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/header",
+      "name": "IntoIter.drop",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/header",
+      "name": "IntoIter.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/header",
+      "name": "IntoIter.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/header",
+      "name": "InvalidHeaderName",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/header",
+      "name": "InvalidHeaderName.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/header",
+      "name": "InvalidHeaderName.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/header",
+      "name": "InvalidHeaderName::from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/header",
+      "name": "InvalidHeaderValue",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/header",
+      "name": "InvalidHeaderValue.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/header",
+      "name": "InvalidHeaderValue.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/header",
+      "name": "InvalidHeaderValue::from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/header",
+      "name": "MaxSizeReached",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/header",
+      "name": "MaxSizeReached.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/header",
+      "name": "MaxSizeReached.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/header",
+      "name": "MaxSizeReached::from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/header",
+      "name": "ToStrError",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/header",
+      "name": "ToStrError.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/header",
+      "name": "ToStrError.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/header/map/as-header-name",
+      "name": "TryEntryError",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/headermap/trait/core/iter/traits/collect/extend-axum/http/headername-t",
+      "name": "extend",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/headermap/trait/core/iter/traits/collect/extend-core/option/option-axum/http/headername-t",
+      "name": "extend",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/headername/trait/core/cmp/partialeq",
+      "name": "eq",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/headername/trait/core/convert/tryfrom-std/vec/vec-u8",
+      "name": "try_from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/headername/trait/core/convert/tryfrom-str",
+      "name": "try_from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/headervalue",
+      "name": "from_str",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/headervalue/trait/core/cmp/partialeq",
+      "name": "eq",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/headervalue/trait/core/cmp/partialeq-std/string/string",
+      "name": "eq",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/headervalue/trait/core/cmp/partialeq-str",
+      "name": "eq",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/headervalue/trait/core/cmp/partialord",
+      "name": "partial_cmp",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/headervalue/trait/core/cmp/partialord-std/string/string",
+      "name": "partial_cmp",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/headervalue/trait/core/cmp/partialord-str",
+      "name": "partial_cmp",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/headervalue/trait/core/convert/from-axum/http/headername",
+      "name": "from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/headervalue/trait/core/convert/from-axum/http/headervalue",
+      "name": "from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/headervalue/trait/core/convert/from-i16",
+      "name": "from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/headervalue/trait/core/convert/from-i32",
+      "name": "from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/headervalue/trait/core/convert/from-i64",
+      "name": "from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/headervalue/trait/core/convert/from-isize",
+      "name": "from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/headervalue/trait/core/convert/from-u16",
+      "name": "from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/headervalue/trait/core/convert/from-u32",
+      "name": "from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/headervalue/trait/core/convert/from-u64",
+      "name": "from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/headervalue/trait/core/convert/from-usize",
+      "name": "from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/headervalue/trait/core/convert/tryfrom-std/vec/vec-u8",
+      "name": "try_from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/headervalue/trait/core/convert/tryfrom-str",
+      "name": "try_from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/method",
+      "name": "InvalidMethod",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/method",
+      "name": "InvalidMethod.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/method",
+      "name": "InvalidMethod.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/method",
+      "name": "InvalidMethod::from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/method/trait/core/cmp/partialeq",
+      "name": "eq",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/request",
+      "name": "Builder",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/request",
+      "name": "Builder.body",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/request",
+      "name": "Builder.extension",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/request",
+      "name": "Builder.extensions_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/request",
+      "name": "Builder.extensions_ref",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/request",
+      "name": "Builder.header",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/request",
+      "name": "Builder.headers_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/request",
+      "name": "Builder.headers_ref",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/request",
+      "name": "Builder.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/request",
+      "name": "Builder.method",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/request",
+      "name": "Builder.method_ref",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/request",
+      "name": "Builder.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/request",
+      "name": "Builder.uri",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/request",
+      "name": "Builder.uri_ref",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/request",
+      "name": "Builder.version",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/request",
+      "name": "Builder.version_ref",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/request",
+      "name": "Builder::default",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/request",
+      "name": "Builder::new",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/request",
+      "name": "Parts",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/request",
+      "name": "Parts.clone",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/request",
+      "name": "Parts.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/request",
+      "name": "Parts.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/request",
+      "name": "borrowed-option",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/request",
+      "name": "borrowed-option.and_then",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/request",
+      "name": "borrowed-option.cloned",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/request",
+      "name": "borrowed-option.map",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/request/request",
+      "name": "method",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/response",
+      "name": "Builder",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/response",
+      "name": "Builder.body",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/response",
+      "name": "Builder.extension",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/response",
+      "name": "Builder.extensions_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/response",
+      "name": "Builder.extensions_ref",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/response",
+      "name": "Builder.header",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/response",
+      "name": "Builder.headers_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/response",
+      "name": "Builder.headers_ref",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/response",
+      "name": "Builder.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/response",
+      "name": "Builder.status",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/response",
+      "name": "Builder.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/response",
+      "name": "Builder.version",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/response",
+      "name": "Builder::default",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/response",
+      "name": "Builder::new",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/response",
+      "name": "Parts",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/response",
+      "name": "Parts.clone",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/response",
+      "name": "Parts.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/response",
+      "name": "Parts.into_response",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/response",
+      "name": "Parts.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/response",
+      "name": "borrowed-option",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/response",
+      "name": "borrowed-option.and_then",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/response",
+      "name": "borrowed-option.cloned",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/response",
+      "name": "borrowed-option.map",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/status",
+      "name": "InvalidStatusCode",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/status",
+      "name": "InvalidStatusCode.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/status",
+      "name": "InvalidStatusCode.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/status",
+      "name": "InvalidStatusCode::from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/status/statuscode",
+      "name": "is_success",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/statuscode/trait/core/cmp/partialeq",
+      "name": "eq",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/statuscode/trait/core/cmp/partialeq-u16",
+      "name": "eq",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/statuscode/trait/core/convert/tryfrom-str",
+      "name": "try_from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/statuscode/trait/core/convert/tryfrom-u16",
+      "name": "try_from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Authority",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Authority.as_ref",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Authority.as_str",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Authority.clone",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Authority.host",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Authority.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Authority.port",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Authority.port_u16",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Authority.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Authority::from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Authority::from_maybe_shared",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Authority::from_str",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Builder",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Builder.authority",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Builder.build",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Builder.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Builder.path_and_query",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Builder.scheme",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Builder.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Builder::default",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Builder::from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Builder::new",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "InvalidUri",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "InvalidUri.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "InvalidUri.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "InvalidUri::from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "InvalidUriParts",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "InvalidUriParts.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "InvalidUriParts.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "InvalidUriParts::from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Parts",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Parts.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Parts.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Parts::default",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Parts::from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Parts::try_from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "PathAndQuery",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "PathAndQuery.as_str",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "PathAndQuery.clone",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "PathAndQuery.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "PathAndQuery.path",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "PathAndQuery.query",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "PathAndQuery.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "PathAndQuery::from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "PathAndQuery::from_maybe_shared",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "PathAndQuery::from_str",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Port",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Port.as_ref",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Port.as_str",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Port.as_u16",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Port.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Port.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Port::from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Scheme",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Scheme.as_ref",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Scheme.as_str",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Scheme.clone",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Scheme.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Scheme.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Scheme::from_str",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "Scheme::try_from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "borrowed-option",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "borrowed-option.and_then",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "borrowed-option.cloned",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri",
+      "name": "borrowed-option.map",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri/authority/trait/core/cmp/partialeq",
+      "name": "eq",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri/authority/trait/core/cmp/partialeq-std/string/string",
+      "name": "eq",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri/authority/trait/core/cmp/partialord",
+      "name": "partial_cmp",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri/authority/trait/core/cmp/partialord-std/string/string",
+      "name": "partial_cmp",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri/authority/trait/core/convert/tryfrom-std/string/string",
+      "name": "try_from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri/authority/trait/core/convert/tryfrom-std/vec/vec-u8",
+      "name": "try_from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri/authority/trait/core/convert/tryfrom-str",
+      "name": "try_from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri/pathandquery/trait/core/cmp/partialeq",
+      "name": "eq",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri/pathandquery/trait/core/cmp/partialeq-std/string/string",
+      "name": "eq",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri/pathandquery/trait/core/cmp/partialord",
+      "name": "partial_cmp",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri/pathandquery/trait/core/cmp/partialord-std/string/string",
+      "name": "partial_cmp",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri/pathandquery/trait/core/convert/tryfrom-std/vec/vec-u8",
+      "name": "try_from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri/pathandquery/trait/core/convert/tryfrom-str",
+      "name": "try_from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri/port/trait/core/cmp/partialeq-u16",
+      "name": "eq",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri/scheme/trait/core/cmp/partialeq",
+      "name": "eq",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri/scheme/trait/core/cmp/partialeq-str",
+      "name": "eq",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri/trait/core/cmp/partialeq",
+      "name": "eq",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri/trait/core/convert/from-axum/http/uri/authority",
+      "name": "from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri/trait/core/convert/from-axum/http/uri/pathandquery",
+      "name": "from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri/trait/core/convert/tryfrom-axum/http/uri",
+      "name": "try_from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri/trait/core/convert/tryfrom-axum/http/uri/parts",
+      "name": "try_from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri/trait/core/convert/tryfrom-std/vec/vec-u8",
+      "name": "try_from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/http/uri/trait/core/convert/tryfrom-str",
+      "name": "try_from",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "AppendHeaders",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "AppendHeaders.clone",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "AppendHeaders.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "AppendHeaders.into_response",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "AppendHeaders.into_response_parts",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "AppendHeaders.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "ErrorResponse",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "ErrorResponse.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "ErrorResponse.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "IntoResponse",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "Response",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "Response.body",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "Response.body_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "Response.clone",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "Response.extensions",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "Response.extensions_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "Response.headers",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "Response.headers_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "Response.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "Response.into_body",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "Response.map",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "Response.status",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "Response.status_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "Response.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "Response.version",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "Response.version_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "Response::default",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "Response::from_parts",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "Response::new",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "ResponseParts",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "ResponseParts.extensions",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "ResponseParts.extensions_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "ResponseParts.headers",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "ResponseParts.headers_mut",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "ResponseParts.into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "ResponseParts.try_into",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
+      "namespace": "/deps/axum/response",
+      "name": "Result",
+      "previous_version": "0.8.9",
+      "current_version": "0.8.9"
+    },
+    {
       "namespace": "/deps/terrane-http-transport",
       "name": "AccessLayer",
       "previous_version": "0.1.6",
@@ -4943,13 +7316,415 @@
       "name": "clone",
       "previous_version": "0.1.8",
       "current_version": "0.1.9"
+    },
+    {
+      "namespace": "/deps/tokio/io",
+      "name": "Error",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/io",
+      "name": "Error.into",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/io",
+      "name": "Error.kind",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/io",
+      "name": "Error.raw_os_error",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/io",
+      "name": "Error.try_into",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/io",
+      "name": "Error::from",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/io",
+      "name": "ErrorKind",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/io",
+      "name": "Result",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/io",
+      "name": "SeekFrom",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.abs_diff",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.add",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.add_assign",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.as_micros",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.as_millis",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.as_millis_f32",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.as_millis_f64",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.as_nanos",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.as_secs",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.as_secs_f32",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.as_secs_f64",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.checked_add",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.checked_div",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.checked_mul",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.checked_sub",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.clone",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.cmp",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.div",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.div_assign",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.div_duration_ceil",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.div_duration_f32",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.div_duration_f64",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.div_duration_floor",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.div_f32",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.div_f64",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.eq",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.into",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.is_zero",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.mul_assign",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.mul_f32",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.mul_f64",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.partial_cmp",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.saturating_add",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.saturating_mul",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.saturating_sub",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.sub",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.sub_assign",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.subsec_micros",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.subsec_millis",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.subsec_nanos",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration.try_into",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration::default",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration::from_days",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration::from_hours",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration::from_micros",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration::from_millis",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration::from_mins",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration::from_nanos",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration::from_nanos_u128",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration::from_secs",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration::from_secs_f32",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration::from_secs_f64",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration::from_weeks",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration::new",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration::try_from_secs_f32",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time",
+      "name": "Duration::try_from_secs_f64",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
+    },
+    {
+      "namespace": "/deps/tokio/time/duration/trait/core/ops/arith/mul-u32",
+      "name": "mul",
+      "previous_version": "1.47.1",
+      "current_version": "1.47.1"
     }
   ],
-  "cache_identity": "d08c06d520a73eb8dfc64868c2257c87ddcfa931abff7981c43a5fe3c0d5e4e3",
+  "cache_identity": "2ee70a9869d1ea8acd36f32e1050ccbf148b1951417253eb08e23a6f1f695797",
   "source": "Local",
   "rustdoc_format": 61,
   "projection_schema": "260",
-  "content_hash": "16235c84ee89fbbfd0d8b3b63c75c0e36ed5692d229f9e62fa0dce1e4f84c574",
+  "content_hash": "023b6a14ca974e76e83baad80a04a613afbfad1ebea52d4755edff14c47b138d",
   "resolution": {
     "outcome": "LocalRustdoc",
     "events": [
