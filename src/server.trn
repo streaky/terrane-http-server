@@ -6,8 +6,8 @@ from /deps/axum-core/response import Response as native-response
 from /deps/axum/middleware import Next as middleware-next, from_fn as from-fn
 from /deps/axum/routing import MethodRouter as native-method-router
 from /deps/tower-http/services import ServeDir as serve-dir
-from /deps/tokio/net import TcpListener as tcp-listener
-from /deps/tokio/net import SocketAddr as socket-addr
+from /core/networking import listen-tcp
+from /core/networking/native import native-socket-address as socket-addr
 from /deps/axum/extract/connect-info import IntoMakeServiceWithConnectInfo as into-make-service-with-connect-info
 from /deps/http import StatusCode as status-code
 from /core/errors import dependency-error, throwable
@@ -148,7 +148,8 @@ public class application
         return this.router.has_routes;
 
     consuming async function serve none throws throwable;
-        listener = await tcp-listener::bind; this.address
+        bound = await listen-tcp; this.address
+        listener = bound.into-native;
         router = this.router
         direct-policy network-policy = compile-network-policy; this.policy.direct-connections
         client-policy network-policy = compile-network-policy; this.policy.client-addresses

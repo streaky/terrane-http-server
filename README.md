@@ -32,6 +32,8 @@ For handlers that need client identity, `routes.get-with-client` accepts an asyn
 
 The public model therefore exposes neither Axum's `Router` nor its move-and-return registration pattern. `application` and `routes` own that native state and preserve Terrane's ordinary consuming-builder semantics internally.
 
+Listener creation uses core `listen-tcp`, then consumes the listener through `into-native` before passing it to Axum. The package neither declares nor imports Tokio directly; Tokio remains underneath core and Axum, with one compiler-bound runtime owner. Core's automatic backlog policy now applies to this server, rather than Axum/Tokio's direct-bind default. Peer metadata uses core's `native-socket-address`, preserving direct/client allowlist and forwarded-header behavior. Axum still owns HTTP serving and WebSockets; no HTTP-specific adapter is added to the compiler or platform support.
+
 A root controller uses the prefix `/`. The framework merges root routes and nests non-root controller prefixes, allowing exact root routes, prefixed controllers, and static directories to coexist. Configuration rejects duplicate mount paths rather than assigning order-dependent precedence.
 
 ## YAML composition

@@ -2,15 +2,19 @@ namespace streaky/http-server
 
 from /deps/ipnet import IpNet as ip-net
 from /deps/ipnet import IpAddr as ip-addr
-from /deps/tokio/net import SocketAddr as socket-addr
+from /core/networking/native import native-socket-address as socket-addr
 from /deps/axum/extract import ConnectInfo as connect-info
 from /deps/axum-core/extract import Request as native-request
 from /core/collections import list
 from /core/errors import dependency-error
 
+function native-peer-ip ip-addr; address ref socket-addr
+    return rust
+        address.ip()
+
 function peer-address ip-addr; peer ref (connect-info of socket-addr)
     payload socket-addr = peer.n0
-    return payload.ip;
+    return native-peer-ip; ref payload
 
 function direct-address ip-addr|none; request ref native-request
     return (((request.extensions;).get of (connect-info of socket-addr));).map; peer-address

@@ -34,10 +34,6 @@ effects = ["build"]
 version = "=2.11.0"
 effects = ["build"]
 
-[rust-dependencies.tokio]
-version = "=1.47.1"
-features = ["net", "rt-multi-thread"]
-effects = ["build", "networking"]
 
 [rust-dependencies.client-ip]
 version = "=0.2.1"
