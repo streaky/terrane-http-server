@@ -115,6 +115,38 @@ class CaptureOutcomeTests(unittest.TestCase):
         data = self.report("failed")
         self.assertIn("error", data)
 
+    def test_failed_trial_snapshot_preserves_reports_and_original_exception(self):
+        self.capture.args.soak_seconds = 30
+        failure = OSError("trial snapshot unavailable")
+        before = {"container_tcp": {"TcpExt:ListenOverflows": 5},
+                  "host_tcp": {"TcpExt:TCPSynRetrans": 7}}
+        with self.assertRaises(OSError) as raised:
+            with self.capture:
+                # Isolate the trial snapshot failure from background sampling.
+                self.capture.stop.set()
+                self.capture.thread.join()
+                self.trial(True)
+                prior = self.capture.data["trials"][-1]
+                prior.update(kind="soak", concurrency=1000)
+                prior["after"] = copy.deepcopy(before)
+                with patch.object(self.capture, "observe", side_effect=[before, failure]), \
+                     patch.object(capture_module.time, "sleep"), \
+                     patch.object(capture_module, "command", return_value={
+                         "returncode": 0, "stdout": "Complete requests: 1\nFailed requests: 0\n"
+                         "Requests per second: 12\nDocument Length: 4\n"}):
+                    capture_module.run_soak(self.capture, self.capture.args)
+        self.assertIs(raised.exception, failure)
+        data = self.report("failed")
+        self.assertEqual(data["error"], repr(failure))
+        self.assertEqual([row["result"]["complete"] for row in data["trials"]], [1, 1])
+        self.assertEqual(data["trials"][0]["tcp_counter_deltas"],
+                         {"container_listen_overflows": 5, "host_syn_retransmissions": 7})
+        unavailable = {"container_listen_overflows": None, "host_syn_retransmissions": None}
+        self.assertEqual(data["trials"][1]["tcp_counter_deltas"], unavailable)
+        self.assertEqual(reporter.summarize(data)[0]["tcp_counter_deltas"], unavailable)
+        self.assertIn("| soak | 1000 | fresh | unavailable | unavailable |",
+                      self.capture.stem.with_suffix(".md").read_text())
+
     def test_interrupted_trial_without_a_measurement_remains_reportable(self):
         failure = RuntimeError("client timed out before returning measurements")
         with self.assertRaises(RuntimeError) as raised:

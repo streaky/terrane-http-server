@@ -22,6 +22,7 @@ def report_data(raw):
     trials = []
     for row in raw["trials"]:
         result = row["result"]
+        before, after = row.get("before"), row.get("after")
         metric = "rps" if row["kind"] in ("ab", "soak") else "post_release_ms"
         trials.append({
             "kind": row["kind"], "concurrency": row["concurrency"],
@@ -32,7 +33,8 @@ def report_data(raw):
                 metric: result.get(metric),
             },
             "tcp_counter_deltas": {
-                name: row["after"][scope].get(counter, 0) - row["before"][scope].get(counter, 0)
+                name: after[scope].get(counter, 0) - before[scope].get(counter, 0)
+                if before is not None and after is not None else None
                 for name, scope, counter in COUNTERS
             },
         })
@@ -55,10 +57,10 @@ def summarize(data):
     for (kind, concurrency, mode), rows in sorted(groups.items()):
         metric = 'rps' if kind in ('ab', 'soak') else 'post_release_ms'
         values = [r['result'][metric] for r in rows if r['result'].get(metric) is not None]
-        counters = {
-            name: sum(row["tcp_counter_deltas"][name] for row in rows)
-            for name, _, _ in COUNTERS
-        }
+        counters = {}
+        for name, _, _ in COUNTERS:
+            deltas = [row["tcp_counter_deltas"][name] for row in rows]
+            counters[name] = None if None in deltas else sum(deltas)
         cells.append(dict(kind=kind, concurrency=concurrency, mode=mode, runs=len(rows),
                           passed=all(r['result']['passed'] for r in rows), metric=metric,
                           median=statistics.median(values) if values else None,
@@ -97,7 +99,8 @@ def write_report(stem, data):
               '|---|---:|---|---:|---:|']
     for c in cells:
         d = c['tcp_counter_deltas']
-        lines.append(f"| {c['kind']} | {c['concurrency']} | {c['mode']} | {d['container_listen_overflows']} | {d['host_syn_retransmissions']} |")
+        counters = ['unavailable' if d[name] is None else str(d[name]) for name, _, _ in COUNTERS]
+        lines.append(f"| {c['kind']} | {c['concurrency']} | {c['mode']} | {' | '.join(counters)} |")
     if data.get('error'):
         lines += ['', 'Error: ' + data['error']]
     lines += ['', '## Interpretation', '',

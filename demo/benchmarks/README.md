@@ -50,6 +50,10 @@ Failures and partial trials are saved in the same report pair, with a nonzero pr
 The final status is `passed` only when at least one trial completed, every trial passed,
 and both monitoring and final container/health checks succeeded. Empty captures, failed
 trials, interruptions, and final-check failures are saved as `failed`.
+If a trial snapshot fails, the failed capture still saves its partial measurements and
+original snapshot error. Counter deltas without both snapshots are `null` in JSON and
+shown as `unavailable` in Markdown. A grouped counter total is also unavailable if any
+of its trials lacks that delta; it is never reported as zero or a partial sum.
 
 Run the report-finalization regressions offline, without Docker access or benchmark traffic:
 
