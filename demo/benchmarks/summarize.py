@@ -1,10 +1,49 @@
 #!/usr/bin/env python3
 """Read or write the demo's self-contained JSON/Markdown run reports."""
 import argparse
-from collections import Counter, defaultdict
+from collections import defaultdict
 import json
 from pathlib import Path
 import statistics
+
+WORKSPACE = Path(__file__).resolve().parents[4]
+COUNTERS = (
+    ("container_listen_overflows", "container_tcp", "TcpExt:ListenOverflows"),
+    ("host_syn_retransmissions", "host_tcp", "TcpExt:TCPSynRetrans"),
+)
+
+
+def report_data(raw):
+    """Reduce in-memory observations to the inputs needed by the Markdown report."""
+    configuration = dict(raw["configuration"])
+    for key in ("output", "native_burst"):
+        if key in configuration:
+            configuration[key] = redact_path_argument(configuration[key])
+    trials = []
+    for row in raw["trials"]:
+        result = row["result"]
+        metric = "rps" if row["kind"] in ("ab", "soak") else "post_release_ms"
+        trials.append({
+            "kind": row["kind"], "concurrency": row["concurrency"],
+            "mode": row["mode"], "phase": row["phase"],
+            "result": {
+                "passed": result["passed"],
+                "complete": int(result.get("complete") or result.get("successes") or 0),
+                metric: result.get(metric),
+            },
+            "tcp_counter_deltas": {
+                name: row["after"][scope].get(counter, 0) - row["before"][scope].get(counter, 0)
+                for name, scope, counter in COUNTERS
+            },
+        })
+    data = {
+        "status": raw["status"], "configuration": configuration,
+        "container_before": {key: raw["container_before"][key] for key in ("id", "image_id")},
+        "trials": trials,
+    }
+    if raw.get("error"):
+        data["error"] = raw["error"]
+    return data
 
 
 def summarize(data):
@@ -14,23 +53,31 @@ def summarize(data):
             groups[row['kind'], row['concurrency'], row['mode']].append(row)
     cells = []
     for (kind, concurrency, mode), rows in sorted(groups.items()):
-        metric = 'rps' if kind == 'ab' else 'post_release_ms'
+        metric = 'rps' if kind in ('ab', 'soak') else 'post_release_ms'
         values = [r['result'][metric] for r in rows if r['result'].get(metric) is not None]
-        counters = Counter()
-        for row in rows:
-            for scope in ('container_tcp', 'host_tcp'):
-                for key in ('TcpExt:ListenOverflows', 'TcpExt:ListenDrops', 'TcpExt:TCPSynRetrans', 'Tcp:RetransSegs'):
-                    counters[f'{scope}:{key}'] += row['after'][scope].get(key, 0) - row['before'][scope].get(key, 0)
+        counters = {
+            name: sum(row["tcp_counter_deltas"][name] for row in rows)
+            for name, _, _ in COUNTERS
+        }
         cells.append(dict(kind=kind, concurrency=concurrency, mode=mode, runs=len(rows),
                           passed=all(r['result']['passed'] for r in rows), metric=metric,
                           median=statistics.median(values) if values else None,
                           min=min(values) if values else None, max=max(values) if values else None,
-                          tcp_counter_deltas=dict(counters)))
+                          tcp_counter_deltas=counters))
     return cells
 
 
+def redact_path_argument(value):
+    if not isinstance(value, str) or not value.startswith("/"):
+        return value
+    try:
+        return Path(value).resolve().relative_to(WORKSPACE).as_posix()
+    except (OSError, ValueError):
+        return "[redacted host path]"
+
+
 def write_report(stem, data):
-    # Raw observations are stored once. Summaries are derived for Markdown only.
+    # Only compact report inputs are persisted; capture observations stay transient.
     stem.with_suffix('.json').write_text(json.dumps(data, separators=(',', ':')) + '\n')
     cells = summarize(data)
     lines = ['# Running-demo HTTP baseline', '', f"Status: **{data['status']}**.", '',
@@ -42,7 +89,7 @@ def write_report(stem, data):
     for c in cells:
         fmt = lambda v: f'{v:.2f}' if v is not None else 'unavailable'
         lines.append(f"| {c['kind']} | {c['concurrency']} | {c['mode']} | {c['runs']} | {c['metric']} | {fmt(c['median'])} | {fmt(c['min'])} | {fmt(c['max'])} | {c['passed']} |")
-    total = sum(int(r['result'].get('complete') or r['result'].get('successes') or 0) for r in data['trials'])
+    total = sum(row['result']['complete'] for row in data['trials'])
     lines += ['', f'Completed requests including warm-up: **{total:,}**.',
               f"All recorded trials passed: **{all(r['result']['passed'] for r in data['trials']) and bool(data['trials'])}**.", '',
               '## TCP counter changes (measured trials)', '',
@@ -50,17 +97,20 @@ def write_report(stem, data):
               '|---|---:|---|---:|---:|']
     for c in cells:
         d = c['tcp_counter_deltas']
-        lines.append(f"| {c['kind']} | {c['concurrency']} | {c['mode']} | {d['container_tcp:TcpExt:ListenOverflows']} | {d['host_tcp:TcpExt:TCPSynRetrans']} |")
+        lines.append(f"| {c['kind']} | {c['concurrency']} | {c['mode']} | {d['container_listen_overflows']} | {d['host_syn_retransmissions']} |")
     if data.get('error'):
         lines += ['', 'Error: ' + data['error']]
     lines += ['', '## Interpretation', '',
               'ApacheBench reports requests/s; burst completion is milliseconds after barrier release. '
               'Preconnected bursts exclude connection setup from that interval. '
-              'Sustained observations are single runs, not repeated estimates; a request cap can finish them early.', '',
+              'Rows labelled soak are sustained single observations, not repeated matrix estimates; a request cap can finish them early.', '',
               'This measures the published Docker port on a shared host. Client dispatch and other workloads can affect results. '
               'Host TCP counters include unrelated traffic; container counters include health probes. '
               'Backlog capacity is not established by somaxconn alone. Memory peaks are historical, not reset per trial.', '',
-              f"Configuration, identities, individual trials, failures, and resource samples: [{stem.name}.json]({stem.name}.json).", '']
+              'The JSON retains configuration, container/image identities, per-trial report measurements, counts, pass/fail, '
+              'and displayed TCP counter deltas. Individual request rows, raw command output, resource samples, and full '
+              'snapshots are not retained. Compaction does not rewrite prior Git history.', '',
+              f"Inputs to recreate this report: [{stem.name}.json]({stem.name}.json).", '']
     stem.with_suffix('.md').write_text('\n'.join(lines))
 
 

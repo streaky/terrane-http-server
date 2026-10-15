@@ -16,7 +16,7 @@ import time
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
 from urllib.request import urlopen
-from summarize import write_report
+from summarize import report_data, write_report
 
 
 def command(argv, timeout=30):
@@ -227,14 +227,48 @@ class Capture:
                 raise RuntimeError(self.data["monitor_error"])
         except Exception as caught:
             final_error = caught
-        self.data["status"] = "failed" if error or final_error or not self.data["trials"] or not all(r["result"]["passed"] for r in self.data["trials"]) else "passed"
         if error or final_error:
             self.data["error"] = repr(error or final_error)
-        write_report(self.stem, self.data)
+        self.data["status"] = (
+            "passed" if error is None and final_error is None and self.data["trials"]
+            and all(trial["result"]["passed"] for trial in self.data["trials"])
+            else "failed"
+        )
+        write_report(self.stem, report_data(self.data))
         if final_error and error is None:
             raise final_error
         if error is None and self.data["status"] != "passed":
             raise RuntimeError("One or more trials failed; see saved report")
+
+
+def run_soak(capture, args):
+    capture.data["configuration"].update(soak_concurrency=1000, soak_request_cap=2000000)
+    time.sleep(5)
+    for keepalive in (False, True):
+        mode = "keepalive" if keepalive else "fresh"
+        record = dict(kind="soak", concurrency=1000, mode=mode, phase="measurement",
+                      before=capture.observe(), result={"passed": False})
+        capture.data["trials"].append(record)
+        argv = ["ab", "-q", "-s", "10", "-t", str(args.soak_seconds), "-n", "2000000", "-c", "1000"]
+        if keepalive:
+            argv.append("-k")
+        argv.append(args.url)
+        started = time.perf_counter()
+        try:
+            raw = command(argv, timeout=args.soak_seconds + 30)
+            record["command"] = raw
+            result = parse_ab(raw["stdout"])
+            result["passed"] = raw["returncode"] == 0 and result["complete"] is not None and result["complete"] > 0 and result["failed"] == 0 and result["non_2xx"] == 0 and result["body_bytes"] == 4
+            record["result"] = result
+        except subprocess.TimeoutExpired as error:
+            record["command"] = dict(argv=error.cmd, returncode=None, stdout=str(error.stdout or ""), stderr=str(error.stderr or ""))
+            raise
+        finally:
+            record.update(after=capture.observe(), wall_seconds=time.perf_counter() - started)
+        print("soak-" + mode, json.dumps(result), flush=True)
+        health(args.url)
+        time.sleep(5)
+    time.sleep(10)
 
 
 def main():
@@ -246,6 +280,7 @@ def main():
     parser.add_argument("--requests", type=int, default=5000)
     parser.add_argument("--seed", type=int, default=20261015)
     parser.add_argument("--native-burst", type=Path, help="Retained native burst binary; otherwise uses Python")
+    parser.add_argument("--soak-seconds", type=int, default=30, help="Sustained observation time per policy, after the matrix")
     args = parser.parse_args()
     with Capture(args) as capture:
         capture.data["configuration"]["warmups"] = 1
@@ -305,6 +340,7 @@ def main():
                 health(args.url)
                 time.sleep(0.5)
         time.sleep(5)
+        run_soak(capture, args)
     print("Capture complete:", args.output, flush=True)
 
 
