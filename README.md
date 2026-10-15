@@ -23,6 +23,12 @@ using the same `TERRANE` executable. Ship the compiler support and template migr
 before this package; a successful build using uncommitted sibling changes is not
 evidence that the package can be merged independently.
 
+Projection locks are compiler-generated. When refreshing one, use the selected current
+compiler and ensure a second build leaves it byte-identical; do not accept unexplained
+inventory loss as routine cache drift. An editor language server built from an older
+compiler can be another projection writer: align or restart it before future refreshes
+if its output conflicts with the selected CLI.
+
 ## Consumer source generation
 
 The native consumer uses AOT-compiled `.trn.tpl` templates under
