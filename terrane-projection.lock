@@ -3726,11 +3726,11 @@
       "current_version": "1.47.1"
     }
   ],
-  "cache_identity": "97703b1c9c6c3a4fe31b1b43781004370d00ef0926a1a370c5131c11e26a6807",
+  "cache_identity": "e97a799eb227bc72d8f79ef065daaf47d9db867a127391edf4c3f943ea2ea9f1",
   "source": "Local",
   "rustdoc_format": 61,
   "projection_schema": "260",
-  "content_hash": "9e944da597976423cddc6832a2d7682a5cbf4ecfb7e2735a34d1759bf9ae057f",
+  "content_hash": "2340fe9f13692a673eafa0bc10ac4806ec10a4df567147b645327df9d4e72210",
   "resolution": {
     "outcome": "LocalRustdoc",
     "events": [

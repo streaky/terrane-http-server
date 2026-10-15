@@ -1,6 +1,6 @@
 namespace http-server-consumer
 
-from /annotation-consumer-protocol import get, at, text, truth, scalar, annotation, read-request, emit-source, emit-error, error-origin, consumer-error
+from /terrane/annotation-consumer-protocol import get, at, text, truth, scalar, annotation, read-request, emit-source, emit-error, error-origin, consumer-error
 from /core/collections import list, range, map
 from /core/documents import document-value, document-map-entries, make-document-none, make-document-string, make-document-bool, make-document-integer
 from /core/errors import replace-error
@@ -30,6 +30,7 @@ function controller-source string throws consumer-error; engine ref template-eng
     values.set; 'operations', (template-list-value; (template-operations; operations, owner))
     values.set; 'documented', (bool-value; documented)
     return render-code; ref engine, 'http/controller-source.trn.tpl', values
+
 class operation
     path string
     method string
@@ -209,6 +210,7 @@ function make-operation operation throws consumer-error; declaration document-va
     operation-id = metadata-string; metadata, 'operation-id', declaration
     if operation-id == ''
         try
+            # Escape '_' first: ordered replacements must not re-escape later escape prefixes.
             operation-id = identity.replace; (list; '_', '/', ':'), (list; '_5f', '_2f', '_3a')
         catch replace-error
             fail; declaration, 'HTTP operation identity escape table has unequal search/replacement counts'

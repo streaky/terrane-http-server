@@ -4,9 +4,11 @@ artifact = "executable"
 [namespaces]
 http-server-consumer = "src"
 
-[terrane-dependencies]
-annotation-consumer-protocol = { path = "../../../tools/annotation-consumers/protocol" }
-template = { path = "../../template" }
+[terrane-dependencies.terrane.annotation-consumer-protocol]
+path = "../../../tools/annotation-consumers/protocol"
+
+[terrane-dependencies.streaky.template]
+path = "../../template"
 
 [consumers.template]
 command = "../../template/.trn/consumers/template"

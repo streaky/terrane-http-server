@@ -61,7 +61,7 @@ documentation:
                 [namespaces]
                 hello-http = "src"
 
-                [terrane-dependencies.streaky/http-server]
+                [terrane-dependencies.streaky.http-server]
                 path = "../http-server"
             - path: src/site.trn
               language: terrane

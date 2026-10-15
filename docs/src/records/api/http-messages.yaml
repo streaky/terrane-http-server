@@ -29,8 +29,11 @@ documentation:
         `http-response` is the general response value. It holds `status`, `content-type`,
         an already-encoded text `body`, and an ordered list of `http-header` values.
         `create-response(status, content-type, body)` constructs it; retain the result of
-        `response.with-header(name, value)` to add a header. Repeated values such as
-        `Set-Cookie` are preserved. Native conversion validates status (100–599) and header
+        `response.with-header(name, value)` to add a header. Header names are case-insensitive:
+        an explicit `Content-Type` header replaces the response's `content-type`; when several
+        are supplied, the last value wins and exactly one is sent. This also applies to direct
+        additions to the public `headers` list. Other repeated values such as `Set-Cookie` are
+        preserved. Native conversion accepts final statuses 200–599 and validates header
         syntax; failures produce HTTP 500 rather than an invalid response.
 
         `create-json-response(status, document)` uses the built-in canonical JSON encoder
@@ -52,6 +55,12 @@ documentation:
         expose the original object's fields. `render` remains human-readable. Do not edit
         `http-error.message` or depend on its encoding; malformed payloads yield HTTP 500.
         Ordinary returned responses do not pass through this exception codec.
+
+        Removing the exception codec requires typed catches to retain and expose the
+        original descriptor's fields, so the caught `http-error` can carry its response
+        directly. That is a compiler/language follow-up, not a capability implemented by
+        this package. Until then, logging should use `render`, and invalid or mutated
+        payloads must continue to fail closed as HTTP 500.
     - type: example
       id: response-factory
       title: Creating a text response

@@ -1,6 +1,6 @@
 namespace http-server-consumer/rendering
 
-from /annotation-consumer-protocol import consumer-error
+from /terrane/annotation-consumer-protocol import consumer-error
 from /core/collections import map
 from /core/documents import make-document-none
 from /core/errors import throwable

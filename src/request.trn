@@ -92,15 +92,24 @@ public class http-response
 
 
 function into-native-response native-response throws throwable; response http-response
-    if response.status < 100 or response.status > 599
+    if response.status < 200 or response.status > 599
         throw coercion-error
     code = status-code::from_u16; response.status
     builder = response-builder::new;
     builder = builder.status; code
-    builder = builder.header; 'content-type', move response.content-type
+    content-type = response.content-type
     for header in response.headers
-        builder = builder.header; header.name, header.value
+        if header-name-is-content-type; header.name
+            content-type = header.value
+        else
+            builder = builder.header; header.name, header.value
+    builder = builder.header; 'content-type', move content-type
     return builder.body; (body-from-text; move response.body)
+
+private function header-name-is-content-type bool; name string
+    matched bool = rust
+        name.eq_ignore_ascii_case("content-type")
+    return matched
 
 public function create-response http-response; status int, content-type string, body string
     return instance http-response; status, content-type, body

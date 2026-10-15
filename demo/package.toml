@@ -4,9 +4,11 @@ artifact = "executable"
 [namespaces]
 http-server-demo = "src"
 
-[terrane-dependencies]
-http-server = { path = ".." }
-template = { path = "../../template" }
+[terrane-dependencies.streaky.http-server]
+path = ".."
+
+[terrane-dependencies.streaky.template]
+path = "../../template"
 
 [consumers.template]
 command = "../../template/.trn/consumers/template"

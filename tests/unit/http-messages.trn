@@ -66,3 +66,12 @@ function test-redirect-helper-rejects-nonredirect-status;
     catch coercion-error
         rejected = true
     assert-equal-bool; rejected, true
+
+function test-final-response-rejects-informational-statuses;
+    for status in (list; 100, 101)
+        rejected bool = false
+        try
+            into-native-response; (create-response; status, 'text/plain', '')
+        catch coercion-error
+            rejected = true
+        assert-equal-bool; rejected, true

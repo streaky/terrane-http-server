@@ -3,7 +3,7 @@ namespace http-server-consumer/models
 from /http-server-consumer/rendering import render-code
 from /streaky/template import template-engine, template-value, text-value, bool-value
 
-from /annotation-consumer-protocol import get, at, text, truth, annotation, consumer-error
+from /terrane/annotation-consumer-protocol import get, at, text, truth, annotation, consumer-error
 from /core/collections import list, range, map
 from /core/documents import document-value, document-map-entries, make-document-none, make-document-string, make-document-bool, make-document-map
 from /http-server-consumer/documents import object-value, list-value, type-schema, source-quote
@@ -25,6 +25,7 @@ function short-name string; identity string
 
 function model-alias string; identity string
     try
+        # Escape '_' first: ordered replacements must not re-escape later escape prefixes.
         return 'http-model-' + (identity.replace; (list; '_', '/', ':'), (list; '_5f', '_2f', '_3a'))
     catch replace-error
         throw (instance consumer-error; (make-document-none;), 'HTTP model identity escape table has unequal search/replacement counts')
@@ -182,6 +183,7 @@ function floating-codecs string throws consumer-error; declarations document-val
 function model-encoder string throws consumer-error; kind string, declarations document-value
     cls = class-record; kind, declarations
     return (model-alias; (text; (get; cls, 'identity'))) + '-to-document'
+
 function model-decoder string throws consumer-error; kind string, declarations document-value
     cls = class-record; kind, declarations
     return (model-alias; (text; (get; cls, 'identity'))) + '-from-document'
@@ -207,6 +209,7 @@ function codec-for string throws consumer-error; engine ref template-engine, kin
         if (text; (get; field, 'visibility')) == 'public' and not (truth; (get; field, 'static'))
             source = source + (decode-field; ref engine, field, ix, declarations)
     return source + '    return value\n\n'
+
 function encode-field-fragments string throws consumer-error; engine ref template-engine, fields document-value, declarations document-value
     source = ''
     for ix in (range; 0, (fields.length;))
@@ -214,6 +217,7 @@ function encode-field-fragments string throws consumer-error; engine ref templat
         if (text; (get; field, 'visibility')) == 'public' and not (truth; (get; field, 'static'))
             source = source + (encode-field; ref engine, field, ix, declarations)
     return source
+
 function unknown-field-condition string throws consumer-error; fields document-value
     condition = 'true'
     for ix in (range; 0, (fields.length;))
@@ -285,6 +289,7 @@ function document-kind string; kind string
     if kind == 'string'
         return 'string'
     return 'map'
+
 function encode-field string throws consumer-error; engine ref template-engine, field document-value, index int, declarations document-value
     member = text; (get; field, 'name')
     wire = text; (get; field, 'external_name')
@@ -313,6 +318,7 @@ function encode-list-field string throws consumer-error; engine ref template-eng
     values.set; 'item-expression', (text-value; (encode-expression; item, item-expression, declarations, field))
     values.set; 'wire', (text-value; (source-quote; wire))
     return render-code; ref engine, 'models/encode-list-field.trn.tpl', values
+
 function encode-expression string throws consumer-error; kind string, expression string, declarations document-value, field document-value
     if kind == 'string'
         return '(make-document-string; ' + expression + ')'
