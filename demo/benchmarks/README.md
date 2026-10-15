@@ -40,11 +40,12 @@ Configured output/native-client paths are normalized to workspace-relative paths
 Full host-local Docker metadata and unused provenance records are omitted rather than copied.
 Compaction changes current files only; it does not rewrite prior Git history.
 
-Before publishing, make an explicit decision about historical host paths: current-file
-redaction cannot remove earlier commits from clones. Squashing at merge
-or rewriting affected history requires a separate owner-approved operation; neither is
-performed by the capture/report tools. Historical privacy is separate from retaining only the
-inputs needed to recreate the current reports.
+Historical commits retain the earlier raw reports, including local project paths,
+host/kernel details, Docker metadata, timestamps, and resource/TCP observations.
+Keeping those low-sensitivity details and the larger historical blobs is an accepted
+tradeoff; no history rewrite is required for this baseline. Current captures remain
+compact and redacted. A later squash merge can keep the raw blobs out of main, but
+does not purge the published feature branch, existing clones, or hosting caches.
 
 Failures and partial trials are saved in the same report pair, with a nonzero process exit. A failure before capture setup completes (for example, an unavailable container) can prevent report creation. Progress is printed to the terminal. Reports are finalized after monitoring stops; a forcibly killed process cannot finalize them.
 The final status is `passed` only when at least one trial completed, every trial passed,
