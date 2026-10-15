@@ -1,4 +1,4 @@
-namespace http-server
+namespace streaky/http-server
 
 from /deps/axum/extract/ws import Message as websocket-message, WebSocket as native-websocket
 from /deps/axum/extract import WebSocketUpgrade as websocket-upgrade

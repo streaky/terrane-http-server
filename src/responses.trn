@@ -1,0 +1,122 @@
+namespace streaky/http-server
+
+from /core/collections import list
+from /core/documents import document-value, document-result, document-map-entries, make-document-string, make-document-integer, make-document-list, make-document-map
+from /core/documents/json import canonical-json, parse-json, default-json-options
+from /core/errors import throwable, coercion-error
+from /deps/http import StatusCode as status-code
+from /deps/axum-core/response import Response as native-response
+
+public class http-header
+    name string
+    value string
+
+    function construct; name string, value string
+        this.name = name
+        this.value = value
+
+public function create-json-response http-response throws throwable; status int, document document-value
+    encoded = canonical-json; document
+    if encoded.failed
+        throw coercion-error
+    return create-response; status, 'application/json', encoded.value.encoded
+
+public function create-redirect-response http-response throws coercion-error; location string, status int = 303
+    switch status
+        case 301, 302, 303, 307, 308
+            return (create-response; status, 'text/plain; charset=utf-8', '').with-header; 'location', location
+        case else
+            throw coercion-error
+
+public function create-error-response http-response throws throwable; status int, detail string = ''
+    if status < 400 or status > 599
+        throw coercion-error
+    if detail == ''
+        detail = status-reason; (status-code::from_u16; status)
+    return create-response; status, 'text/plain; charset=utf-8', detail
+
+public class http-error implements throwable
+    message string = ''
+    private display string = ''
+
+    function construct; status int, detail string = '', response http-response|none = none
+        if status < 400 or status > 599
+            throw coercion-error
+        if response != none
+            if response.status != status or detail != ''
+                throw coercion-error
+            actual = response
+        else
+            actual = create-error-response; status, detail
+        this.display = 'HTTP ' + actual.status + ': ' + actual.body
+        this.message = encode-error-response; actual
+
+    function render string;
+        return this.display
+
+public function create-http-error http-error throws throwable; response http-response
+    return instance http-error; response.status, '', response
+
+private function checked-document document-value throws coercion-error; result document-result
+    if result.failed
+        throw coercion-error
+    return result.value
+
+private function encode-error-response string throws coercion-error; response http-response
+    headers list of document-value = list;
+    for header in response.headers
+        fields = instance document-map-entries;
+        fields.append; 'name', (make-document-string; header.name)
+        fields.append; 'value', (make-document-string; header.value)
+        headers.append; (checked-document; (make-document-map; fields))
+    fields = instance document-map-entries;
+    fields.append; 'status', (checked-document; (make-document-integer; (response.status.to-string;)))
+    fields.append; 'content-type', (make-document-string; response.content-type)
+    fields.append; 'body', (make-document-string; response.body)
+    fields.append; 'headers', (checked-document; (make-document-list; headers))
+    encoded = canonical-json; (checked-document; (make-document-map; fields))
+    if encoded.failed
+        throw coercion-error
+    return encoded.value.encoded
+
+private function decode-error-response http-response throws throwable; message string
+    decoded = parse-json; message, (default-json-options;)
+    document = checked-document; decoded
+    if document.kind != 'map'
+        throw coercion-error
+    status = checked-document; (document.field; 'status')
+    content-type = checked-document; (document.field; 'content-type')
+    body = checked-document; (document.field; 'body')
+    headers = checked-document; (document.field; 'headers')
+    if status.kind != 'integer' or content-type.kind != 'string' or body.kind != 'string' or headers.kind != 'list'
+        throw coercion-error
+    code int = status.scalar.radix; 10
+    if code < 400 or code > 599
+        throw coercion-error
+    response = create-response; code, content-type.scalar, body.scalar
+    index int = 0
+    while index < (headers.length;)
+        header = checked-document; (headers.item; index)
+        if header.kind != 'map'
+            throw coercion-error
+        name = checked-document; (header.field; 'name')
+        value = checked-document; (header.field; 'value')
+        if name.kind != 'string' or value.kind != 'string'
+            throw coercion-error
+        response = response.with-header; name.scalar, value.scalar
+        index = index + 1
+    return response
+
+function into-native-http-error native-response; error throwable
+    try
+        return into-native-response; (decode-error-response; error.message)
+    catch
+        return (status-code::INTERNAL-SERVER-ERROR).into_response;
+
+# Own the borrowed canonical reason at the narrow native text boundary.
+private function status-reason string; code status-code
+    return rust
+        match code.canonical_reason() {
+            Some(reason) => reason.to_owned(),
+            None => format!("HTTP {}", code.as_u16()),
+        }

@@ -665,7 +665,6 @@ dependencies = [
  "mime",
  "ppv-lite86",
  "serde_core",
- "tokio",
  "tower-http",
  "tower-layer",
  "tower-service",

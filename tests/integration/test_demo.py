@@ -3,11 +3,14 @@
 Run: python packages/http-server/tests/integration/test_demo.py /path/to/app
 """
 import http.client
+from html.parser import HTMLParser
 import json
 from pathlib import Path
 import socket
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import unittest
 
@@ -16,15 +19,41 @@ BINARY = Path(sys.argv.pop(1)).resolve() if len(sys.argv) > 1 else None
 DEMO = Path(__file__).resolve().parents[2] / "demo"
 
 
+class PageParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.titles = []
+        self.headings = []
+        self.links = []
+        self.active = None
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ("title", "h1"):
+            self.active = self.titles if tag == "title" else self.headings
+        if tag == "a":
+            self.links.append(dict(attrs).get("href"))
+
+    def handle_data(self, data):
+        if self.active is not None:
+            self.active.append(data)
+
+    def handle_endtag(self, tag):
+        if tag in ("title", "h1"):
+            self.active = None
+
+
 class CatalogHttpTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         if BINARY is None:
             raise RuntimeError("Pass the built demo executable as the first argument")
+        cls.runtime = tempfile.TemporaryDirectory(prefix="http-demo-runtime-")
+        cls.addClassCleanup(cls.runtime.cleanup)
+        shutil.copytree(DEMO / "public", Path(cls.runtime.name) / "public")
         with socket.socket() as listener:
             listener.bind(("127.0.0.1", 0))
             cls.port = listener.getsockname()[1]
-        cls.server = subprocess.Popen([str(BINARY), f"127.0.0.1:{cls.port}"], cwd=DEMO,
+        cls.server = subprocess.Popen([str(BINARY), f"127.0.0.1:{cls.port}"], cwd=cls.runtime.name,
             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         cls.addClassCleanup(cls.stop_server)
         deadline = time.monotonic() + 20
@@ -72,10 +101,18 @@ class CatalogHttpTests(unittest.TestCase):
         self.assertEqual((status, content_type), (200, "application/json"))
         self.assertEqual(item, {"id": 1, "name": "Terrane notebook", "price-cents": 1200, "in-stock": False})
         self.assertTrue(self.request("GET", "/api/items/1?detailed=true")[2]["in-stock"])
-        self.assertEqual(self.request("GET", "/api/items/9")[2]["name"], "Unknown item")
         self.assertEqual(self.request("GET", "/api/search?term=Terrane+notebook")[2],
             {"term": "Terrane notebook", "limit": 10, "matches": True, "items": [{"id": 1, "name": "Terrane notebook", "price-cents": 1200, "in-stock": True}]})
         self.assertEqual(self.request("GET", "/api/search?term=notebook&limit=0")[2]["matches"], False)
+
+    def test_missing_catalog_items_return_http_error_status(self):
+        status, content_type, body = self.request("GET", "/api/items/99")
+        self.assertEqual(status, 404)
+        self.assertTrue(content_type.startswith("text/plain"))
+        self.assertEqual(body, "Catalog item not found")
+        status, _, body = self.request("POST", "/api/orders/quote", '{"item-id":99,"quantity":1}')
+        self.assertEqual(status, 404)
+        self.assertEqual(body, "Catalog item not found")
 
     def test_invalid_parameters_and_typed_bodies_return_422(self):
         for path in ["/api/items/not-an-int", "/api/items/1?detailed=maybe", "/api/search", "/api/search?term=x&limit=oops"]:
@@ -89,21 +126,27 @@ class CatalogHttpTests(unittest.TestCase):
         status, _, quote = self.request("POST", "/api/orders/quote", '{"item-id":1,"quantity":3}')
         self.assertEqual(status, 200)
         self.assertEqual(quote, {"item-id": 1, "quantity": 3, "total-cents": 3600})
-        self.assertEqual(self.request("POST", "/api/orders/quote", '{"item-id":9,"quantity":3}')[2]["total-cents"], 0)
         self.assertEqual(self.request("POST", "/api/orders/quote", '{"item-id":1}')[2],
             {"item-id": 1, "quantity": 0, "total-cents": 0})
 
     def test_json_utf8_and_body_size_boundary(self):
         self.assertEqual(self.request("POST", "/api/orders/quote", b'{"item-id":1,"quantity":1,"invalid":"\xff"}')[0], 422)
-        self.assertEqual(self.request("POST", "/api/orders/quote", b'{}' + b' ' * 2097100)[0], 200)
+        self.assertEqual(self.request("POST", "/api/orders/quote", b'{"item-id":1}' + b' ' * 2097100)[0], 200)
         self.assertEqual(self.request("POST", "/api/orders/quote", b'{}' + b' ' * 2097151)[0], 422)
 
     def test_html_and_static_files(self):
-        for path, marker in [("/", "Terrane Catalog"), ("/about", "About this demo")]:
+        for path, title, heading, links in [
+            ("/", "Terrane Catalog", "Terrane Catalog", {"/docs/", "/about", "/api/health"}),
+            ("/about", "About — Terrane Catalog", "About this demo", {"/"}),
+        ]:
             status, content_type, page = self.request("GET", path)
             self.assertEqual(status, 200)
             self.assertTrue(content_type.startswith("text/html"))
-            self.assertIn(marker, page)
+            parsed = PageParser()
+            parsed.feed(page)
+            self.assertEqual("".join(parsed.titles), title)
+            self.assertEqual("".join(parsed.headings), heading)
+            self.assertTrue(links.issubset(parsed.links))
         status, content_type, page = self.request("GET", "/docs/")
         self.assertEqual(status, 200)
         self.assertTrue(content_type.startswith("text/html"))

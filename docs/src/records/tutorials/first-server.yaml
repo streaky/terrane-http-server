@@ -30,10 +30,11 @@ documentation:
       blocks:
         - type: markdown
           markdown: |-
-            Create a directory named `hello-http` beside the `http-server`
-            package. The manifest below resolves `../http-server` relative to
-            `hello-http/package.toml`; adjust that dependency path if your
-            checkout layout differs. Keep all four files under `hello-http`.
+            Create a directory named `hello-http` beside the package that
+            provides the `streaky/http-server` namespace. The manifest below
+            resolves `../http-server` relative to `hello-http/package.toml`;
+            adjust that dependency path if your checkout layout differs. Keep
+            all four files under `hello-http`.
 
             The application's profile permits building, network access, static
             file reads, and the thread-backed executor. The library is
@@ -60,14 +61,14 @@ documentation:
                 [namespaces]
                 hello-http = "src"
 
-                [terrane-dependencies.http-server]
+                [terrane-dependencies.streaky.http-server]
                 path = "../http-server"
             - path: src/site.trn
               language: terrane
               source: |-
                 namespace hello-http
 
-                from /http-server import controller, routes
+                from /streaky/http-server import controller, routes
 
                 class site implements controller
                     consuming function routes routes; registered-routes routes
@@ -84,7 +85,7 @@ documentation:
               source: |-
                 namespace hello-http
 
-                from /http-server import create-application
+                from /streaky/http-server import create-application
                 from /core/errors import throwable
 
                 async function main none throws throwable;
@@ -210,7 +211,7 @@ documentation:
             A handler registered with `get-with-client` receives
             [[http-server.api.client-info]]. Add the registration below to the
             controller before returning its routes, add `client-info` to the
-            `/http-server` import, and add the handler to `site`.
+            `/streaky/http-server` import, and add the handler to `site`.
         - type: example
           id: client-registration
           title: Register an identity-aware handler
@@ -255,7 +256,7 @@ documentation:
       blocks:
         - type: markdown
           markdown: |-
-            Add `websocket-session` to the `/http-server` import, register the
+            Add `websocket-session` to the `/streaky/http-server` import, register the
             endpoint before returning the routes, and add the handler below.
             An ordinary HTTP `curl` request is not a WebSocket session: connect
             with a WebSocket client, send a text message, and observe its echo

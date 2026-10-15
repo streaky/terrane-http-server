@@ -6,6 +6,7 @@ from pathlib import Path
 import http.client
 import json
 import os
+import re
 import subprocess
 import socket
 import tempfile
@@ -15,7 +16,7 @@ import time
 
 PACKAGE = Path(__file__).resolve().parents[2]
 ROOT = PACKAGE.parents[1]
-COMPILER = Path(os.environ.get("TERRANE", ROOT / "target/debug/terrane"))
+COMPILER = Path(os.environ.get("TERRANE", ROOT / "target/release/terrane"))
 CONSUMER = PACKAGE / ".trn/consumers/http-server"
 
 
@@ -27,58 +28,76 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
         cls.directory = Path(cls.workspace.name)
         (cls.directory / "src").mkdir()
 
-    def check(self, source, selections, message=None, code="S2061"):
+    def check(self, source, selections, origin=None, code="S2061"):
         manifest = '\n'.join([
             'package = "http-annotation-test"',
             '[namespaces]',
             'http-annotation-test = "src"',
-            '[terrane-dependencies]',
-            f'http-server = {{ path = "{os.path.relpath(PACKAGE, self.directory)}" }}',
+            '[terrane-dependencies.streaky.http-server]',
+            f'path = "{os.path.relpath(PACKAGE, self.directory)}"',
             '[consumers.http-server]',
             f'command = "{os.path.relpath(CONSUMER, self.directory)}"',
             'declarations = [' + ', '.join(f'"/http-annotation-test::{name}"' for name in selections) + ']',
         ])
         (self.directory / "package.toml").write_text(manifest)
-        (self.directory / "src/main.trn").write_text(
-            "namespace http-annotation-test\nfrom /http-server/annotations import endpoint, path, query, body\n"
+        written = (
+            "namespace http-annotation-test\nfrom /streaky/http-server/annotations import endpoint, path, query, body\n"
             + source
             + "\nfunction main int;\n    return 0\n"
         )
+        source_path = self.directory / "src/main.trn"
+        source_path.write_text(written)
         result = subprocess.run([str(COMPILER), "check", str(self.directory)], capture_output=True, text=True, timeout=300)
         self.assertNotEqual(result.returncode, 0, result.stdout)
         self.assertIn(code, result.stderr)
-        if message is not None:
-            self.assertIn(message, result.stderr)
+        if code == "S2061":
+            self.assertIsNotNone(origin, "Consumer diagnostics need an expected declaration origin")
+            function, _, parameter = origin.partition("::")
+            declaration = re.search(r"\bfunction (" + re.escape(function) + r")\b", written)
+            self.assertIsNotNone(declaration)
+            offset = declaration.start(1)
+            if parameter:
+                signature_end = written.index("\n", offset)
+                selected = re.search(r"\b" + re.escape(parameter) + r"\s+", written[declaration.end():signature_end])
+                self.assertIsNotNone(selected)
+                offset = declaration.end() + selected.start()
+            line = written.count("\n", 0, offset) + 1
+            column = offset - written.rfind("\n", 0, offset)
+            self.assertRegex(
+                result.stderr,
+                rf"(?m)^{re.escape(str(source_path))}:{line}:{column}: error\[S2061\]:",
+                "Consumer failure must point at the declaration under test",
+            )
 
     def test_duplicate_method_path(self):
-        self.check("@[endpoint; path = '/same']\nasync function first string;\n    return 'a'\n@[endpoint; path = '/same']\nasync function second string;\n    return 'b'\n", ["first", "second"], "duplicate HTTP method/path route")
+        self.check("@[endpoint; path = '/same']\nasync function first string;\n    return 'a'\n@[endpoint; path = '/same']\nasync function second string;\n    return 'b'\n", ["first", "second"], origin="second")
 
     def test_missing_selected_parameter(self):
-        self.check("@[endpoint; path = '/search']\nasync function search string; @[query;] term string\n    return term\n", ["search"], "must have exactly one selected declaration record")
+        self.check("@[endpoint; path = '/search']\nasync function search string; @[query;] term string\n    return term\n", ["search"], origin="search")
 
     def test_unbound_path_placeholder(self):
-        self.check("@[endpoint; path = '/items/{id}']\nasync function item string;\n    return 'item'\n", ["item"], "each HTTP path placeholder requires exactly one matching parameter")
+        self.check("@[endpoint; path = '/items/{id}']\nasync function item string;\n    return 'item'\n", ["item"], origin="item")
 
     def test_reserved_schema_route(self):
-        self.check("@[endpoint; path = '/openapi.json']\nasync function schema string;\n    return 'schema'\n", ["schema"], "reserved")
+        self.check("@[endpoint; path = '/openapi.json']\nasync function schema string;\n    return 'schema'\n", ["schema"], origin="schema")
 
     def test_conflicting_parameter_transports(self):
-        self.check("@[endpoint; path = '/items/{id}']\nasync function item int; @[path;] @[query;] id int\n    return id\n", ["item", "item::id"], "exactly one path, query, or body annotation")
+        self.check("@[endpoint; path = '/items/{id}']\nasync function item int; @[path;] @[query;] id int\n    return id\n", ["item", "item::id"], origin="item::id")
 
     def test_runtime_query_default(self):
         self.check("function fallback int;\n    return 3\n@[endpoint; path = '/items']\nasync function item int; @[query;] count int = (fallback;)\n    return count\n", ["item", "item::count"], code="T0006")
 
     def test_duplicate_operation_id(self):
-        self.check("@[endpoint; path = '/first', operation-id = 'same']\nasync function first string;\n    return 'a'\n@[endpoint; path = '/second', operation-id = 'same']\nasync function second string;\n    return 'b'\n", ["first", "second"], "duplicate HTTP operation ID")
+        self.check("@[endpoint; path = '/first', operation-id = 'same']\nasync function first string;\n    return 'a'\n@[endpoint; path = '/second', operation-id = 'same']\nasync function second string;\n    return 'b'\n", ["first", "second"], origin="second")
 
     def test_synchronous_handler_rejected(self):
-        self.check("@[endpoint; path = '/sync']\nfunction sync string;\n    return 'sync'\n", ["sync"], "standalone safe asynchronous non-throwing")
+        self.check("@[endpoint; path = '/sync']\nfunction sync string;\n    return 'sync'\n", ["sync"], origin="sync")
 
     def test_unsupported_query_type(self):
-        self.check("@[endpoint; path = '/values']\nasync function values string; @[query;] ratio float\n    return 'values'\n", ["values", "values::ratio"], "path/query parameters must be")
+        self.check("@[endpoint; path = '/values']\nasync function values string; @[query;] ratio float\n    return 'values'\n", ["values", "values::ratio"], origin="values::ratio")
 
     def test_invalid_method(self):
-        self.check("@[endpoint; path = '/trace', method = 'TRACE']\nasync function trace string;\n    return 'trace'\n", ["trace"], "method must be")
+        self.check("@[endpoint; path = '/trace', method = 'TRACE']\nasync function trace string;\n    return 'trace'\n", ["trace"], origin="trace")
 
     def test_all_supported_methods_and_scalar_responses(self):
         (self.directory / "package.toml").write_text('\n'.join([
@@ -86,21 +105,34 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
             'artifact = "executable"',
             '[namespaces]',
             'http-annotation-test = "src"',
-            '[terrane-dependencies]',
-            f'http-server = {{ path = "{os.path.relpath(PACKAGE, self.directory)}" }}',
+            '[terrane-dependencies.streaky.http-server]',
+            f'path = "{os.path.relpath(PACKAGE, self.directory)}"',
             '[consumers.http-server]',
             f'command = "{os.path.relpath(CONSUMER, self.directory)}"',
             'declarations = ["/http-annotation-test::read", "/http-annotation-test::create", '
             '"/http-annotation-test::replace", "/http-annotation-test::change", "/http-annotation-test::remove", '
             '"/http-annotation-test::echo-model", "/http-annotation-test::echo-model::value", '
-            '"/http-annotation-test::data-model", "/http-annotation-test::tree-node"]',
+            '"/http-annotation-test::data-model", "/http-annotation-test::tree-node", '
+            '"/http-annotation-test::failing-handler", "/http-annotation-test::throwing-success", '
+            '"/http-annotation-test::created", "/http-annotation-test::redirect", "/http-annotation-test::empty", '
+            '"/http-annotation-test::denied", "/http-annotation-test::custom-error", '
+            '"/http-annotation-test::invalid-code", "/http-annotation-test::invalid-header", '
+            '"/http-annotation-test::override-content-type", "/http-annotation-test::final-continue", '
+            '"/http-annotation-test::final-upgrade", '
+            '"/http-annotation-test::nonfinite-model", "/http-annotation-test::nonfinite-model::single", '
+            '"/http-annotation-test::tampered-error", "/http-annotation-test::quoted-default", '
+            '"/http-annotation-test::quoted-default::label"]',
         ]))
-        (self.directory / "src/main.trn").write_text("""namespace http-annotation-test
-from /http-server/annotations import endpoint, body
-from /http-server import create-application
+        (self.directory / "src/main.trn").write_text(r"""namespace http-annotation-test
+from /streaky/http-server/annotations import endpoint, body, query
+from /streaky/http-server import create-application, http-response, create-response, create-json-response, create-redirect-response, http-error, create-http-error, controller, routes, client-info
+from /streaky/http-server import http-response as explicit-response
+from /streaky/http-server import http-header
 from /generated/http-server import annotated-controller
 from /core/process import arguments
 from /core/collections import list
+from /core/errors import throwable, coercion-error
+from /core/documents import document-map-entries, make-document-string, make-document-map
 
 class tree-node
     name string
@@ -115,10 +147,22 @@ class data-model
     count uint8 = 7
     children list of tree-node
     selected tree-node|none
+    related list of (tree-node)|none
     private internal string = 'not-public'
 
 @[endpoint; path = '/models', method = 'POST']
 async function echo-model data-model; @[body;] value data-model
+    return value
+
+@[endpoint; path = '/nonfinite-model']
+async function nonfinite-model data-model; @[query;] single bool = false
+    value = instance data-model;
+    if single
+        value.small = rust
+            f32::NAN
+    else
+        value.ratio = rust
+            f64::INFINITY
     return value
 
 @[endpoint; path = '/method']
@@ -137,9 +181,98 @@ async function change bool;
 async function remove string;
     return 'deleted'
 
+@[endpoint; path = '/failure', content-type = 'text/html']
+async function failing-handler string throws throwable;
+    throw coercion-error
+
+@[endpoint; path = '/throwing-success']
+async function throwing-success string throws throwable;
+    return 'still works'
+
+@[endpoint; path = '/created', summary = 'A "quoted" café\nand a backslash \\']
+async function created explicit-response;
+    entries = instance document-map-entries;
+    entries.append; 'value', (make-document-string; 'say "hello" \\ café\n\t')
+    payload = make-document-map; entries
+    if payload.failed
+        throw coercion-error
+    response = create-json-response; 201, payload.value
+    response = response.with-header; 'location', '/created/1'
+    response = response.with-header; 'set-cookie', 'first=1'
+    return response.with-header; 'set-cookie', 'second=2'
+
+@[endpoint; path = '/redirect']
+async function redirect http-response;
+    return create-redirect-response; '/method', 307
+
+@[endpoint; path = '/empty']
+async function empty http-response;
+    return create-response; 204, 'text/plain', ''
+
+@[endpoint; path = '/override-content-type']
+async function override-content-type http-response;
+    response = create-response; 200, 'text/plain', 'content type'
+    response = response.with-header; 'Content-Type', 'application/json'
+    response = response.with-header; 'cOnTeNt-TyPe', 'application/problem+json'
+    response.headers.append; (instance http-header; 'CONTENT-TYPE', 'application/vnd.example+json')
+    return move response
+
+@[endpoint; path = '/final-100']
+async function final-continue http-response;
+    return create-response; 100, 'text/plain', ''
+
+@[endpoint; path = '/final-101']
+async function final-upgrade http-response;
+    return create-response; 101, 'text/plain', ''
+
+@[endpoint; path = '/denied']
+async function denied string;
+    throw http-error; 403
+
+@[endpoint; path = '/custom-error']
+async function custom-error http-response;
+    entries = instance document-map-entries;
+    entries.append; 'detail', (make-document-string; 'No café "seat"\nleft')
+    payload = make-document-map; entries
+    if payload.failed
+        throw coercion-error
+    response = create-json-response; 409, payload.value
+    response = response.with-header; 'x-error', 'capacity'
+    throw (create-http-error; response)
+
+@[endpoint; path = '/invalid-code']
+async function invalid-code http-response;
+    return create-response; 999, 'text/plain', 'must not escape'
+
+@[endpoint; path = '/invalid-header']
+async function invalid-header http-response;
+    return (create-response; 200, 'text/plain', 'must not escape').with-header; 'x-invalid', 'a\r\nb'
+
+@[endpoint; path = '/tampered-error']
+async function tampered-error string;
+    error = instance http-error; 403
+    error.message = 'not-json'
+    throw error
+
+@[endpoint; path = '/quoted-default']
+async function quoted-default string; @[query;] label string = 'say "hello" \\ café\n\t'
+    return label
+
+async function text-denied string;
+    throw http-error; 401
+
+async function client-denied string; _client client-info
+    throw http-error; 403
+
+class text-controller implements controller
+    consuming function routes routes; registered-routes routes
+        registered-routes = registered-routes.get; '/denied', text-denied
+        return registered-routes.get-with-client; '/client-denied', client-denied
+
 async function main throws throwable;
     app = create-application;
     app = app.mount; '/', (instance annotated-controller;)
+    app = app.mount; '/text', (instance text-controller;)
     supplied = arguments;
     address = supplied[0].text
     app = app.with-address; address
@@ -182,16 +315,84 @@ main
                     actual = request(method, "/method")
                     self.assertIs(type(actual), type(value))
                     self.assertEqual(actual, value)
+            self.assertEqual(request("GET", "/throwing-success"), "still works")
+            connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+            try:
+                connection.request("GET", "/failure")
+                response = connection.getresponse()
+                self.assertEqual(response.status, 500)
+                self.assertNotIn(b"coercion-error", response.read())
+            finally:
+                connection.close()
+            self.assertEqual(request("GET", "/method"), 7)
+            def raw_request(path):
+                connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+                try:
+                    connection.request("GET", path)
+                    response = connection.getresponse()
+                    return response.status, response.getheaders(), response.read()
+                finally:
+                    connection.close()
+            status, headers, payload = raw_request("/created")
+            self.assertEqual(status, 201)
+            self.assertEqual(dict(headers)["content-type"], "application/json")
+            self.assertEqual(dict(headers)["location"], "/created/1")
+            self.assertEqual([value for name, value in headers if name.lower() == "set-cookie"], ["first=1", "second=2"])
+            special = 'say "hello" \\ café\n\t'
+            self.assertEqual(json.loads(payload), {"value": special})
+            status, headers, payload = raw_request("/redirect")
+            self.assertEqual(status, 307)
+            self.assertEqual(dict(headers)["location"], "/method")
+            self.assertEqual(payload, b"")
+            status, _, payload = raw_request("/empty")
+            self.assertEqual((status, payload), (204, b""))
+            status, headers, payload = raw_request("/override-content-type")
+            self.assertEqual((status, payload), (200, b"content type"))
+            self.assertEqual([value for name, value in headers if name.lower() == "content-type"],
+                             ["application/vnd.example+json"])
+            for path, code, body in [("/denied", 403, b"Forbidden"),
+                                     ("/text/denied", 401, b"Unauthorized"),
+                                     ("/text/client-denied", 403, b"Forbidden")]:
+                with self.subTest(path=path):
+                    status, _, payload = raw_request(path)
+                    self.assertEqual((status, payload), (code, body))
+            status, headers, payload = raw_request("/custom-error")
+            self.assertEqual(status, 409)
+            self.assertEqual(dict(headers)["content-type"], "application/json")
+            self.assertEqual(dict(headers)["x-error"], "capacity")
+            self.assertEqual(json.loads(payload), {"detail": 'No café "seat"\nleft'})
+            for path in ("/invalid-code", "/invalid-header", "/tampered-error", "/final-100", "/final-101",
+                         "/nonfinite-model", "/nonfinite-model?single=true"):
+                with self.subTest(path=path):
+                    status, _, payload = raw_request(path)
+                    self.assertEqual(status, 500)
+                    self.assertNotIn(b"must not escape", payload)
+            self.assertEqual(request("GET", "/quoted-default"), special)
+            schema = request("GET", "/openapi.json")
+            self.assertEqual(schema["paths"]["/created"]["get"]["summary"], 'A "quoted" café\nand a backslash \\')
+            responses = schema["paths"]["/created"]["get"]["responses"]
+            self.assertNotIn("200", responses)
+            self.assertIn("default", responses)
+            default = schema["paths"]["/quoted-default"]["get"]["parameters"][0]
+            self.assertEqual(default["schema"]["default"], special)
+            self.assertFalse(default["required"])
+            self.assertEqual(request("GET", "/method"), 7)
             defaults = request("POST", "/models", "{}")
             self.assertEqual(defaults, {"active": True, "ratio": 1.5, "small": 0.5, "nickname": None,
-                "values": [], "count": 7, "children": [], "selected": None})
+                "values": [], "count": 7, "children": [], "selected": None, "related": None})
             model = {"active": False, "ratio": 2, "small": 1.5, "nickname": "Ada",
                 "values": [-32768, 32767], "count": 255,
                 "children": [{"name": "nested", "children": [{"name": "leaf", "children": []}]}],
-                "selected": {"name": "selected", "children": []}}
+                "selected": {"name": "selected", "children": []},
+                "related": [{"name": special, "children": []}]}
+            self.assertEqual(request("POST", "/models", json.dumps(model)), model)
+            model["related"] = None
+            self.assertEqual(request("POST", "/models", json.dumps(model)), model)
+            model["related"] = []
             self.assertEqual(request("POST", "/models", json.dumps(model)), model)
             for invalid in ['{"active":1}', '{"nickname":1}', '{"values":["bad"]}', '{"values":[32768]}',
                     '{"children":[1]}', '{"children":{}}', '{"children":[{"extra":true}]}',
+                    '{"related":{}}', '{"related":[1]}', '{"related":[{"extra":true}]}',
                     '{"count":256}', '{"count":-1}', '{"ratio":1e10000}', '{"small":1e40}', '{"internal":"leak"}', '{"selected":1}']:
                 with self.subTest(invalid=invalid):
                     request("POST", "/models", invalid, status=422)

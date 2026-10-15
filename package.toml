@@ -1,9 +1,9 @@
-package = "http-server"
+package = "streaky/http-server"
 artifact = "library"
 rust-toolchain = "pinned"
 
 [namespaces]
-http-server = "src"
+"streaky/http-server" = "src"
 
 [rust-dependencies.axum]
 version = "=0.8.9"
@@ -33,11 +33,6 @@ effects = ["build"]
 [rust-dependencies.ipnet]
 version = "=2.11.0"
 effects = ["build"]
-
-[rust-dependencies.tokio]
-version = "=1.47.1"
-features = ["net", "rt-multi-thread"]
-effects = ["build", "networking"]
 
 [rust-dependencies.client-ip]
 version = "=0.2.1"

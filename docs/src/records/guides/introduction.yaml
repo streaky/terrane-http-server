@@ -30,6 +30,11 @@ documentation:
         Terrane builders and interfaces; Axum, Tower HTTP, and Tokio are implementation
         dependencies rather than application-facing router or extractor APIs.
 
+        Listeners are created through core `listen-tcp` and transferred to Axum with
+        `into-native`. The package does not declare or import Tokio itself: core owns
+        that runtime dependency and native transport boundary. Core's automatic listener
+        backlog policy applies; Axum continues to provide HTTP and WebSocket handling.
+
         The package is experimental: ordinary GET handlers return text, client information
         is supplied through a dedicated handler form, static directories can be mounted,
         and WebSocket handlers expose text plus event kinds. Typed HTTP endpoints and an
@@ -46,7 +51,7 @@ documentation:
       target: null
       timeout-ms: null
       source: |-
-        [terrane-dependencies.http-server]
+        [terrane-dependencies.streaky.http-server]
         path = "../http-server"
 
         [profile]

@@ -1,4 +1,4 @@
-namespace http-server
+namespace streaky/http-server
 
 from /core/collections import list
 from /core/documents/yaml import default-yaml-options, parse-yaml, stringify-yaml
@@ -62,7 +62,7 @@ function config-failure config-result; message string
 public function parse-config-yaml config-result; source string
     parsed = parse-yaml; source, (default-yaml-options;)
     if parsed.failed
-        return config-failure; (parsed.path.concat; ': ', parsed.message)
+        return config-failure; parsed.path + ': ' + parsed.message
     if parsed.value.kind != 'map'
         return config-failure; 'configuration must be a mapping'
 

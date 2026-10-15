@@ -1,15 +1,24 @@
 namespace http-server-demo
 
-from /http-server/annotations import endpoint, route-group, static-directory
+from /streaky/http-server/annotations import endpoint, route-group, static-directory
+from /streaky/template import text-value
+from /generated/template/http-server-demo import make-template-engine
+from /core/errors import throwable
+
+private function render-page string throws throwable; name string, title string, heading string
+    engine = make-template-engine;
+    engine.assign; 'title', (text-value; title)
+    engine.assign; 'heading', (text-value; heading)
+    return engine.fetch; name
 
 @[route-group; prefix = '/', document = false]
 @[static-directory; path = '/docs', directory = 'public/docs']
 @[static-directory; path = '/assets', directory = 'public/assets']
 class site
     @[endpoint; method = 'GET', path = '/', content-type = 'text/html', summary = 'Catalog home']
-    async function home string;
-        return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Terrane Catalog</title><link rel="stylesheet" href="/assets/site.css"></head><body><main><h1>Terrane Catalog</h1><p>A small stateless catalog API, with typed request and response models.</p><p><a href="/docs/">Explore the API documentation</a></p><p><a href="/about">About this demo</a></p><p><a href="/api/health">API health</a></p></main></body></html>'
+    async function home string throws throwable;
+        return render-page; 'home.html', 'Terrane Catalog', 'Terrane Catalog'
 
     @[endpoint; method = 'GET', path = '/about', content-type = 'text/html', summary = 'About the catalog demo']
-    async function about string;
-        return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>About — Terrane Catalog</title><link rel="stylesheet" href="/assets/site.css"></head><body><main><h1>About this demo</h1><p>Catalog lookup, search, and quote pricing are stateless examples. Quotes are calculated from the current catalog price and are not stored.</p><p><a href="/">Back to the catalog home</a></p></main></body></html>'
+    async function about string throws throwable;
+        return render-page; 'about.html', 'About — Terrane Catalog', 'About this demo'

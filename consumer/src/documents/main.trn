@@ -1,0 +1,37 @@
+namespace http-server-consumer/documents
+
+from /core/documents import document-value, document-map-entries, make-document-none, make-document-map, make-document-list, make-document-string
+from /core/documents/json import canonical-json
+from /terrane/annotation-consumer-protocol import consumer-error
+from /core/collections import list
+from /core/errors import replace-error
+
+function object-value document-value throws consumer-error; entries document-map-entries, origin document-value
+    result = make-document-map; entries
+    if result.failed
+        throw (instance consumer-error; origin, 'could not construct document object')
+    return result.value
+
+function list-value document-value throws consumer-error; values list of document-value, origin document-value
+    result = make-document-list; values
+    if result.failed
+        throw (instance consumer-error; origin, 'could not construct document list')
+    return result.value
+
+function encode-document string throws consumer-error; value document-value, origin document-value
+    result = canonical-json; value
+    if result.failed
+        throw (instance consumer-error; origin, 'could not encode document as JSON')
+    return result.value.encoded
+
+function type-schema document-value throws consumer-error; kind string
+    entries = instance document-map-entries;
+    entries.append; 'type', (make-document-string; kind)
+    return (object-value; entries, (make-document-none;))
+
+function source-quote string throws consumer-error; value string
+    try
+        escaped = value.replace; (list; '\\', '\'', '\n', '\r', '\t'), (list; '\\\\', '\\\'', '\\n', '\\r', '\\t')
+        return '\'' + escaped + '\''
+    catch replace-error
+        throw (instance consumer-error; (make-document-none;), 'source string escape table has unequal search/replacement counts')

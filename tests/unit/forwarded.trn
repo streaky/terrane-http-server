@@ -1,4 +1,4 @@
-namespace http-server
+namespace streaky/http-server
 
 from /deps/ipnet import IpAddr as ip-addr, IpNet as ip-net
 from /core/testing import assert-equal-bool

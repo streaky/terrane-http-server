@@ -1,4 +1,4 @@
-namespace http-server
+namespace streaky/http-server
 
 from /deps/axum import Router as native-router, serve as native-serve
 from /deps/axum-core/extract import Request as native-request
@@ -6,8 +6,8 @@ from /deps/axum-core/response import Response as native-response
 from /deps/axum/middleware import Next as middleware-next, from_fn as from-fn
 from /deps/axum/routing import MethodRouter as native-method-router
 from /deps/tower-http/services import ServeDir as serve-dir
-from /deps/tokio/net import TcpListener as tcp-listener
-from /deps/tokio/net import SocketAddr as socket-addr
+from /core/networking import listen-tcp
+from /core/networking/native import native-socket-address as socket-addr
 from /deps/axum/extract/connect-info import IntoMakeServiceWithConnectInfo as into-make-service-with-connect-info
 from /deps/http import StatusCode as status-code
 from /core/errors import dependency-error, throwable
@@ -25,25 +25,39 @@ public class routes
     private function construct; router native-router
         this.router = move router
 
-    consuming function get routes; path string, handler async function to string
+    consuming function get routes; path string, handler async function to string throws throwable
+        callback = async function native-response;
+            try
+                body = await handler;
+                return into-native-response; (create-response; 200, 'text/plain; charset=utf-8', body)
+            catch http-error as error
+                return into-native-http-error; error
+            catch
+                return (status-code::INTERNAL-SERVER-ERROR).into_response;
         method-router native-method-router = native-method-router::new;
-        method-router = method-router.get; handler
+        method-router = method-router.get; callback
         router = move this.router
         router = router.route; path, move method-router
         return instance routes; move router
 
-    consuming function get-with-client routes; path string, handler async function from client-info to string
-        native-handler = async function string; request native-request
+    consuming function get-with-client routes; path string, handler async function from client-info to string throws throwable
+        native-handler = async function native-response; request native-request
             peer = direct-address; ref request
             client = client-address; ref request
-            return await handler; (instance client-info; peer, client)
+            try
+                body = await handler; (instance client-info; peer, client)
+                return into-native-response; (create-response; 200, 'text/plain; charset=utf-8', body)
+            catch http-error as error
+                return into-native-http-error; error
+            catch
+                return (status-code::INTERNAL-SERVER-ERROR).into_response;
         method-router native-method-router = native-method-router::new;
         method-router = method-router.get; native-handler
         router = move this.router
         router = router.route; path, move method-router
         return instance routes; move router
 
-    consuming function endpoint routes; method http-method, path string, handler async function from http-request to http-response
+    consuming function endpoint routes; method http-method, path string, handler async function from http-request to http-response throws throwable
         callback = async function native-response; request native-request
             try
                 typed-request = instance http-request; move request, path
@@ -52,6 +66,8 @@ public class routes
             try
                 response = await handler; move typed-request
                 return into-native-response; move response
+            catch http-error as error
+                return into-native-http-error; error
             catch
                 return (status-code::INTERNAL-SERVER-ERROR).into_response;
         method-router native-method-router = native-method-router::new;
@@ -132,7 +148,8 @@ public class application
         return this.router.has_routes;
 
     consuming async function serve none throws throwable;
-        listener = await tcp-listener::bind; this.address
+        bound = await listen-tcp; this.address
+        listener = bound.into-native;
         router = this.router
         direct-policy network-policy = compile-network-policy; this.policy.direct-connections
         client-policy network-policy = compile-network-policy; this.policy.client-addresses

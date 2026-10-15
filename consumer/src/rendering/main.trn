@@ -1,0 +1,24 @@
+namespace http-server-consumer/rendering
+
+from /terrane/annotation-consumer-protocol import consumer-error
+from /core/collections import map
+from /core/documents import make-document-none
+from /core/errors import throwable
+from /streaky/template import template-engine, template-value, object-value
+from /generated/template/http-server-consumer import make-template-engine
+
+function make-code-engine template-engine throws consumer-error;
+    try
+        engine = make-template-engine;
+        engine.set-autoescape; false
+        return engine
+    catch throwable as error
+        throw (instance consumer-error; (make-document-none;), 'could not initialize source templates: ' + error.message)
+
+function render-code string throws consumer-error; engine ref template-engine, name string, values map of string, template-value
+    try
+        context map of string, template-value = map;
+        context.set; 'data', (object-value; values)
+        return engine.fetch-context; name, context, 0
+    catch throwable as error
+        throw (instance consumer-error; (make-document-none;), 'could not render source template ' + name + ': ' + error.message)

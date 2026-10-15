@@ -1,8 +1,13 @@
 namespace http-server-consumer/models
 
-from /annotation-consumer-protocol import get, at, text, truth, quote, json-quote, annotation, consumer-error
-from /core/collections import list, range
-from /core/documents import document-value, make-document-none
+from /http-server-consumer/rendering import render-code
+from /streaky/template import template-engine, template-value, text-value, bool-value
+
+from /terrane/annotation-consumer-protocol import get, at, text, truth, annotation, consumer-error
+from /core/collections import list, range, map
+from /core/documents import document-value, document-map-entries, make-document-none, make-document-string, make-document-bool, make-document-map
+from /http-server-consumer/documents import object-value, list-value, type-schema, source-quote
+from /core/errors import replace-error
 
 function model-error; declaration document-value, message string
     throw (instance consumer-error; declaration, message)
@@ -11,7 +16,7 @@ function type-name string; field document-value
     raw = text; (get; field, 'type')
     if (raw.contains.start; 'list of ')
         item = raw.replace; 'list of ', ''
-        return 'list of '.concat; (item.replace; ' ', '')
+        return 'list of ' + (item.replace; ' ', '')
     return raw.replace; ' ', ''
 
 function short-name string; identity string
@@ -19,10 +24,11 @@ function short-name string; identity string
     return pieces[pieces.length - 1]
 
 function model-alias string; identity string
-    escaped = identity.replace; '_', '_5f'
-    escaped = escaped.replace; '/', '_2f'
-    escaped = escaped.replace; ':', '_3a'
-    return 'http-model-'.concat; escaped
+    try
+        # Escape '_' first: ordered replacements must not re-escape later escape prefixes.
+        return 'http-model-' + (identity.replace; (list; '_', '/', ':'), (list; '_5f', '_2f', '_3a'))
+    catch replace-error
+        throw (instance consumer-error; (make-document-none;), 'HTTP model identity escape table has unequal search/replacement counts')
 
 function class-record document-value throws consumer-error; kind string, declarations document-value
     index int = 0
@@ -36,10 +42,10 @@ function class-record document-value throws consumer-error; kind string, declara
             count = count + 1
         index = index + 1
     if count > 1
-        model-error; found, ('ambiguous short model name: '.concat; kind)
+        model-error; found, ('ambiguous short model name: ' + kind)
     if count == 1
         return found
-    model-error; (make-document-none;), ('no selected model class for '.concat; kind)
+    model-error; (make-document-none;), ('no selected model class for ' + kind)
     return make-document-none;
 
 function is-model bool; kind string, declarations document-value
@@ -53,35 +59,33 @@ function is-model bool; kind string, declarations document-value
     return false
 
 function route-group-class bool; declaration document-value
-    metadata = annotation; declaration, 'route-group', '/http-server/annotations'
+    metadata = annotation; declaration, 'route-group', '/streaky/http-server/annotations'
     return metadata.kind != 'none'
 
-function model-schema string throws consumer-error; kind string, declarations document-value
+function model-schema document-value throws consumer-error; kind string, declarations document-value
     cls = class-record; kind, declarations
     fields = get; cls, 'fields'
-    schema = '{"title":'.concat; (json-quote; (short-name; (text; (get; cls, 'identity')))), ',"type":"object","properties":{'
-    included int = 0
-    required string = ''
+    entries = instance document-map-entries;
+    entries.append; 'title', (make-document-string; (short-name; (text; (get; cls, 'identity'))))
+    entries.append; 'type', (make-document-string; 'object')
+    properties = instance document-map-entries;
+    required-values list of document-value = list
     index int = 0
     while index < (fields.length;)
         field = at; fields, index
         if (text; (get; field, 'visibility')) == 'public' and not (truth; (get; field, 'static'))
             name = text; (get; field, 'external_name')
-            if included > 0
-                schema = schema.concat; ','
-            schema = schema.concat; (json-quote; name), ':', (schema-field; field, declarations)
-            included = included + 1
+            properties.append; name, (schema-field; field, declarations)
             if not (truth; (get; field, 'optional')) and not (truth; (get; field, 'defaulted'))
-                if required != ''
-                    required = required.concat; ','
-                required = required.concat; (json-quote; name)
+                required-values.append; (make-document-string; name)
         index = index + 1
-    schema = schema.concat; '},"additionalProperties":false'
-    if required != ''
-        schema = schema.concat; ',"required":[', required, ']'
-    return schema.concat; '}'
+    entries.append; 'properties', (object-value; properties, (make-document-none;))
+    entries.append; 'additionalProperties', (make-document-bool; false)
+    if required-values.length > 0
+        entries.append; 'required', (list-value; required-values, (make-document-none;))
+    return (object-value; entries, (make-document-none;))
 
-function schema-field string throws consumer-error; field document-value, declarations document-value
+function schema-field document-value throws consumer-error; field document-value, declarations document-value
     kind = type-name; field
     optional = (kind.contains.end; '|none')
     base = kind
@@ -89,48 +93,54 @@ function schema-field string throws consumer-error; field document-value, declar
         base = kind.replace; '|none', ''
     schema = model-field-schema; base, declarations, field
     if optional
-        return '{"anyOf":['.concat; schema, ',{"type":"null"}]}'
+        alternatives list of document-value = list
+        alternatives.append; schema
+        alternatives.append; (type-schema; 'null')
+        wrapper = instance document-map-entries;
+        wrapper.append; 'anyOf', (list-value; alternatives, field)
+        return (object-value; wrapper, field)
     return schema
 
 function integer-kind bool; kind string
     return kind == 'int' or kind == 'int8' or kind == 'int16' or kind == 'int32' or kind == 'int64' or kind == 'int128' or kind == 'uint8' or kind == 'uint16' or kind == 'uint32' or kind == 'uint64' or kind == 'uint128'
 
-function model-field-schema string throws consumer-error; kind string, declarations document-value, field document-value
+function model-field-schema document-value throws consumer-error; kind string, declarations document-value, field document-value
     if kind == 'string'
-        return '{"type":"string"}'
+        return type-schema; 'string'
     if integer-kind; kind
-        return '{"type":"integer"}'
+        return type-schema; 'integer'
     if kind == 'float' or kind == 'float32' or kind == 'float64'
-        return '{"type":"number"}'
+        return type-schema; 'number'
     if kind == 'bool'
-        return '{"type":"boolean"}'
+        return type-schema; 'boolean'
     if (kind.contains; 'list of ')
         item-kind = kind.replace; 'list of ', ''
-        return '{"type":"array","items":'.concat; (model-field-schema; item-kind, declarations, field), '}'
+        items = instance document-map-entries;
+        items.append; 'type', (make-document-string; 'array')
+        items.append; 'items', (model-field-schema; item-kind, declarations, field)
+        return (object-value; items, field)
     if is-model; kind, declarations
         return (model-reference; kind, declarations)
-    model-error; field, ('unsupported model field type: '.concat; kind)
-    return '{}'
+    model-error; field, ('unsupported model field type: ' + kind)
+    return (make-document-none;)
 
-function model-reference string throws consumer-error; kind string, declarations document-value
+function model-reference document-value throws consumer-error; kind string, declarations document-value
     cls = class-record; kind, declarations
     identity = text; (get; cls, 'identity')
-    return '{"$ref":'.concat; (json-quote; ('#/components/schemas/'.concat; (model-alias; identity))), '}'
+    entries = instance document-map-entries;
+    entries.append; '$ref', (make-document-string; ('#/components/schemas/' + (model-alias; identity)))
+    return (object-value; entries, cls)
 
-function model-schemas string throws consumer-error; declarations document-value
-    schemas string = '{'
-    count int = 0
+function model-schemas document-value throws consumer-error; declarations document-value
+    schemas = instance document-map-entries;
     for index in (range; 0, (declarations.length;))
         cls = at; declarations, index
         if (text; (get; cls, 'kind')) == 'class' and not (route-group-class; cls)
             identity = text; (get; cls, 'identity')
-            if count > 0
-                schemas = schemas.concat; ','
-            count = count + 1
-            schemas = schemas.concat; (json-quote; (model-alias; identity)), ':', (model-schema; identity, declarations)
-    return schemas.concat; '}'
+            schemas.append; (model-alias; identity), (model-schema; identity, declarations)
+    return (object-value; schemas, declarations)
 
-function model-codecs string throws consumer-error; declarations document-value
+function model-codecs string throws consumer-error; engine ref template-engine, declarations document-value
     generated = 'from /core/collections import list\nfrom /core/documents import document-value, document-map-entries, make-document-none, make-document-string, make-document-bool, make-document-integer, make-document-decimal, make-document-list, make-document-map\nfrom /core/errors import coercion-error, throwable\n'
     for index in (range; 0, (declarations.length;))
         cls = at; declarations, index
@@ -139,14 +149,14 @@ function model-codecs string throws consumer-error; declarations document-value
             pieces = identity.split; '::'
             class-name = short-name; identity
             class-alias = model-alias; identity
-            generated = generated.concat; 'from ', pieces[0], ' import ', class-name, ' as ', class-alias, '\n'
-    generated = generated.concat; '\n'
-    generated = generated.concat; (floating-codecs; declarations)
+            generated = generated + 'from ' + pieces[0] + ' import ' + class-name + ' as ' + class-alias + '\n'
+    generated = generated + '\n'
+    generated = generated + (floating-codecs; declarations)
     for index in (range; 0, (declarations.length;))
         cls = at; declarations, index
         if (text; (get; cls, 'kind')) == 'class' and not (route-group-class; cls)
             identity = text; (get; cls, 'identity')
-            generated = generated.concat; (codec-for; identity, declarations)
+            generated = generated + (codec-for; ref engine, identity, declarations)
     return generated
 
 # Decimal document text needs the standard finite binary-float parser, not numeric coercion.
@@ -160,25 +170,25 @@ function floating-codecs string throws consumer-error; declarations document-val
                 fields = get; cls, 'fields'
                 for field-index in (range; 0, (fields.length;))
                     kind = type-name; (at; fields, field-index)
-                    kind = kind.replace; '|none', ''
-                    kind = kind.replace; 'list of ', ''
-                    if kind == ('float'.concat; precision) or (precision == '64' and kind == 'float')
+                    kind = kind.replace; (list; '|none', 'list of '), ''
+                    if kind == ('float' + precision) or (precision == '64' and kind == 'float')
                         needed = true
         if needed
             if generated == ''
                 generated = 'from /core/documents/json import parse-json, default-json-options\n\n'
-            generated = generated.concat; 'class parsed-model-float', precision, '\n    value float', precision, ' = 0.0\n    failed bool = true\n\nfunction parse-model-float', precision, ' float', precision, ' throws coercion-error; text string\n    parsed parsed-model-float', precision, ' = rust\n        match text.parse::<f', precision, '>() {\n            Ok(value) if value.is_finite() => ParsedModelFloat', precision, ' { value, failed: false },\n            _ => ParsedModelFloat', precision, ' { value: 0.0, failed: true },\n        }\n    if parsed.failed\n        throw coercion-error\n    return parsed.value\n\n'
-            generated = generated.concat; 'function encode-model-float', precision, ' document-value; value float', precision, '\n    return (parse-json; (\'\'.concat; value), (default-json-options;)).value\n\n'
+            generated = generated + 'class parsed-model-float' + precision + '\n    value float' + precision + ' = 0.0\n    failed bool = true\n\nfunction parse-model-float' + precision + ' float' + precision + ' throws coercion-error; text string\n    parsed parsed-model-float' + precision + ' = rust\n        match text.parse::<f' + precision + '>() {\n            Ok(value) if value.is_finite() => ParsedModelFloat' + precision + ' { value, failed: false },\n            _ => ParsedModelFloat' + precision + ' { value: 0.0, failed: true },\n        }\n    if parsed.failed\n        throw coercion-error\n    return parsed.value\n\n'
+            generated = generated + 'function encode-model-float' + precision + ' document-value; value float' + precision + '\n    return (parse-json; (\'\' + value), (default-json-options;)).value\n\n'
     return generated
 
 function model-encoder string throws consumer-error; kind string, declarations document-value
     cls = class-record; kind, declarations
-    return (model-alias; (text; (get; cls, 'identity'))).concat; '-to-document'
+    return (model-alias; (text; (get; cls, 'identity'))) + '-to-document'
+
 function model-decoder string throws consumer-error; kind string, declarations document-value
     cls = class-record; kind, declarations
-    return (model-alias; (text; (get; cls, 'identity'))).concat; '-from-document'
+    return (model-alias; (text; (get; cls, 'identity'))) + '-from-document'
 
-function codec-for string throws consumer-error; kind string, declarations document-value
+function codec-for string throws consumer-error; engine ref template-engine, kind string, declarations document-value
     cls = class-record; kind, declarations
     contracts = get; cls, 'contracts'
     constructor = get; contracts, 'constructor'
@@ -188,14 +198,27 @@ function codec-for string throws consumer-error; kind string, declarations docum
     fields = get; cls, 'fields'
     identity = text; (get; cls, 'identity')
     name = model-alias; identity
-    source = ''
-    source = source.concat; 'function ', name, '-to-document document-value; value ', name, '\n    entries = instance document-map-entries;\n'
+    values map of string, template-value = map;
+    values.set; 'name', (text-value; name)
+    values.set; 'fields', (text-value; (encode-field-fragments; ref engine, fields, declarations))
+    source = render-code; ref engine, 'models/encode-model.trn.tpl', values
+    values.set; 'unknown-field-condition', (text-value; (unknown-field-condition; fields))
+    source = source + (render-code; ref engine, 'models/decode-model.trn.tpl', values)
     for ix in (range; 0, (fields.length;))
         field = at; fields, ix
-        visibility = text; (get; field, 'visibility')
-        if visibility == 'public' and not (truth; (get; field, 'static'))
-            source = source.concat; (encode-field; field, ix, declarations)
-    source = source.concat; '    return (make-document-map; entries).value\n\nfunction ', name, '-from-document ', name, ' throws throwable; document document-value\n    if document.kind != \'map\'\n        throw coercion-error\n    key-index int = 0\n    while key-index < (document.length;)\n        key = document.key; key-index\n'
+        if (text; (get; field, 'visibility')) == 'public' and not (truth; (get; field, 'static'))
+            source = source + (decode-field; ref engine, field, ix, declarations)
+    return source + '    return value\n\n'
+
+function encode-field-fragments string throws consumer-error; engine ref template-engine, fields document-value, declarations document-value
+    source = ''
+    for ix in (range; 0, (fields.length;))
+        field = at; fields, ix
+        if (text; (get; field, 'visibility')) == 'public' and not (truth; (get; field, 'static'))
+            source = source + (encode-field; ref engine, field, ix, declarations)
+    return source
+
+function unknown-field-condition string throws consumer-error; fields document-value
     condition = 'true'
     for ix in (range; 0, (fields.length;))
         field = at; fields, ix
@@ -203,15 +226,10 @@ function codec-for string throws consumer-error; kind string, declarations docum
             if condition == 'true'
                 condition = ''
             else
-                condition = condition.concat; ' and '
-            condition = condition.concat; 'key != ', (quote; (text; (get; field, 'external_name')))
-    source = source.concat; '        if ', condition, '\n            throw coercion-error\n        key-index = key-index + 1\n    value = instance ', name, ';\n'
-    for ix in (range; 0, (fields.length;))
-        field = at; fields, ix
-        if (text; (get; field, 'visibility')) == 'public' and not (truth; (get; field, 'static'))
-            source = source.concat; (decode-field; field, ix, declarations)
-    return source.concat; '    return value\n\n'
-function decode-field string throws consumer-error; field document-value, index int, declarations document-value
+                condition = condition + ' and '
+            condition = condition + 'key != ' + (source-quote; (text; (get; field, 'external_name')))
+    return condition
+function decode-field string throws consumer-error; engine ref template-engine, field document-value, index int, declarations document-value
     member = text; (get; field, 'name')
     wire = text; (get; field, 'external_name')
     kind = type-name; field
@@ -219,39 +237,45 @@ function decode-field string throws consumer-error; field document-value, index 
     base = kind
     if optional
         base = kind.replace; '|none', ''
-    required = not optional and not (truth; (get; field, 'defaulted'))
-    source = '    slot'.concat; index, ' = document.field; ', (quote; wire), '\n'
-    if required
-        source = source.concat; '    if slot', index, '.failed\n        throw coercion-error\n'
-    source = source.concat; '    if not slot', index, '.failed\n'
+    indent = '        '
     if optional
-        source = source.concat; '        if slot', index, '.value.kind == \'none\'\n            value.', member, ' = none\n        else\n'
-        source = source.concat; (decode-assignment; base, member, index, declarations, field, '            ')
-    else
-        source = source.concat; (decode-assignment; base, member, index, declarations, field, '        ')
-    return source
+        indent = '            '
+    values map of string, template-value = map;
+    values.set; 'index', (text-value; (index.to-string;))
+    values.set; 'wire', (text-value; (source-quote; wire))
+    values.set; 'member', (text-value; member)
+    values.set; 'required', (bool-value; not optional and not (truth; (get; field, 'defaulted')))
+    values.set; 'optional', (bool-value; optional)
+    values.set; 'assignment', (text-value; (decode-assignment; ref engine, base, member, index, declarations, field, indent))
+    return render-code; ref engine, 'models/decode-field.trn.tpl', values
 
-function decode-assignment string throws consumer-error; kind string, member string, index int, declarations document-value, field document-value, indent string
+function decode-assignment string throws consumer-error; engine ref template-engine, kind string, member string, index int, declarations document-value, field document-value, indent string
     if (kind.contains.start; 'list of ')
         item = kind.replace; 'list of ', ''
         item-class = item
         if is-model; item, declarations
             item-class = model-alias; (text; (get; (class-record; item, declarations), 'identity'))
-        source = indent.concat; 'if slot', index, '.value.kind != \'list\'\n', indent, '    throw coercion-error\n', indent, 'decoded-items', index, ' list of ', item-class, ' = list\n', indent, 'item-index', index, ' int = 0\n', indent, 'while item-index', index, ' < (slot', index, '.value.length;)\n', indent, '    item', index, ' = slot', index, '.value.item; item-index', index, '\n'
+        item-check = ''
         expected = document-kind; item
         if expected == 'float'
-            source = source.concat; indent, '    if item', index, '.value.kind != \'decimal\' and item', index, '.value.kind != \'integer\'\n', indent, '        throw coercion-error\n'
+            item-check = indent + '    if item' + index + '.value.kind != \'decimal\' and item' + index + '.value.kind != \'integer\'\n' + indent + '        throw coercion-error\n'
         else if expected != 'map'
-            source = source.concat; indent, '    if item', index, '.value.kind != ', (quote; expected), '\n', indent, '        throw coercion-error\n'
-        source = source.concat; indent, '    decoded-items', index, '.append; ', (decode-expression; item, ('item'.concat; index, '.value'), declarations, field), '\n', indent, '    item-index', index, ' = item-index', index, ' + 1\n', indent, 'value.', member, ' = decoded-items', index, '\n'
-        return source
+            item-check = indent + '    if item' + index + '.value.kind != ' + (source-quote; expected) + '\n' + indent + '        throw coercion-error\n'
+        values map of string, template-value = map;
+        values.set; 'indent', (text-value; indent)
+        values.set; 'index', (text-value; (index.to-string;))
+        values.set; 'item-class', (text-value; item-class)
+        values.set; 'item-check', (text-value; item-check)
+        values.set; 'item-expression', (text-value; (decode-expression; item, ('item' + index + '.value'), declarations, field))
+        values.set; 'member', (text-value; member)
+        return render-code; ref engine, 'models/decode-list-assignment.trn.tpl', values
     expected = document-kind; kind
-    source = ''
+    check = ''
     if expected == 'float'
-        source = indent.concat; 'if slot', index, '.value.kind != \'decimal\' and slot', index, '.value.kind != \'integer\'\n', indent, '    throw coercion-error\n'
+        check = indent + 'if slot' + index + '.value.kind != \'decimal\' and slot' + index + '.value.kind != \'integer\'\n' + indent + '    throw coercion-error\n'
     else if expected != 'map'
-        source = indent.concat; 'if slot', index, '.value.kind != ', (quote; expected), '\n', indent, '    throw coercion-error\n'
-    return source.concat; indent, 'value.', member, ' = ', (decode-expression; kind, ('slot'.concat; index, '.value'), declarations, field), '\n'
+        check = indent + 'if slot' + index + '.value.kind != ' + (source-quote; expected) + '\n' + indent + '    throw coercion-error\n'
+    return check + indent + 'value.' + member + ' = ' + (decode-expression; kind, ('slot' + index + '.value'), declarations, field) + '\n'
 
 function document-kind string; kind string
     if integer-kind; kind
@@ -265,7 +289,8 @@ function document-kind string; kind string
     if kind == 'string'
         return 'string'
     return 'map'
-function encode-field string throws consumer-error; field document-value, index int, declarations document-value
+
+function encode-field string throws consumer-error; engine ref template-engine, field document-value, index int, declarations document-value
     member = text; (get; field, 'name')
     wire = text; (get; field, 'external_name')
     kind = type-name; field
@@ -273,53 +298,60 @@ function encode-field string throws consumer-error; field document-value, index 
     base = kind
     if optional
         base = kind.replace; '|none', ''
-        local = 'member-value'.concat; index
-        prefix = '    '.concat; local, ' = value.', member, '\n    if ', local, ' != none\n'
-        suffix = '    else\n        entries.append; '.concat; (quote; wire), ', (make-document-none;)\n'
+        local = 'member-value' + index
+        prefix = '    ' + local + ' = value.' + member + '\n    if ' + local + ' != none\n'
+        suffix = '    else\n        entries.append; ' + (source-quote; wire) + ', (make-document-none;)\n'
         if (base.contains.start; 'list of ')
-            return prefix.concat; (encode-list-field; base, local, wire, index, declarations, field, '        '), suffix
-        return prefix.concat; '        entries.append; ', (quote; wire), ', ', (encode-expression; base, local, declarations, field), '\n', suffix
+            return prefix + (encode-list-field; ref engine, base, local, wire, index, declarations, field, '        ') + suffix
+        return prefix + '        entries.append; ' + (source-quote; wire) + ', ' + (encode-expression; base, local, declarations, field) + '\n' + suffix
     if (base.contains.start; 'list of ')
-        return (encode-list-field; base, ('value.'.concat; member), wire, index, declarations, field, '    ')
-    return '    entries.append; '.concat; (quote; wire), ', ', (encode-expression; base, ('value.'.concat; member), declarations, field), '\n'
+        return (encode-list-field; ref engine, base, ('value.' + member), wire, index, declarations, field, '    ')
+    return '    entries.append; ' + (source-quote; wire) + ', ' + (encode-expression; base, ('value.' + member), declarations, field) + '\n'
 
-function encode-list-field string throws consumer-error; kind string, expression string, wire string, index int, declarations document-value, field document-value, indent string
+function encode-list-field string throws consumer-error; engine ref template-engine, kind string, expression string, wire string, index int, declarations document-value, field document-value, indent string
     item = kind.replace; 'list of ', ''
-    item-expression = expression.concat; '[item-index', index, ']'
-    return indent.concat; 'encoded-items', index, ' list of document-value = list\n', indent, 'item-index', index, ' int = 0\n', indent, 'while item-index', index, ' < ', expression, '.length\n', indent, '    encoded-items', index, '.append; ', (encode-expression; item, item-expression, declarations, field), '\n', indent, '    item-index', index, ' = item-index', index, ' + 1\n', indent, 'encoded-list', index, ' = make-document-list; encoded-items', index, '\n', indent, 'entries.append; ', (quote; wire), ', encoded-list', index, '.value\n'
+    item-expression = expression + '[item-index' + index + ']'
+    values map of string, template-value = map;
+    values.set; 'indent', (text-value; indent)
+    values.set; 'index', (text-value; (index.to-string;))
+    values.set; 'expression', (text-value; expression)
+    values.set; 'item-expression', (text-value; (encode-expression; item, item-expression, declarations, field))
+    values.set; 'wire', (text-value; (source-quote; wire))
+    return render-code; ref engine, 'models/encode-list-field.trn.tpl', values
+
 function encode-expression string throws consumer-error; kind string, expression string, declarations document-value, field document-value
     if kind == 'string'
-        return '(make-document-string; '.concat; expression, ')'
+        return '(make-document-string; ' + expression + ')'
     if kind == 'bool'
-        return '(make-document-bool; '.concat; expression, ')'
+        return '(make-document-bool; ' + expression + ')'
     if integer-kind; kind
-        return '(make-document-integer; (\'\'.concat; '.concat; expression, ')).value'
+        return '(make-document-integer; (' + expression + '.to-string;)).value'
     if kind == 'float' or kind == 'float32' or kind == 'float64'
         if kind == 'float'
             kind = 'float64'
-        return '(encode-model-'.concat; kind, '; ', expression, ')'
+        return '(encode-model-' + kind + '; ' + expression + ')'
     if (kind.contains; 'list of ')
         model-error; field, 'list model fields require generated element codecs'
     if is-model; kind, declarations
-        return '('.concat; (model-alias; (text; (get; (class-record; kind, declarations), 'identity'))), '-to-document; ', expression, ')'
-    model-error; field, ('unsupported model field type: '.concat; kind)
+        return '(' + (model-alias; (text; (get; (class-record; kind, declarations), 'identity'))) + '-to-document; ' + expression + ')'
+    model-error; field, ('unsupported model field type: ' + kind)
     return ''
 
 function decode-expression string throws consumer-error; kind string, expression string, declarations document-value, field document-value
     if kind == 'string'
-        return expression.concat; '.scalar'
+        return expression + '.scalar'
     if kind == 'bool'
-        return '('.concat; expression, '.scalar == \'true\')'
+        return '(' + expression + '.scalar == \'true\')'
     if integer-kind; kind
-        return '('.concat; expression, '.scalar.radix; 10)'
+        return '(' + expression + '.scalar.radix; 10)'
     if kind == 'float' or kind == 'float32' or kind == 'float64'
         if kind == 'float'
             kind = 'float64'
-        return '(parse-model-'.concat; kind, '; ', expression, '.scalar)'
+        return '(parse-model-' + kind + '; ' + expression + '.scalar)'
     if (kind.contains; 'list of ')
         model-error; field, 'list model fields require generated element codecs'
     if is-model; kind, declarations
-        return '('.concat; (model-alias; (text; (get; (class-record; kind, declarations), 'identity'))), '-from-document; ', expression, ')'
-    model-error; field, ('unsupported model field type: '.concat; kind)
+        return '(' + (model-alias; (text; (get; (class-record; kind, declarations), 'identity'))) + '-from-document; ' + expression + ')'
+    model-error; field, ('unsupported model field type: ' + kind)
     return ''
 

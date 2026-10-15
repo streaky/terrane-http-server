@@ -1,2 +1,9 @@
 docs/dump/*
 **/.trn/
+
+# Python bytecode
+*.pyc
+__pycache__/
+
+# Native demo benchmark client (source is tracked)
+/demo/benchmarks/http-burst
