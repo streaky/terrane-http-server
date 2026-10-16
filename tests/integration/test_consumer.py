@@ -291,6 +291,7 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
             "final-upgrade", "nonfinite-model", "nonfinite-model::single", "tampered-error",
             "quoted-default", "quoted-default::label",
             "head-metadata",
+            "unicode-length", "unicode-length::length",
         ]
         declarations = ["handlers"] + ["handlers::" + name for name in handlers] + [
             "data-model", "tree-node", "data-model::nickname", "data-model::selected",
@@ -463,6 +464,12 @@ class handlers uses api
     @[endpoint; path = '/throwing-success']
     async function throwing-success string throws throwable;
         return 'still works'
+
+    @[endpoint; path = '/unicode-length', content-type = 'text/plain']
+    async function unicode-length string throws throwable; @[query;] length int = 21
+        response = this.controls;
+        response.set-content-length; length
+        return 'café é 👩‍💻'
 
     @[endpoint; path = '/created', summary = 'A "quoted" café\nand a backslash \\']
     async function created document-value throws throwable;
@@ -639,6 +646,11 @@ main
             status, headers, payload = raw_request("/method", method="OPTIONS")
             self.assertEqual((status, payload), (204, b""))
             self.assertEqual(dict(headers)["allow"], "GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS")
+            unicode_body = "café é 👩‍💻".encode("utf-8")
+            status, headers, payload = raw_request("/unicode-length")
+            self.assertEqual((status, payload), (200, unicode_body))
+            self.assertEqual(dict(headers)["content-length"], str(len(unicode_body)))
+            self.assertEqual(raw_request("/unicode-length?length=8")[0], 500)
             status, headers, payload = raw_request("/created")
             self.assertEqual(status, 201)
             self.assertEqual(dict(headers)["content-type"], "application/json")

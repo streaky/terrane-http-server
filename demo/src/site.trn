@@ -20,8 +20,8 @@ class site uses api
     private note-size int
 
     function construct;
-        # The stored note is ASCII; cache its byte length once, not during HEAD.
-        this.note-size = this.note.length
+        # Cache the encoded UTF-8 byte length once, not during HEAD.
+        this.note-size = this.note.bytes.length
 
     @[endpoint; method = 'GET', path = '/', content-type = 'text/html', summary = 'Catalog home']
     async function home string throws throwable;

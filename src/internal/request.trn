@@ -157,9 +157,7 @@ public function native-status-response native-response; status status-code, vary
     return move response
 
 private function body-byte-length int; text ref string
-    length int = rust
-        terrane_int_support::Int::from_u128(text.len() as u128)
-    return length
+    return text.bytes.length
 
 private function header-varies-accept bool; value ref string
     result bool = rust
@@ -167,9 +165,7 @@ private function header-varies-accept bool; value ref string
     return result
 
 private function request-has-accept-header bool; request ref native-request
-    present bool = rust
-        request.headers().contains_key("accept")
-    return present
+    return (request.headers;).contains_key; 'accept'
 
 private function request-accept-header string; request ref native-request
     result string = rust

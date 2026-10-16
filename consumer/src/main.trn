@@ -182,10 +182,6 @@ function make-operation operation throws consumer-error; declaration document-va
     signature = get; declaration, 'signature'
     identity = text; (get; declaration, 'identity')
     pieces = identity.split; '::'
-    owner string = ''
-    prefix string = '/'
-    documented bool = true
-    target string = ''
     if pieces.length != 3
         fail; declaration, 'HTTP endpoint must be an instance method of a selected route-group class'
     owner = pieces[0] + '::' + pieces[1]

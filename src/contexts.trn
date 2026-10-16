@@ -4,6 +4,7 @@ from /core/collections import list
 from /core/errors import coercion-error
 from /deps/axum-core/extract import Request as native-request
 from /deps/ipnet import IpAddr as ip-addr
+from /deps/axum/extract import MatchedPath as matched-path
 
 /// Adds optional invocation context without imposing a base class or handler parameters.
 public trait api
@@ -127,9 +128,7 @@ public function capture-request-context request-context; request ref native-requ
     return instance request-context; request, route-pattern
 
 private function request-method string; request ref native-request
-    value string = rust
-        request.method().as_str().to_owned()
-    return value
+    return (request.method;).as_str;
 
 private function address-text string; address ip-addr
     value string = rust
@@ -149,9 +148,13 @@ private function request-path string; request ref native-request
     return value
 
 private function request-route-pattern string; request ref native-request, fallback string
-    value string = rust
-        request.extensions().get::<::axum::extract::MatchedPath>().map(|v| v.as_str().to_owned()).unwrap_or(fallback)
-    return value
+    matched string|none = ((((request.extensions;).get of matched-path);).map; matched-path-text)
+    if matched != none
+        return matched
+    return fallback
+
+private function matched-path-text string; value ref matched-path
+    return value.as_str;
 
 private function request-version string; request ref native-request
     value string = rust
@@ -176,8 +179,12 @@ private function request-authority string|none; request ref native-request
     return none
 
 private function request-proxy-trust bool; request ref native-request
-    value bool = rust
-        request.extensions().get::<bool>().copied().unwrap_or(false)
+    trusted bool|none = ((((request.extensions;).get of bool);).map; proxy-trust-value)
+    if trusted != none
+        return trusted
+    return false
+
+private function proxy-trust-value bool; value ref bool
     return value
 
 private function request-header-names list of string; request ref native-request
