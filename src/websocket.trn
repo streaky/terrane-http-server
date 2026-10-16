@@ -62,7 +62,7 @@ function upgrade-websocket native-response; request websocket-upgrade, handler a
         await run-websocket; move socket, handler
     return request.on_upgrade; move callback
 
-public function register-websocket native-router; router native-router, path string, handler async function from websocket-session to none throws dependency-error
+function register-websocket native-router; router native-router, path string, handler async function from websocket-session to none throws dependency-error
     callback = async function native-response; request websocket-upgrade
         return upgrade-websocket; move request, handler
     return router.route; path, (native-websocket-get; move callback)

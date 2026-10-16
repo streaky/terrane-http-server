@@ -20,7 +20,14 @@ documentation:
       markdown: |-
         Obtain an application with [[http-server.api.create-application]]; its constructor is private. `address: string` is publicly readable and writable state, initially `127.0.0.1:3000`. Builder methods consume `application` and return its successor; assign every result.
 
-        Application composition mounts selected annotated API classes through the package's consumer integration. Their class-bound endpoint methods use the public `api` trait; generated adapters register handlers through internal routing transport. This does not expose a public route-registration API.
+        Ordinary HTTP handlers are class-bound through annotated API classes and
+        generated adapters. WebSocket upgrades have the separate public
+        `websocket(path, handler) -> application` registration method: the asynchronous
+        callback receives an owned `websocket-session` and returns `none`, with
+        `dependency-error` as its throwable contract. No internal routing import is
+        required. See [[http-server.guide.websockets]] for a complete example.
+        Native-router registration helpers are implementation details, not public
+        authoring APIs; use this method rather than constructing native routes.
 
         `static-directory(prefix: string, directory: string) -> application` mounts the directory service under the prefix. Serving static content requires filesystem capability.
 
@@ -43,6 +50,7 @@ documentation:
       source: |-
         public class application
             address string = '127.0.0.1:3000'
+            consuming function websocket application; path string, handler async function from websocket-session to none throws dependency-error
             consuming function static-directory application; prefix string, directory string
             consuming function with-address application; address string
             consuming function configure application; config server-config

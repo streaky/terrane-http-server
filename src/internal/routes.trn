@@ -4,9 +4,9 @@ from /deps/axum/routing import MethodRouter as native-method-router
 from /deps/axum-core/extract import Request as native-request
 from /deps/axum import Router as native-router
 from /deps/http import StatusCode as status-code
-from /core/errors import dependency-error, throwable
+from /core/errors import throwable
 from /core/documents/json import parse-json, default-json-options
-from /streaky/http-server import http-error, websocket-session, register-websocket
+from /streaky/http-server import http-error
 
 enum http-method
     get
@@ -60,11 +60,6 @@ public class routes
             case http-method::options
                 registered = registered.options; callback
         router = router.route; path, registered
-        return instance routes; move router
-
-    consuming function websocket routes; path string, handler async function from websocket-session to none throws dependency-error
-        router = move this.router
-        router = register-websocket; move router, path, move handler
         return instance routes; move router
 
 private function request-is-head bool; request ref native-request

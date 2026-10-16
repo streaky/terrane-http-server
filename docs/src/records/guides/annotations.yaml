@@ -28,11 +28,13 @@ documentation:
         Annotated endpoints are instance methods of a selected `route-group` class that
         declares `uses api`; free functions and static methods are not endpoint handlers.
         The public `api` trait provides optional `request` and `response` context fields.
-        The generated adapter copies the mounted source into a per-request invocation,
-        attaches both contexts to that copy, then invokes the handler. Outside dispatch
-        the fields are `none`; narrow them before use. Helper methods on the same invocation
-        see the same contexts. Do not treat ordinary collection fields as shared mutable
-        state: use an explicit shared reference when application state must persist.
+        The generated adapter copies the mounted source into a per-request invocation and
+        attaches both contexts to that copy. Outside dispatch the fields are `none`; narrow
+        them before use. Helper methods on the same invocation see the same contexts. `uses api`
+        is the convenience composition; a class with public, non-static `request` and `response`
+        fields of exactly `request-context|none` and `response-context|none` is also accepted.
+        Ordinary collection fields are not shared mutable state: use an explicit shared
+        reference when application state must persist.
 
         `request-context` exposes metadata getters only: method, original target, path, route pattern, HTTP version, effective scheme, authority and URL, peer/client IP, proxy trust, header values, and cookie values. It does not provide route-parameter, query, Accept, or body extraction; generated adapters use internal incoming-request transport for those operations.
         `response-context` provides status and header replacement/appending, content type/length, `Vary`, redirects, and cookie set/clear operations. Its state is shared only within one invocation and closes on successful finalization. Overrides are discarded if the handler throws. See [[http-server.api.http-messages]] for exact method behavior and body/status rules.
@@ -44,10 +46,16 @@ documentation:
         metadata supplies a well-formed effective external scheme; unknown or malformed
         trusted forwarded scheme yields `none`.
 
-        Explicit `operation-id` values remain unchanged. Otherwise the consumer derives a
-        unique URL-safe ID from the canonical declaration identity, so documentation viewers
-        can navigate operations without treating namespace separators as URL path segments.
-
+        Explicit `operation-id` values remain unchanged for single-method endpoints. An
+        explicit ID on a multi-method endpoint is rejected because it cannot name each
+        generated operation unambiguously. Otherwise each operation gets a unique URL-safe
+        ID derived from the canonical declaration identity and suffixed with its HTTP method,
+        so documentation viewers can navigate operations without treating namespace
+        separators as URL path segments.
+        Route-group context validation is structural: public optional `request-context`
+        and `response-context` fields satisfy it even when declared without `uses api`.
+        Prefer `uses api` to keep their defaults and types consistent. The fields are
+        framework-attached; do not replace them during dispatch.
         Throw `http-error` with a status from 400 through 599 and optional detail for an early exit. The server renders its detail as plain text (using the canonical status reason when detail is empty); malformed error payloads fail closed as HTTP 500. The exception's response discards partial response-context overrides. OpenAPI uses a default response for handler-defined statuses; ordinary typed handlers retain their generated response schemas and validation boundaries.
     - type: example
       id: annotated-handler
@@ -83,6 +91,7 @@ documentation:
       timeout-ms: null
       source: |-
         from /core/collections import list
+        from /streaky/http-server import api
         from /streaky/http-server/annotations import route-group, endpoint, body, request-example, response-example, api-documentation
 
         class count-input
@@ -95,7 +104,7 @@ documentation:
         /// representation with the Accept header.
         @[api-documentation; title = 'Count API', version = '0.1.0']
         @[route-group; prefix = '/api', response-formats = (list; 'json', 'yaml', 'xml'), default-response-format = 'json']
-        class count-api
+        class count-api uses api
             /// Echo a typed count, without saving it.
             ///
             /// ```console
@@ -215,9 +224,11 @@ documentation:
             YAML, or XML when enabled on the route group. A returned string is a JSON string
             by default, not raw JSON text; string endpoints configured as `text/html` or
             `text/plain` return those text types. A method with no returned value defaults to
-            204 without a body or content type. Response-context overrides can set explicit
-            status and response metadata; request bodies remain JSON regardless of response
-            negotiation.
+            204 without a body or content type. For HEAD operations returning `none`, OpenAPI
+            documents both 200 (the metadata-only response) and the default 204; an explicit
+            status override such as 200 remains available at runtime. Response-context
+            overrides can set explicit status and response metadata; request bodies remain
+            JSON regardless of response negotiation.
 
             A route group opts into negotiated automatic responses by explicitly setting
             `response-formats` to a nonempty list drawn from `json`, `yaml`, and `xml`.
@@ -274,6 +285,9 @@ documentation:
             models, including recursive model lists. Supported scalar fields include strings,
             booleans, exact/fixed-width integers, and finite binary floats; scalar/model lists
             and nullable fields need no document-map construction in application code.
+            A top-level optional scalar or selected model result may place `none` on either
+            side of the supported result type (`string|none` or `none|string`); this nullable
+            form does not permit unrelated unions.
 
             Documentation comments also describe the inputs and outputs in OpenAPI. Put a
             `///` or `/** ... */` comment immediately before a parameter's transport annotation
@@ -294,6 +308,10 @@ documentation:
             schemas. Body examples remain JSON even
             when responses negotiate YAML or XML. OpenAPI examples belong to their matching
             media types and parameter/request-body objects.
+            On endpoint documentation, only a line beginning exactly with `@returns ` (the
+            marker followed by a space) starts the response-description section; the text
+            after it, including following lines, describes the response. A bare `@returns`
+            line is ordinary description text.
             YAML examples retain the parsed structured value; XML examples are serialized
             strings using the same encoder as runtime responses. Text/HTML examples must
             contain a JSON string. Invalid example JSON or duplicate names fail compilation.

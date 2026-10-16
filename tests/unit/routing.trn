@@ -25,18 +25,8 @@ class api implements controller
     async function health wire-response; _request incoming-request
         return encoded-response; 200, 'text/plain', 'ok'
 
-class socket-controller implements controller
-    consuming function routes routes; registered-routes routes
-        registered-routes = registered-routes.websocket; '/events', this.events
-        return registered-routes
-
-    async function events none throws dependency-error; socket websocket-session
-        event = await socket.receive;
-        text = event.text
-        if text != none
-            await socket.send-text; text
-        await socket.close;
-        return none
+async function ignore-session none throws dependency-error; _session websocket-session
+    return none
 
 function test-empty-application-has-no-routes;
     app application = create-application;
@@ -71,7 +61,7 @@ function test-access-policies-and-websocket-routes-compose;
     app = app.allow-direct; '::1/128'
     app = app.allow-client; '192.0.2.0/24'
     app = app.allow-client; '2001:db8::/32'
-    app = app.mount; '/socket', (instance socket-controller;)
+    app = app.websocket; '/socket/events', ignore-session
     assert-equal-bool; (app.has-routes;), true
 
 function test-yaml-configures-address-static-content-and-controller-prefixes;

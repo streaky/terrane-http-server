@@ -9,7 +9,7 @@ from /core/networking import listen-tcp
 from /core/networking/native import native-socket-address as socket-addr
 from /deps/axum/extract/connect-info import IntoMakeServiceWithConnectInfo as into-make-service-with-connect-info
 from /deps/http import StatusCode as status-code
-from /core/errors import throwable
+from /core/errors import throwable, dependency-error
 from /streaky/http-server/internal import routes
 
 # Generated class composition protocol. Endpoints are declared on api-using route groups.
@@ -35,6 +35,10 @@ public class application
             router = router.merge; move nested
         else
             router = router.nest; prefix, move nested
+        return instance application; move router, this.address, (move this.policy)
+
+    consuming function websocket application; path string, handler async function from websocket-session to none throws dependency-error
+        router = register-websocket; (move this.router), path, handler
         return instance application; move router, this.address, (move this.policy)
 
     consuming function static-directory application; prefix string, directory string
@@ -86,8 +90,7 @@ public class application
             if not client-allowed
                 if client != none
                     client-allowed = client-policy.permits; client
-            install-client-address; ref request, client
-            (request.extensions_mut;).insert; trust-forwarded
+            install-proxy-metadata; ref request, client, trust-forwarded
             if direct-allowed and client-allowed
                 return await next.run; request
             return (status-code::FORBIDDEN).into_response;

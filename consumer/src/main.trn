@@ -200,9 +200,13 @@ function make-operation operation throws consumer-error; declaration document-va
     if mode != 'Shared' and mode != 'Mutable'
         fail; declaration, 'HTTP endpoint methods must have shared or mutable invocation authority'
     result-kind = (text; (get; signature, 'result')).replace; ' ', ''
-    result-optional = result-kind.contains.end; '|none'
-    if result-optional
+    result-optional bool = false
+    if result-kind.contains.end; '|none'
+        result-optional = true
         result-kind = result-kind.replace; '|none', ''
+    else if result-kind.contains.start; 'none|'
+        result-optional = true
+        result-kind = result-kind.replace; 'none|', ''
     result-none = result-kind == 'none' or result-kind == 'void'
     result-document = is-document; result-kind
     result-model = false
@@ -219,14 +223,16 @@ function make-operation operation throws consumer-error; declaration document-va
     structured = not result-none and content-type == 'application/json'
     negotiated = structured and policy.negotiated
     operation-id = metadata-string; metadata, 'operation-id', declaration
+    methods = (metadata-string; metadata, 'method', declaration).split; '|'
+    if operation-id != '' and methods.length > 1
+        fail; declaration, 'explicit operation-id cannot be used on an endpoint with multiple methods'
     if operation-id == ''
         try
             # Escape '_' first: ordered replacements must not re-escape later escape prefixes.
             operation-id = identity.replace; (list; '_', '/', ':'), (list; '_5f', '_2f', '_3a')
         catch replace-error
             fail; declaration, 'HTTP operation identity escape table has unequal search/replacement counts'
-        operation-id = 'operation' + operation-id
-    operation-id = operation-id + '_' + (method.lower;)
+        operation-id = 'operation' + operation-id + '_' + (method.lower;)
     summary = metadata-string; metadata, 'summary', declaration
     description = metadata-string; metadata, 'description', declaration
     if description == ''
@@ -380,10 +386,10 @@ function make-operation operation throws consumer-error; declaration document-va
     if method == 'HEAD' or result-none
         if result-description == ''
             result-description = 'Response headers only; no response body'
-        response-key = '200'
+        if method == 'HEAD'
+            response-entries.append; '200', (response-description; result-description, declaration)
         if result-none
-            response-key = '204'
-        response-entries.append; response-key, (response-description; result-description, declaration)
+            response-entries.append; '204', (response-description; result-description, declaration)
     else
         response-schema = object-value; (instance document-map-entries;), declaration
         if result-model
@@ -518,8 +524,7 @@ function generate string throws consumer-error; request document-value
             metadata = annotation; declaration, 'route-group', '/streaky/http-server/annotations'
             if metadata.kind != 'none'
                 groups.append; declaration
-    policies map of string, response-policy = map;
-    policies.set; '', (read-response-policy; (make-document-none;), request)
+    policies map of string, response-policy = map
     imports string = ''
     for index in (range; 0, groups.length)
         group = groups[index]

@@ -179,13 +179,7 @@ private function request-authority string|none; request ref native-request
     return none
 
 private function request-proxy-trust bool; request ref native-request
-    trusted bool|none = ((((request.extensions;).get of bool);).map; proxy-trust-value)
-    if trusted != none
-        return trusted
-    return false
-
-private function proxy-trust-value bool; value ref bool
-    return value
+    return request-proxy-metadata-trusted; request
 
 private function request-header-names list of string; request ref native-request
     values list of string = rust
@@ -266,7 +260,8 @@ private function forwarded-scheme string|none; context request-context
                 return result
         return none
     headers = context.header-values; 'x-forwarded-proto'
-    if headers.length == 0
+    raw = context.header-bytes; 'x-forwarded-proto'
+    if headers.length != raw.length or headers.length == 0
         return none
     legacy-entries = headers[headers.length - 1].split; ','
     value = ((legacy-entries[legacy-entries.length - 1].trim;).lower;)

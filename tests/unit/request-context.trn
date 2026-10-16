@@ -1,6 +1,7 @@
 namespace streaky/http-server
 
 from /deps/axum-core/extract import Request as native-request
+from /deps/ipnet import IpAddr as ip-addr
 from /deps/axum-core/body import Body as native-body
 from /deps/http/request import Builder as request-builder
 from /core/collections import list
@@ -19,7 +20,7 @@ function context-with-forwarding request-context; forwarded string, legacy strin
     return capture-request-context; ref native, '/metadata'
 
 private function trust-test-request native-request; request native-request, trusted bool
-    (request.extensions_mut;).insert; trusted
+    install-proxy-metadata; ref request, none, trusted
     return move request
 
 function test-forwarded-scheme-respects-trust-and-standard-precedence;
@@ -40,10 +41,34 @@ function test-forwarded-scheme-respects-trust-and-standard-precedence;
     if scheme != none
         assert-equal-string; scheme, 'https'
 
+function test-undecodable-rightmost-legacy-scheme-fails-closed;
+    built native-request = rust
+        let mut request = ::http::Request::builder().uri("/metadata").body(::axum_core::body::Body::empty()).unwrap();
+        request.headers_mut().append("x-forwarded-proto", ::http::HeaderValue::from_static("https"));
+        request.headers_mut().append("x-forwarded-proto", ::http::HeaderValue::from_bytes(b"\xff").unwrap());
+        request
+    native = trust-test-request; move built, true
+    context = capture-request-context; ref native, '/metadata'
+    assert-equal-bool; (context.scheme;) == none, true
+
+function test-trusted-forwarding-without-scheme-is-unknown;
+    context = context-with-forwarding; '', '', true
+    assert-equal-bool; (context.scheme;) == none, true
+
 function test-ambiguous-forwarded-scheme-never-promotes-to-https;
     for header in (list; 'for=192.0.2.1;by="edge;proto=https;other=value"', 'for=192.0.2.1;proto="https', 'for=192.0.2.1;proto=http;proto=https', 'for=192.0.2.1;proto=invalid', 'for=192.0.2.1')
         context = context-with-forwarding; header, 'https', true
         assert-equal-bool; (context.scheme;) == none, true
+
+function test-unrelated-bool-and-ip-extensions-do-not-collide;
+    built = native-request::new; (native-body::empty;)
+    (built.extensions_mut;).insert; true
+    spoof ip-addr = ip-addr::from_str; '192.0.2.99'
+    (built.extensions_mut;).insert; spoof
+    native = trust-test-request; move built, false
+    context = capture-request-context; ref native, '/'
+    assert-equal-bool; (context.via-trusted-proxy;) == false, true
+    assert-equal-bool; (context.client-ip;) == none, true
 
 function test-request-snapshot-retains-invalid-bytes-without-fabricating-text;
     native native-request = rust

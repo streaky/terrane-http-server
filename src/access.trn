@@ -8,6 +8,35 @@ from /deps/axum-core/extract import Request as native-request
 from /core/collections import list
 from /core/errors import dependency-error
 
+class proxy-request-metadata
+    private client ip-addr|none
+    private trusted bool
+
+    function construct; client ip-addr|none, trusted bool
+        this.client = client
+        this.trusted = trusted
+
+function install-proxy-metadata; request ref native-request, client ip-addr|none, trusted bool
+    # Declare the mutable native borrow; the inline insertion uses that same request.
+    # Rust below (and in request-proxy-metadata) depends on the emitted
+    # ProxyRequestMetadata name and its client/trusted field layout.
+    request.extensions_mut;
+    rust
+        request.extensions_mut().insert(ProxyRequestMetadata { client, trusted });
+
+private function request-proxy-metadata proxy-request-metadata; request ref native-request
+    metadata proxy-request-metadata = rust
+        request.extensions().get::<ProxyRequestMetadata>().cloned().unwrap_or(ProxyRequestMetadata { client: None, trusted: false })
+    return metadata
+
+function request-proxy-metadata-client ip-addr|none; request ref native-request
+    metadata = request-proxy-metadata; request
+    return metadata.client
+
+function request-proxy-metadata-trusted bool; request ref native-request
+    metadata = request-proxy-metadata; request
+    return metadata.trusted
+
 function native-peer-ip ip-addr; address ref socket-addr
     return rust
         address.ip()
@@ -19,22 +48,16 @@ function peer-address ip-addr; peer ref (connect-info of socket-addr)
 function direct-address ip-addr|none; request ref native-request
     return (((request.extensions;).get of (connect-info of socket-addr));).map; peer-address
 
-
 function forwarded-address ip-addr|none; request ref native-request
     return parse-forwarded-headers; request
 
 function client-address ip-addr|none; request ref native-request
-    return (((request.extensions;).get of ip-addr);).cloned;
-
-function install-client-address; request ref native-request, client ip-addr|none
-    if client != none
-        (request.extensions_mut;).insert; client
+    return request-proxy-metadata-client; request
 
 function resolve-client-address ip-addr|none; request ref native-request, direct ip-addr|none, trust-forwarded bool
     if trust-forwarded
         return forwarded-address; request
     return direct
-
 
 public class access-policy
     direct-connections list of string

@@ -10,6 +10,11 @@ The [annotation guide](docs/src/records/guides/annotations.yaml) describes the p
 
 The [catalog demo](demo/README.md) exercises these capabilities with typed catalog models, AOT template-backed HTML pages, static Stoplight Elements docs, and a prefixed `/api` with OpenAPI at `/api/openapi.json`. Build both native consumers first with `sh packages/http-server/build-consumer.sh`, then build or run the demo through Terrane.
 
+WebSocket upgrades remain publicly authorable with `app = app.websocket; '/events', handler`.
+The asynchronous callback receives a `websocket-session`; ordinary HTTP endpoints stay
+class-bound. See the [WebSockets guide](docs/src/records/guides/websockets.yaml) for the
+complete example, upgrade access-policy behavior, and `Close` versus `closed` events.
+
 ## Build prerequisites
 
 The compiler must support canonical `owner/package` Terrane dependency identities
@@ -22,6 +27,12 @@ run `build-consumer.sh`, which builds the template consumer before the HTTP cons
 using the same `TERRANE` executable. Ship the compiler support and template migration
 before this package; a successful build using uncommitted sibling changes is not
 evidence that the package can be merged independently.
+
+This API also requires compiler commit **`3b725be6`** (owned object-field snapshots,
+function-owned collection lowering, and imported trait/base-field retention), or a
+descendant containing those fixes. It is currently on the compiler's
+`fix/request-scoped-value-lowering` branch, not its `main`; land that compiler change
+before merging this package. The native consumer and demo checks below use that compiler.
 
 Projection state is disposable compiler-generated cache under `.trn/projection-cache.json`,
 not a package-root lockfile to commit or refresh. Keep `terrane-dependencies.lock` committed:

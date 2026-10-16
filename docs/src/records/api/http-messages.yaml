@@ -22,6 +22,12 @@ documentation:
         `this.request` and `this.response` contexts. Both are optional outside dispatch;
         narrow them before use. Helpers called on the same invocation share these contexts.
 
+        The trait fields are publicly assignable, but their attachment is framework-owned.
+        Do not reassign `this.request` or `this.response`. In particular, replacing the
+        response field does not replace the adapter's original finalization context:
+        changes to a replacement object are not sent. Narrow the attached object into a
+        local alias and use its methods instead.
+
         The request context exposes metadata getters only: `method() -> string`,
         `target() -> string` (original path and query), `path() -> string`,
         `route-pattern() -> string`, `http-version() -> string`, `scheme() -> string|none`,
@@ -37,6 +43,13 @@ documentation:
         internal incoming-request transport used by generated adapters; they are not
         public request-context methods. The request context is an immutable metadata
         snapshot and does not own or buffer the body.
+        Capture is currently eager, including copies of all header names and raw values,
+        even if a handler never reads `this.request`. Header-heavy workloads therefore
+        pay a per-request copying cost. Lazy capture or a retained immutable native map
+        could reduce that cost, but neither is implemented; preserving repeated values,
+        invalid bytes, and request-local lifetimes remains required.
+        Overhead depends on build mode and workload; debug-build comparisons do not
+        establish release-throughput costs.
 
         The response context modifies response state for the current invocation:
         `set-status(status)`, `set-header(name, value)` (case-insensitive replacement),
@@ -48,6 +61,12 @@ documentation:
         bodies and must not disagree with a selected structured encoder. `vary` appends
         variation values. Header and status syntax is checked at the response boundary.
 
+        Cookie attributes are currently fixed: helpers do not add `Secure`, even when
+        the effective scheme is HTTPS, and do not offer configurable Path, Domain,
+        lifetime, or SameSite options. When custom attributes are required, append a
+        complete `Set-Cookie` value using `add-header` instead of using the fixed helper.
+        This is a current API limitation, not automatic production cookie policy.
+
         Successful handler completion finalizes and closes response state; retained
         aliases cannot modify it afterward. Overrides apply only to normal completion,
         including deliberately returned error-status bodies. When a handler throws
@@ -57,8 +76,11 @@ documentation:
         YAML, or XML format and defaults to status 200. A string endpoint configured for
         text/html uses that configured text type. A handler returning no value defaults
         to 204 with no body or content type. Explicit `set-status` overrides the default.
-        Generated OpenAPI describes the declared return contract, not runtime status
-        changes made through the response context.
+        Generated OpenAPI normally describes the declared return contract, not arbitrary
+        runtime status changes. For a no-value HEAD operation it documents both the
+        default 204 and the 200 metadata-only pattern.
+        Other no-value methods document 204 alone as their generated success status;
+        they do not acquire an inferred 200 response.
         Finalization suppresses the body and content type for 204 and 205; it suppresses
         the body but preserves content type for 304. HEAD suppresses the body while
         preserving representation headers. A metadata-only HEAD handler may return no

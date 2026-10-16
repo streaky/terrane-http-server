@@ -18,14 +18,61 @@ documentation:
   blocks:
     - type: markdown
       markdown: |-
-        WebSocket endpoints are registered by framework routing, not through the HTTP `api` trait or a public route-builder callback. Their asynchronous handlers receive a Terrane `websocket-session`, not a transport extractor. Session and event operations are documented on [[http-server.api.websocket-session]] and [[http-server.api.websocket-event]]. The package does not currently document a public endpoint-authoring API for WebSockets.
+        Register an upgrade endpoint with the consuming public
+        `application.websocket(path, handler)` method and assign its returned application.
+        Its asynchronous handler receives an owned `websocket-session`; no import from
+        the internal routing namespace is required. WebSocket callbacks have session
+        lifetime, not HTTP `api` request/response contexts or ordinary HTTP result encoding.
+
+        Upgrade requests pass through the direct/client access policy. A denied upgrade
+        receives HTTP 403 before its session handler runs.
+
+        The catalog demo includes an interactive `/websocket` playground, linked
+        from its home page. It connects to `/ws/echo`, sends multiple text messages
+        on the same session, and supports disconnecting and reconnecting. The
+        callback echoes each message to that client only; it is not a broadcast
+        service and does not mutate the catalog. WebSocket sessions are separate
+        from the demo's HTTP OpenAPI document.
+    - type: example
+      id: public-websocket
+      title: Registering a text WebSocket
+      language: terrane
+      mode: illustrative
+      target: null
+      timeout-ms: null
+      source: |-
+        namespace websocket-demo
+        from /streaky/http-server import create-application, websocket-session
+        from /core/errors import throwable, dependency-error
+
+        async function echo none throws dependency-error; session websocket-session
+            event = await session.receive;
+            text = event.text
+            if text != none
+                await session.send-text; text
+            await session.close;
+            return none
+
+        async function main throws throwable;
+            app = create-application;
+            app = app.websocket; '/events', echo
+            await app.serve;
+        main
+      response: null
+      diagnostic: null
+      markdown: null
   sections:
     - id: session-model
       title: Session model
       blocks:
         - type: markdown
           markdown: |-
-            `receive` returns an event whose `kind` preserves the transport message-kind spelling and case: a text event uses `text`, while non-text message variants retain names such as `Close`, `Binary`, `Ping`, and `Pong`. Text events carry an optional `text` value.
+            `receive` returns an event whose `kind` preserves the transport message-kind spelling and case: a text event uses `text`, while non-text message variants retain names such as `Close`, `Binary`, `Ping`, and `Pong`. Text events carry an optional `text` value. When the incoming stream ends, `receive` returns the distinct lower-case `closed` event kind; a received close frame is `Close`.
+
+            After receiving a peer `Close`, keep receiving until `closed` so the
+            transport can flush its close reply. Do not send text or initiate
+            another close frame after that event. The demo's echo loop follows
+            this pattern; use `close` to initiate a server-side close instead.
 
             `send-text` sends a text frame, and `close` sends an explicit close frame. Transport failures use `dependency-error`; the framework catches an individual handler failure after upgrade so one failed session does not terminate the HTTP server.
 

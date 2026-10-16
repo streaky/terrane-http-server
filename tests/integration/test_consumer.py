@@ -141,6 +141,13 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
     def test_duplicate_operation_id(self):
         self.check("@[endpoint; path = '/first', operation-id = 'same']\nasync function first string;\n    return 'a'\n@[endpoint; path = '/second', operation-id = 'same']\nasync function second string;\n    return 'b'\n", ["first", "second"], origin="second")
 
+    def test_explicit_operation_id_rejected_for_multi_method_endpoint(self):
+        self.check("from /streaky/http-server/annotations import route-group\n"
+            "@[route-group;]\nclass api uses http-api\n"
+            "    @[endpoint; path = '/value', method = 'GET|HEAD', operation-id = 'value']\n"
+            "    async function value int;\n        return 1\n",
+            ["api", "api::value"], origin="api::value")
+
     def test_synchronous_handler_rejected(self):
         self.check("@[endpoint; path = '/sync']\nfunction sync string;\n    return 'sync'\n", ["sync"], origin="sync")
 
@@ -289,11 +296,11 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
             "throwing-success", "created", "redirect", "empty", "denied", "custom-error",
             "invalid-code", "invalid-header", "override-content-type", "final-continue",
             "final-upgrade", "nonfinite-model", "nonfinite-model::single", "tampered-error",
-            "quoted-default", "quoted-default::label",
-            "head-metadata",
+            "quoted-default", "quoted-default::label", "head-metadata",
             "unicode-length", "unicode-length::length",
         ]
         declarations = ["handlers"] + ["handlers::" + name for name in handlers] + [
+            "handlers::optional-result", "handlers::optional-result::present",
             "data-model", "tree-node", "data-model::nickname", "data-model::selected",
             "xml-api", "xml-api::value", "xml-api::nothing", "xml-api::failure",
             "xml-api::denied", "xml-api::invalid-xml", "xml-api::model", "xml-api::model::value",
@@ -325,7 +332,7 @@ from /core/documents import document-value, document-map-entries, make-document-
 @[api-documentation; title = 'Integration fixture', version = '2026.10', description = '']
 @[route-group; prefix = '/xml', response-formats = (list; 'yaml', 'xml'), default-response-format = 'xml']
 class xml-api uses api
-    @[endpoint; path = '/value']
+    @[endpoint; path = '/value', operation-id = 'xmlValue']
     @[response-example; value = '"<café & units>"']
     async function value string;
         return '<café & units>'
@@ -397,6 +404,11 @@ class data-model
 
 @[route-group;]
 class handlers uses api
+    @[endpoint; path = '/optional']
+    async function optional-result none|string; @[query;] present bool = false
+        if present
+            return 'present'
+        return none
     function controls response-context throws coercion-error;
         response = this.response
         if response != none
@@ -643,6 +655,10 @@ main
             self.assertEqual((status, payload), (200, b""))
             self.assertEqual(dict(headers)["content-type"], "text/plain")
             self.assertNotIn("content-length", dict(headers))
+            status, headers, payload = raw_request("/optional")
+            self.assertEqual((status, payload), (204, b""))
+            status, headers, payload = raw_request("/optional?present=true")
+            self.assertEqual((status, payload), (200, b'"present"'))
             status, headers, payload = raw_request("/method", method="OPTIONS")
             self.assertEqual((status, payload), (204, b""))
             self.assertEqual(dict(headers)["allow"], "GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS")
@@ -729,7 +745,15 @@ main
                 self.assertEqual(operations[method.lower()]["responses"]["200"]["content"]["application/json"]["schema"]["type"], expected_type)
             self.assertNotIn("content", operations["head"]["responses"]["200"])
             self.assertNotIn("content", operations["options"]["responses"]["204"])
+            self.assertNotIn("200", operations["options"]["responses"])
             self.assertNotIn("content", schema["paths"]["/head-scalar"]["head"]["responses"]["200"])
+            unknown_head = schema["paths"]["/unknown-length"]["head"]["responses"]
+            self.assertIn("200", unknown_head)
+            self.assertIn("204", unknown_head)
+            self.assertNotIn("content", unknown_head["200"])
+            self.assertNotIn("content", unknown_head["204"])
+            self.assertEqual(schema["paths"]["/xml/value"]["get"]["operationId"], "xmlValue")
+            self.assertTrue(schema["paths"]["/optional"]["get"]["operationId"].endswith("_get"))
             model_schema = schema["paths"]["/models"]["post"]["requestBody"]
             status, headers, payload = raw_request("/xml/value")
             self.assertEqual((status, dict(headers)["content-type"]), (200, "application/xml"))
