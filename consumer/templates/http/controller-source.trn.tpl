@@ -10,7 +10,7 @@ public class {{ data.name }} implements controller
 {% endif %}{% endfor %}{% if data.documented %}        registered-routes = registered-routes.endpoint; (instance http-method::get;), '/openapi.json', this.openapi-handler
 {% endif %}        return registered-routes
 {% if data.documented %}
-    async function openapi-handler http-response; _request http-request
-        return create-response; 200, 'application/json', (openapi-json;)
+    async function openapi-handler wire-response; _request incoming-request
+        return encoded-response; 200, 'application/json', (openapi-json;)
 {% endif %}{% for operation in data.operations %}{% if operation.selected %}
 {{ operation.adapter }}{% endif %}{% endfor %}

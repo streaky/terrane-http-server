@@ -25,27 +25,30 @@ documentation:
         the ordinary package pipeline. No HTTP-specific compiler behavior or runtime source
         reflection is involved.
 
-        Selected safe asynchronous handlers may be standalone functions or shared methods on
-        selected classes and may declare `throws throwable`. Path and query parameters are
-        `string`, `int`, or `bool`; query defaults must be compile-time scalar values of the
-        declared type. Results may be JSON-encoded scalars, `document-value`, selected
-        ordinary model classes, or `string` for `text/html` and `text/plain`. Automatically
-        encoded responses can negotiate JSON, YAML, or XML when enabled on their route group.
-        `http-response` bypasses automatic encoding: the handler owns status, headers, content
-        type, and body. A body may be a decoded `document-value` or a selected model class.
-        Model schemas and codecs derive from actual fields, including nested values. Schemas
-        are assembled as document trees and encoded with Terrane's canonical JSON encoder.
-        Request bodies remain JSON: response negotiation never changes how inputs are decoded.
+        Annotated endpoints are instance methods of a selected `route-group` class that
+        declares `uses api`; free functions and static methods are not endpoint handlers.
+        The public `api` trait provides optional `request` and `response` context fields.
+        The generated adapter copies the mounted source into a per-request invocation,
+        attaches both contexts to that copy, then invokes the handler. Outside dispatch
+        the fields are `none`; narrow them before use. Helper methods on the same invocation
+        see the same contexts. Do not treat ordinary collection fields as shared mutable
+        state: use an explicit shared reference when application state must persist.
+
+        `request-context` exposes metadata getters only: method, original target, path, route pattern, HTTP version, effective scheme, authority and URL, peer/client IP, proxy trust, header values, and cookie values. It does not provide route-parameter, query, Accept, or body extraction; generated adapters use internal incoming-request transport for those operations.
+        `response-context` provides status and header replacement/appending, content type/length, `Vary`, redirects, and cookie set/clear operations. Its state is shared only within one invocation and closes on successful finalization. Overrides are discarded if the handler throws. See [[http-server.api.http-messages]] for exact method behavior and body/status rules.
+
+        Nonempty typed handler results are response bodies; `none`/void defaults to
+        204 with no body. The server applies response-context overrides after successful
+        handler completion. A plain TCP listener does not provide TLS or certificate
+        verification metadata: the reported scheme is `http` unless trusted proxy
+        metadata supplies a well-formed effective external scheme; unknown or malformed
+        trusted forwarded scheme yields `none`.
 
         Explicit `operation-id` values remain unchanged. Otherwise the consumer derives a
         unique URL-safe ID from the canonical declaration identity, so documentation viewers
         can navigate operations without treating namespace separators as URL path segments.
 
-        Throw `http-error` with an error status or an explicit error response for an early
-        exit. The server preserves it instead of converting it to a generic 500. OpenAPI
-        uses a default response for handler-defined statuses; explicit response handlers do
-        not claim a fixed 200/content schema. Other handlers retain their automatic 200
-        schema, and all document request validation and internal error boundaries.
+        Throw `http-error` with a status from 400 through 599 and optional detail for an early exit. The server renders its detail as plain text (using the canonical status reason when detail is empty); malformed error payloads fail closed as HTTP 500. The exception's response discards partial response-context overrides. OpenAPI uses a default response for handler-defined statuses; ordinary typed handlers retain their generated response schemas and validation boundaries.
     - type: example
       id: annotated-handler
       title: A typed path parameter and optional query parameter
@@ -54,18 +57,20 @@ documentation:
       target: null
       timeout-ms: null
       source: |-
+        from /streaky/http-server import api
         from /streaky/http-server/annotations import endpoint, path, query
 
-        /// Calculate a catalog quantity.
-        /// @returns The item identifier multiplied by the requested quantity.
-        @[endpoint; method = 'GET', path = '/items/{item-id}', summary = 'Read an item']
-        async function read-item int; (
-            /// Identifier of the catalog item.
-            @[path;] item-id int,
-            /// Number of units, defaulting to one.
-            @[query;] quantity int = 1,
-        )
-            return item-id * quantity
+        class catalog-api uses api
+            /// Calculate a catalog quantity.
+            /// @returns The item identifier multiplied by the requested quantity.
+            @[endpoint; method = 'GET', path = '/items/{item-id}', summary = 'Read an item']
+            async function read-item int; (
+                /// Identifier of the catalog item.
+                @[path;] item-id int,
+                /// Number of units, defaulting to one.
+                @[query;] quantity int = 1,
+            )
+                return item-id * quantity
       response: null
       diagnostic: null
       markdown: null
@@ -143,11 +148,13 @@ documentation:
         - type: markdown
           markdown: |-
             `mount-annotated` configures an application from explicitly selected source
-            classes. It instantiates each class, mounts its generated wrapper at the
-            `route-group` prefix, and applies its `static-directory` declarations. The
-            generated OpenAPI document is served at `/api/openapi.json` when the API class
-            uses prefix `/api`; its schema paths include that prefix and its server URL is
-            `/`. A group may set `document = false` to keep its endpoints out of the API
+            classes. It generates an adapter with a class instance and a copy of the
+            selected source, mounts the adapter at the `route-group` prefix, and applies
+            its `static-directory` declarations.
+            The generated OpenAPI document is served at `/api/openapi.json` when the API
+            class uses prefix `/api`; its schema paths include that prefix and its server URL
+            is `/`.
+            A group may set `document = false` to keep its endpoints out of the API
             schema while still serving HTML pages.
 
             Source classes have ordinary value semantics. A collection field alone is not
@@ -204,16 +211,19 @@ documentation:
             HTTP 422 before calling the handler. The generated endpoint callback accepts the
             ordinary `throws throwable` effect, so handler failures propagate to the HTTP
             boundary as HTTP 500 rather than being converted into input errors.
-            Generated responses default to `application/json`. A returned string is a JSON
-            string, not raw JSON text; string endpoints may instead select `text/html` or
-            `text/plain`. Request bodies remain JSON: response negotiation never changes
-            how inputs are decoded.
+            Structured results default to `application/json`; negotiation may select JSON,
+            YAML, or XML when enabled on the route group. A returned string is a JSON string
+            by default, not raw JSON text; string endpoints configured as `text/html` or
+            `text/plain` return those text types. A method with no returned value defaults to
+            204 without a body or content type. Response-context overrides can set explicit
+            status and response metadata; request bodies remain JSON regardless of response
+            negotiation.
 
             A route group opts into negotiated automatic responses by explicitly setting
             `response-formats` to a nonempty list drawn from `json`, `yaml`, and `xml`.
             Omitting it, or setting it to `none`, preserves the legacy JSON-only behavior:
-            `Accept` is ignored and does not cause a 406. Free-function endpoints use that
-            same implicit policy. An explicitly empty list is rejected, not replaced with JSON.
+            `Accept` is ignored and does not cause a 406. An explicitly empty list is
+            rejected, not replaced with JSON.
 
             An explicit list enables strict negotiation even if it contains only `json`.
             An empty `default-response-format` selects the first enabled format; an explicit
@@ -240,8 +250,8 @@ documentation:
             records the default, because OpenAPI has no standard default-media field.
             Format policy is validated once at the selected route-group declaration, including
             groups without selected methods; errors point to that class rather than a method.
-            Explicit `http-response` values remain handler-controlled; HTML and plain-text
-            endpoint content types bypass automatic serialization and negotiation.
+            HTML and plain-text endpoint content types bypass automatic serialization
+            and response-format negotiation.
 
             JSON uses the canonical document representation. YAML responses use
             `application/yaml` with readable block collections and JSON-compatible scalar
@@ -288,48 +298,29 @@ documentation:
             strings using the same encoder as runtime responses. Text/HTML examples must
             contain a JSON string. Invalid example JSON or duplicate names fail compilation.
 
-            Declaration comments support CommonMark, including paragraphs, emphasis, links,
-            lists, and fenced code blocks. Keep `@returns` as the final documentation section:
-            it describes the automatic 200 response (or the default response for an explicit
-            `http-response` handler), independently of the operation description. See
+            Declaration comments support CommonMark, including paragraphs, emphasis,
+            links, lists, and fenced code blocks. Endpoint comments describe the
+            operation, while `summary` and `description` metadata can provide explicit
+            OpenAPI text. Comments on parameters and selected model fields describe
+            inputs and schema properties. These descriptions do not affect runtime
+            validation or response behavior. See
             [OpenAPI rich-text formatting](https://spec.openapis.org/oas/v3.1.0.html#rich-text-formatting)
             and the [Media Type Object](https://spec.openapis.org/oas/v3.1.0.html#media-type-object)
-            for the specification details.
-
-            End an endpoint's documentation with `@returns ` followed by the response
-            description. The marker must start a documentation line with no indentation and
-            include the following space. A marker inside a valid CommonMark fence is code,
-            not metadata. Backtick openers cannot contain another backtick in their info
-            string, so an inline-code-looking line cannot swallow a following returns section.
-            A bare `@returns` or an indented marker remains ordinary Markdown prose; it
-            does not start a response section and does not produce a diagnostic.
-            After a recognized marker, following lines belong to that response description
-            until the documentation ends.
-            The preceding prose describes the operation, unless the endpoint supplies an explicit
-            `description`. The returns section applies independently of that override. It
-            describes the automatic 200 response, or the default response for an explicit
-            `http-response` handler. Without a returns section, existing generic response
-            descriptions remain in use. This is an HTTP consumer documentation convention,
-            not a new language annotation or a way to describe arbitrary document-value keys;
-            use selected typed models to document individual object properties.
+            for specification details.
 
             The consumer rejects unsupported signatures, contradictory parameter metadata,
             duplicate registrations and operation IDs, invalid methods or paths, and the
             reserved `/api/openapi.json` route. Declaration documentation provides a
-            description when explicit metadata does not provide one. GET, POST, PUT, PATCH,
-            DELETE, HEAD, and OPTIONS are supported operation methods. GET may also be
-            served for HEAD by the framework; explicit HEAD registration overrides it and
-            produces a bodyless wire response. Typed HEAD handlers should produce the same
-            negotiated representation as GET so the native router can preserve its headers
-            while suppressing its body. An explicit `http-response` HEAD handler owns its
-            headers, including content type, length, and cache variation; an empty body
-            without an explicit length yields `Content-Length: 0`, not GET's encoded length.
-            OPTIONS requires an explicit handler and does not provide automatic CORS behavior.
-            `route-group` is class metadata
-            with `prefix` (default `/`) and `document` (default `true`). `static-directory`
-            is repeatable class metadata with an absolute URL `path` and a directory relative
-            to the process working directory. Endpoint metadata adds `content-type`, default
-            `application/json`; `text/html` and `text/plain` responses require string results.
+            description when explicit metadata does not provide one. Endpoints support
+            `GET` and `HEAD`; GET may also be served for HEAD by the framework, while
+            explicit HEAD registration overrides it. HEAD suppresses the body but preserves
+            representation headers. Metadata-only HEAD handlers can set a known content
+            length without retrieving the body; unknown length is not reported as zero.
+            `route-group` is class metadata with `prefix` (default `/`) and `document`
+            (default `true`). `static-directory` is repeatable class metadata with an
+            absolute URL `path` and a directory relative to the process working directory.
+            Endpoint metadata adds `content-type`, default `application/json`;
+            `text/html` and `text/plain` responses require string results.
 
             Annotated `static-directory` values currently reject any `..` substring,
             including ordinary names such as `a..b`, not only a parent path segment.
@@ -451,7 +442,7 @@ documentation:
             create a fresh context for each render. Render failures propagate through the
             handler's `throws throwable` contract and produce HTTP 500; malformed request input
             remains HTTP 422.
-  see-also: [http-server.api.routes, http-server.api.controller]
+  see-also: [http-server.api.http-messages, http-server.api.application, http-server.guide.application-routing]
 provenance:
   specification: null
   conformance: null

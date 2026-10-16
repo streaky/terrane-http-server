@@ -24,10 +24,7 @@ navigation:
     children:
       - source: records/api/create-application.yaml
       - source: records/api/application.yaml
-      - source: records/api/controller.yaml
-      - source: records/api/routes.yaml
       - source: records/api/http-messages.yaml
-      - source: records/api/client-info.yaml
       - source: records/api/access-policy.yaml
   - group: Configuration API
     numbering: none

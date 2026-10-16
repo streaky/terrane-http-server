@@ -27,12 +27,13 @@ documentation:
   blocks:
     - type: markdown
       markdown: |-
-        The server tracks two addresses. The peer address is the TCP connection peer
-        (typically the edge proxy in a proxied deployment). The client address is resolved
-        from forwarded headers only when that peer is trusted; otherwise it is the peer
-        itself. `client-info.peer-ip` and `client-info.client-ip` expose these separately
-        to a client-aware handler. See [[http-server.api.client-info]] and
-        [[http-server.api.access-policy]] for signatures.
+        The server distinguishes the TCP peer from the resolved client. For annotated
+        class handlers, `request-context.peer-ip()` reports the peer and
+        `client-ip()` reports the resolved client; `via-trusted-proxy()` indicates
+        whether the direct peer matched the configured proxy trust allowlist.
+        `scheme()`, `authority()`, and `url()` expose effective request metadata.
+        Forwarded values affect this metadata only when the TCP peer is trusted.
+        See [[http-server.api.access-policy]] for policy signatures.
   sections:
     - id: independent-allowlists
       title: "Independent allowlists"
@@ -51,9 +52,9 @@ documentation:
             library to distinguish those clients from proxies. The public API
             does not have a separate trust-only list.
 
-            Address resolution is independent of the client allowlist. A client-aware
-            handler can report addresses for logging even when no client filter is
-            configured. Logging receives `none` for an unresolved client; do not interpret
+            An endpoint method can inspect addresses through the optional
+            `request-context.client-ip()` getter, regardless of whether a client filter
+            is configured. It returns `none` for unresolved identity; do not interpret
             that as the proxy's identity when a trusted proxy supplied unusable headers.
         - type: example
           id: proxy-and-client-lists
@@ -73,19 +74,30 @@ documentation:
       blocks:
         - type: markdown
           markdown: |-
-            Forwarded headers affect identity only if the direct-peer list is non-empty
-            and the TCP peer matches it. With no direct allowlist, forwarded headers are
-            ignored and the resolved client is the TCP peer. With a trusted edge proxy, the
-            server chooses the rightmost `for` address from RFC 7239 `Forwarded`; it checks
-            `X-Forwarded-For` rightmost only when the standard `Forwarded` header is absent.
-            A present but malformed, unknown, obfuscated, or missing-`for` standard header
-            does not fall back to the legacy header.
+            Forwarded headers affect identity and effective scheme only if the direct-peer
+            list is non-empty and the TCP peer matches it. With no direct allowlist,
+            forwarded headers are ignored and the resolved client is the TCP peer. With a
+            trusted edge proxy, the server chooses the rightmost `for` address from RFC 7239
+            `Forwarded`; it checks `X-Forwarded-For` rightmost only when the standard
+            `Forwarded` header is absent. A present but malformed, unknown, obfuscated, or
+            missing-`for` standard header does not fall back to the legacy header.
 
             This is single-proxy trust, not trusted-chain traversal. Rightmost selection
             does not validate or walk multiple proxy hops. If multiple proxies are involved,
-            configure the edge proxy to normalize the authoritative client identity before
-            forwarding. Restrict direct peers so untrusted clients cannot inject headers
-            that the application will trust.
+            configure the edge proxy to normalize authoritative client identity and scheme
+            before forwarding. Restrict direct peers so untrusted clients cannot inject
+            headers that the application will trust. The server binds plain TCP; TLS
+            termination must happen at the trusted proxy, which should forward the external
+            scheme using trusted metadata.
+
+            Effective scheme uses the rightmost `Forwarded` element's `proto`, or
+            rightmost `X-Forwarded-Proto` only when `Forwarded` is absent. Scheme is
+            `none` for missing, malformed, or ambiguous trusted metadata rather than
+            a guessed HTTPS value. Quoted delimiters are not interpreted as parameters;
+            quoted-pair escapes currently make scheme unknown. The original header
+            bytes remain accessible. Authority comes from the request URI or Host,
+            not an unvalidated forwarded-host header. TLS protocol and certificate
+            information are unavailable because this listener does not terminate TLS.
         - type: example
           id: proxy-normalization
           title: "Expected edge-proxy normalization"
@@ -94,7 +106,7 @@ documentation:
           target: null
           timeout-ms: null
           source: |-
-            Forwarded: for=198.51.100.24
+            Forwarded: for=198.51.100.24;proto=https
           response: null
           diagnostic: null
           markdown: null
@@ -119,7 +131,6 @@ documentation:
             on [[http-server.api.application]].
   see-also:
     - http-server.api.access-policy
-    - http-server.api.client-info
     - http-server.guide.websockets
     - http-server.guide.application-routing
 

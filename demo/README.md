@@ -61,6 +61,33 @@ encoded content length, and `Vary: Accept` while sending no body. OPTIONS return
 a body or content type and supplies `Allow: GET, PUT, PATCH, DELETE, HEAD, OPTIONS`, even for
 a missing item; it describes this route and does not implement CORS.
 
+## Request-local contexts and response control
+
+Both mounted classes use the `api` trait. Dispatch copies the mounted class into a fresh
+invocation with `this.request` and `this.response`; both fields are `none` outside routing.
+Helpers on the same invocation see the same contexts, while the explicit catalog reference
+continues to share application state across requests.
+
+`/api/items/{item-id}` registers one handler for `GET|HEAD`. The request context exposes
+the actual method, original target/path, matched route, protocol, headers, cookies, and
+direct/resolved client addresses. `/api/request` demonstrates that snapshot and uses the
+response context to set a requested status and echo `X-Request-ID`. It does not trust
+forwarding headers from arbitrary clients.
+
+```console
+curl -i -H 'X-Request-ID: example' -H 'Cookie: demo=session' \
+  'http://127.0.0.1:3187/api/request?status=201'
+curl -I http://127.0.0.1:3187/catalog-note
+curl -i http://127.0.0.1:3187/catalog
+```
+
+The site's `GET|HEAD /catalog-note` handler uses stored representation metadata for HEAD,
+returning no value without fetching or encoding its body. `/catalog` sets a 303 redirect
+and `Location` without throwing an exception. Typed return values remain response bodies;
+status, headers, cookies, and redirects are response-context instructions. A no-value
+handler defaults to 204; ordinary typed results default to 200. Failed handlers discard
+partial overrides, and finalized response contexts reject further mutation.
+
 ## Site rendering
 
 Templates live in `templates/home.html` and `templates/about.html`; they use a shared header and footer. The AOT `template` consumer compiles these templates into the binary, so edits to template sources require rebuilding. `.html` rendering escapes values automatically; do not apply a safe filter to untrusted values. Each render uses a fresh context. No template source files or runtime template roots are needed in deployment; only public static assets must accompany the executable.
@@ -96,7 +123,7 @@ and XML automatic responses, defaulting to JSON; clients can choose with `Accept
 Unsupported formats return 406 and negotiated replies vary on `Accept`. Request bodies
 continue to use JSON regardless of response format. XML wraps values in a `response`
 root, arrays in a wrapper with `item` children, and null with `xsi:nil="true"`.
-Explicit `http-response` and the site's HTML routes are not automatically serialized.
+The site's HTML/text routes use their configured content types rather than automatic serialization.
 The explicit format list is the opt-in: apps that omit it keep legacy JSON-only responses
 without rejecting `Accept` preferences. An explicit empty list is an error. Negotiated
 validation/error replies keep their usual bodies but also vary on `Accept`.
@@ -136,6 +163,9 @@ From the repository root, build the Terrane consumers and demo executable, stage
 ```console
 sh packages/http-server/demo/scripts/build-image.sh
 ```
+
+*Side note: `demo/scripts/build-image.sh` exists because Terrane does not yet have an
+OS package. Once OS packages are available, this build workflow will change.*
 
 The script uses the `TERRANE` environment variable when set, otherwise `target/release/terrane`, matching the consumer helper and integration-test default. Build that release compiler first, or export an absolute `TERRANE` path to use the same alternative compiler for every step. It copies the artifact path printed by `terrane build` into `demo/.docker/app`; Docker receives only that prebuilt executable and the demo's `public/` assets. Templates are compiled into the executable, so the image needs neither source templates nor a template runtime root. The image does not contain or run the Terrane compiler. Compose publishes the service on host port `3187` by default; override it with `HTTP_SERVER_PORT`, for example:
 

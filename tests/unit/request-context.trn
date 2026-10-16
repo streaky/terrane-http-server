@@ -1,0 +1,61 @@
+namespace streaky/http-server
+
+from /deps/axum-core/extract import Request as native-request
+from /core/collections import list
+from /core/testing import assert-equal-bool, assert-equal-string, assert-equal-int
+
+function context-with-forwarding request-context; forwarded string, legacy string, trusted bool
+    native native-request = rust
+        let mut request = ::http::Request::builder().uri("/metadata").body(::axum_core::body::Body::empty()).unwrap();
+        if !forwarded.is_empty() {
+            request.headers_mut().append("forwarded", ::http::HeaderValue::from_str(&forwarded).unwrap());
+        }
+        if !legacy.is_empty() {
+            request.headers_mut().append("x-forwarded-proto", ::http::HeaderValue::from_str(&legacy).unwrap());
+        }
+        request.extensions_mut().insert(trusted);
+        request
+    return capture-request-context; ref native, '/metadata'
+
+function test-forwarded-scheme-respects-trust-and-standard-precedence;
+    untrusted = context-with-forwarding; 'for=192.0.2.1;proto=https', 'https', false
+    scheme = untrusted.scheme;
+    assert-equal-bool; scheme != none, true
+    if scheme != none
+        assert-equal-string; scheme, 'http'
+    for header in (list; 'for=192.0.2.1;proto=https', 'for="[2001:db8::1]";proto="HTTPS"', 'for=192.0.2.1;by="edge,a;b";proto=https')
+        trusted = context-with-forwarding; header, 'http', true
+        scheme = trusted.scheme;
+        assert-equal-bool; scheme != none, true
+        if scheme != none
+            assert-equal-string; scheme, 'https'
+    legacy = context-with-forwarding; '', 'http, https', true
+    scheme = legacy.scheme;
+    assert-equal-bool; scheme != none, true
+    if scheme != none
+        assert-equal-string; scheme, 'https'
+
+function test-ambiguous-forwarded-scheme-never-promotes-to-https;
+    for header in (list; 'for=192.0.2.1;by="edge;proto=https;other=value"', 'for=192.0.2.1;proto="https', 'for=192.0.2.1;proto=http;proto=https', 'for=192.0.2.1;proto=invalid', 'for=192.0.2.1')
+        context = context-with-forwarding; header, 'https', true
+        assert-equal-bool; (context.scheme;) == none, true
+
+function test-request-snapshot-retains-invalid-bytes-without-fabricating-text;
+    native native-request = rust
+        let mut request = ::http::Request::builder().uri("/metadata?x=1").body(::axum_core::body::Body::empty()).unwrap();
+        request.headers_mut().append("x-tag", ::http::HeaderValue::from_static("first"));
+        request.headers_mut().append("x-tag", ::http::HeaderValue::from_bytes(b"\xff").unwrap());
+        request.headers_mut().append("x-tag", ::http::HeaderValue::from_static("last"));
+        request
+    context = capture-request-context; ref native, '/metadata'
+    values = context.header-values; 'X-Tag'
+    assert-equal-int; values.length, 2
+    assert-equal-string; values[0], 'first'
+    assert-equal-string; values[1], 'last'
+    raw = context.header-bytes; 'x-tag'
+    assert-equal-int; raw.length, 3
+    invalid = raw[1]
+    assert-equal-int; invalid[0], 255
+    assert-equal-string; (context.target;), '/metadata?x=1'
+    assert-equal-bool; (context.authority;) == none, true
+    assert-equal-bool; (context.url;) == none, true

@@ -18,42 +18,21 @@ documentation:
   blocks:
     - type: markdown
       markdown: |-
-        Obtain an application with [[http-server.api.create-application]]; its constructor is
-        private. `address: string` is publicly readable and writable state, initially
-        `127.0.0.1:3000`. Builder methods consume `application` and return its successor;
-        assign every result.
+        Obtain an application with [[http-server.api.create-application]]; its constructor is private. `address: string` is publicly readable and writable state, initially `127.0.0.1:3000`. Builder methods consume `application` and return its successor; assign every result.
 
-        `mount(prefix: string, handler-controller: controller) -> application` consumes
-        the controller through its `routes` callback and mounts its returned routes. `/`
-        merges registrations at the root; any other prefix nests them.
+        Application composition mounts selected annotated API classes through the package's consumer integration. Their class-bound endpoint methods use the public `api` trait; generated adapters register handlers through internal routing transport. This does not expose a public route-registration API.
 
-        `static-directory(prefix: string, directory: string) -> application` mounts the
-        directory service under the prefix. Serving static content requires filesystem
-        capability.
+        `static-directory(prefix: string, directory: string) -> application` mounts the directory service under the prefix. Serving static content requires filesystem capability.
 
-        `with-address(address: string) -> application` replaces the listen address without
-        validating it at this point.
+        `with-address(address: string) -> application` replaces the listen address without validating it at this point.
 
-        `configure(config: server-config) -> application` replaces the address and mounts
-        every configured static directory in list order. It does not resolve or mount
-        configured controller identifiers; resolve those with
-        `server-config.controller-path` and explicitly call `mount`.
+        `configure(config: server-config) -> application` replaces the address and mounts every configured static directory in list order. It does not resolve or mount configured controller identifiers; resolve those with `server-config.controller-path` and explicitly compose the matching selected API class.
 
-        `allow-direct(network: string) -> application` and `allow-client(network: string) ->
-        application` append entries to independent address/network allowlists. Empty lists
-        are permissive; malformed networks surface when serving begins. Detailed trust and
-        forwarding behavior is in [[http-server.guide.proxy-security]].
+        `allow-direct(network: string) -> application` and `allow-client(network: string) -> application` append entries to independent address/network allowlists. Empty lists are permissive; malformed networks surface when serving begins. Detailed trust and forwarding behavior is in [[http-server.guide.proxy-security]].
 
-        `has-routes() -> bool` is a non-consuming query indicating whether the internal
-        router has registered routes.
+        `has-routes() -> bool` is a non-consuming query indicating whether the internal router has registered routes.
 
-        `serve() -> async none throws throwable` consumes the application. It binds the
-        configured address, compiles both network policies, installs request checks, then
-        serves until the server terminates. Binding and policy compilation errors propagate
-        as `throwable`; denied requests receive HTTP 403. A direct peer must pass its policy,
-        and the resolved client address must pass its independent policy. Forwarded identity
-        is trusted only from a permitted direct peer when the direct policy is non-permissive;
-        otherwise the TCP peer is the client address. No shutdown handle is returned.
+        `serve() -> async none throws throwable` consumes the application. It binds the configured address, compiles both network policies, installs request checks, then serves until the server terminates. Binding and policy compilation errors propagate as `throwable`; denied requests receive HTTP 403. A direct peer must pass its policy, and the resolved client address must pass its independent policy. Forwarded identity is trusted only from a permitted direct peer when the direct policy is non-permissive; otherwise the TCP peer is the client address. No shutdown handle is returned.
     - type: example
       id: signatures
       title: Public declaration synopsis
@@ -64,7 +43,6 @@ documentation:
       source: |-
         public class application
             address string = '127.0.0.1:3000'
-            consuming function mount application; prefix string, handler-controller controller
             consuming function static-directory application; prefix string, directory string
             consuming function with-address application; address string
             consuming function configure application; config server-config
@@ -78,9 +56,8 @@ documentation:
   sections: []
   see-also:
     - http-server.api.create-application
-    - http-server.api.routes
+    - http-server.api.http-messages
     - http-server.api.server-config
-    - http-server.guide.application-routing
     - http-server.guide.proxy-security
 provenance:
   specification: null

@@ -1,6 +1,7 @@
 namespace http-server-demo
 
 from /streaky/http-server/annotations import endpoint, route-group, static-directory
+from /streaky/http-server import api
 from /streaky/template import text-value
 from /generated/template/http-server-demo import make-template-engine
 from /core/errors import throwable
@@ -14,7 +15,14 @@ private function render-page string throws throwable; name string, title string,
 @[route-group; prefix = '/', document = false]
 @[static-directory; path = '/docs', directory = 'public/docs']
 @[static-directory; path = '/assets', directory = 'public/assets']
-class site
+class site uses api
+    private note string = 'Terrane catalog API\n'
+    private note-size int
+
+    function construct;
+        # The stored note is ASCII; cache its byte length once, not during HEAD.
+        this.note-size = this.note.length
+
     @[endpoint; method = 'GET', path = '/', content-type = 'text/html', summary = 'Catalog home']
     async function home string throws throwable;
         return render-page; 'home.html', 'Terrane Catalog', 'Terrane Catalog'
@@ -22,3 +30,23 @@ class site
     @[endpoint; method = 'GET', path = '/about', content-type = 'text/html', summary = 'About the catalog demo']
     async function about string throws throwable;
         return render-page; 'about.html', 'About — Terrane Catalog', 'About this demo'
+
+    @[endpoint; method = 'GET|HEAD', path = '/catalog-note', content-type = 'text/plain']
+    async function catalog-note string|none;
+        request = this.request
+        response = this.response
+        if request != none
+            if response != none
+                response.set-status; 200
+                response.set-content-type; 'text/plain'
+                if (request.method;) == 'HEAD'
+                    response.set-content-length; this.note-size
+                    return none
+        return this.note
+
+    @[endpoint; method = 'GET', path = '/catalog']
+    async function catalog-redirect none;
+        response = this.response
+        if response != none
+            response.redirect; '/'
+        return none

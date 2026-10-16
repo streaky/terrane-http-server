@@ -1,8 +1,7 @@
 namespace streaky/http-server
 
 from /core/collections import list, range
-from /core/documents import document-value
-from /core/errors import throwable, coercion-error
+from /core/errors import coercion-error
 
 public function response-media-type string throws coercion-error; format string
     switch format
@@ -14,11 +13,6 @@ public function response-media-type string throws coercion-error; format string
             return 'application/xml'
         case else
             throw coercion-error
-
-public function create-document-response http-response throws throwable; status int, document document-value, format string
-    body = encode-response-document; document, format
-    response = create-response; status, (response-media-type; format), body
-    return response.with-header; 'vary', 'Accept'
 
 class accept-range
     media string

@@ -35,19 +35,6 @@ function resolve-client-address ip-addr|none; request ref native-request, direct
         return forwarded-address; request
     return direct
 
-public class client-info
-    private peer ip-addr|none
-    private client ip-addr|none
-
-    private function construct; peer ip-addr|none, client ip-addr|none
-        this.peer = peer
-        this.client = client
-
-    function peer-ip ip-addr|none;
-        return this.peer
-
-    function client-ip ip-addr|none;
-        return this.client
 
 public class access-policy
     direct-connections list of string

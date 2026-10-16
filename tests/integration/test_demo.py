@@ -292,7 +292,10 @@ class CatalogHttpTests(DemoHttpTestCase):
             return value
 
         paths = schema["paths"]
-        self.assertEqual(set(paths), {"/api/health", "/api/items/{item-id}", "/api/search", "/api/orders/quote"})
+        self.assertEqual(set(paths), {"/api/health", "/api/items/{item-id}", "/api/search",
+            "/api/orders/quote", "/api/request"})
+        self.assertNotEqual(paths["/api/items/{item-id}"]["get"]["operationId"],
+            paths["/api/items/{item-id}"]["head"]["operationId"])
         resource = paths["/api/items/{item-id}"]
         self.assertEqual(set(resource), {"get", "put", "patch", "delete", "head", "options"})
         self.assertNotIn("content", resource["head"]["responses"]["200"])
@@ -353,6 +356,93 @@ class CatalogHttpTests(DemoHttpTestCase):
                 self.assertIsInstance(field.get("description"), str)
                 self.assertNotEqual(field["description"].strip(), "")
                 self.assertNotEqual(field["description"], "none")
+
+
+class RequestContextTests(DemoHttpTestCase):
+    def test_request_snapshot_and_status_override(self):
+        connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=3)
+        target = "/api/request?status=201&note=a%20b"
+        connection.putrequest("GET", target)
+        connection.putheader("X-Tag", "first")
+        connection.putheader("X-Tag", "second")
+        connection.putheader("Cookie", "demo=abc==; other=z")
+        connection.putheader("X-Request-ID", "snapshot")
+        connection.putheader("X-Forwarded-For", "198.51.100.7")
+        connection.putheader("X-Forwarded-Proto", "https")
+        connection.endheaders()
+        response = connection.getresponse()
+        try:
+            result = json.loads(response.read())
+            self.assertEqual(response.status, 201)
+            self.assertEqual(response.getheader("X-Request-ID"), "snapshot")
+            self.assertEqual(result, {
+                "method": "GET", "target": target, "path": "/api/request",
+                "route-pattern": "/api/request", "http-version": "HTTP/1.1",
+                "scheme": "http", "authority": f"127.0.0.1:{self.port}",
+                "peer-ip": "127.0.0.1", "client-ip": "127.0.0.1",
+                "via-trusted-proxy": False, "tags": ["first", "second"], "cookie": "abc==",
+            })
+        finally:
+            response.close()
+            connection.close()
+
+    def test_concurrent_status_and_header_overrides_are_request_local(self):
+        from concurrent.futures import ThreadPoolExecutor
+
+        def inspect(index):
+            marker = f"request-{index}"
+            status = 200 + index % 3
+            connection, response = self.response("GET", f"/api/request?status={status}",
+                headers={"X-Request-ID": marker, "Cookie": f"demo={marker}"})
+            try:
+                data = json.loads(response.read())
+                return response.status, response.getheader("X-Request-ID"), data["cookie"], data["target"]
+            finally:
+                response.close()
+                connection.close()
+        with ThreadPoolExecutor(max_workers=8) as clients:
+            actual = list(clients.map(inspect, range(24)))
+        self.assertEqual(actual, [
+            (200 + i % 3, f"request-{i}", f"request-{i}", f"/api/request?status={200 + i % 3}")
+            for i in range(24)
+        ])
+        self.assertIsNone(self.response_header_after_plain_request("X-Request-ID"))
+
+    def response_header_after_plain_request(self, name):
+        connection, response = self.response("GET", "/api/request")
+        try:
+            self.assertEqual(response.status, 200)
+            response.read()
+            return response.getheader(name)
+        finally:
+            response.close()
+            connection.close()
+
+    def test_metadata_only_head_and_redirect_without_exceptions(self):
+        connection, response = self.response("GET", "/catalog-note")
+        try:
+            body = response.read()
+            expected_length = response.getheader("Content-Length")
+            self.assertEqual(int(expected_length), len(body))
+            self.assertEqual(response.getheader("Content-Type"), "text/plain")
+        finally:
+            response.close()
+            connection.close()
+        connection, response = self.response("HEAD", "/catalog-note")
+        try:
+            self.assertEqual((response.status, response.read()), (200, b""))
+            self.assertEqual(response.getheader("Content-Length"), expected_length)
+            self.assertEqual(response.getheader("Content-Type"), "text/plain")
+        finally:
+            response.close()
+            connection.close()
+        connection, response = self.response("GET", "/catalog")
+        try:
+            self.assertEqual((response.status, response.getheader("Location"), response.read()),
+                (303, "/", b""))
+        finally:
+            response.close()
+            connection.close()
 
 
 class CatalogMutationTests(DemoHttpTestCase):

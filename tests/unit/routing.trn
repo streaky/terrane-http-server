@@ -1,28 +1,29 @@
 namespace tests/http-server/routing
 
-from /streaky/http-server import application, controller, routes, websocket-session, create-application, parse-config-yaml
+from /streaky/http-server import application, controller, websocket-session, create-application, parse-config-yaml
+from /streaky/http-server/internal import routes, http-method, incoming-request, wire-response, encoded-response
 from /core/errors import dependency-error
 from /core/testing import assert-equal-bool, assert-equal-string
 
 class site implements controller
     consuming function routes routes; registered-routes routes
-        registered-routes = registered-routes.get; '/', this.home
-        registered-routes = registered-routes.get; '/about', this.about
+        registered-routes = registered-routes.endpoint; (instance http-method::get;), '/', this.home
+        registered-routes = registered-routes.endpoint; (instance http-method::get;), '/about', this.about
         return registered-routes
 
-    async function home string;
-        return 'hello from Terrane'
+    async function home wire-response; _request incoming-request
+        return encoded-response; 200, 'text/plain', 'hello from Terrane'
 
-    async function about string;
-        return 'about'
+    async function about wire-response; _request incoming-request
+        return encoded-response; 200, 'text/plain', 'about'
 
 class api implements controller
     consuming function routes routes; registered-routes routes
-        registered-routes = registered-routes.get; '/health', this.health
+        registered-routes = registered-routes.endpoint; (instance http-method::get;), '/health', this.health
         return registered-routes
 
-    async function health string;
-        return 'ok'
+    async function health wire-response; _request incoming-request
+        return encoded-response; 200, 'text/plain', 'ok'
 
 class socket-controller implements controller
     consuming function routes routes; registered-routes routes

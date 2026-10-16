@@ -1,7 +1,7 @@
 namespace http-server-demo
 
 from /streaky/http-server/annotations import endpoint, path, query, body, route-group, request-example, response-example, api-documentation
-from /streaky/http-server import http-response, create-response
+from /streaky/http-server import api
 from /core/collections import list
 
 /// # Explore the Terrane catalog
@@ -24,14 +24,8 @@ from /core/collections import list
 /// supplied request example. See the [demo overview](/about) for the HTML site.
 @[api-documentation; title = 'Terrane Catalog API', version = '0.1.0']
 @[route-group; prefix = '/api', response-formats = (list; 'json', 'yaml', 'xml'), default-response-format = 'json']
-class catalog-api
+class catalog-api uses api
     private catalog shared ref catalog-store = create-catalog;
-
-    private function item-representation item-response; item-id int, detailed bool
-        item = this.catalog.read; item-id
-        if not detailed
-            item.in-stock = false
-        return item
 
     /// Check that the catalog service is running.
     ///
@@ -59,7 +53,7 @@ class catalog-api
     ///
     /// You can also request XML; unsupported Accept preferences receive 406.
     /// @returns The catalog item, with stock availability populated only when detailed is true.
-    @[endpoint; method = 'GET', path = '/items/{item-id}', summary = 'Read a catalog item']
+    @[endpoint; method = 'GET|HEAD', path = '/items/{item-id}', summary = 'Read or inspect a catalog item']
     @[response-example; name = 'detailed', summary = 'Item with stock details', value = '{"id":1,"name":"Terrane notebook","price-cents":1200,"in-stock":true}']
     async function read-item item-response; (
         /// Catalog identifier of the item to retrieve; the demo starts with items 1 and 2.
@@ -67,7 +61,10 @@ class catalog-api
         /// Include stock availability; otherwise in-stock is reported as false.
         @[query;] @[request-example; value = 'true'] detailed bool = false,
     )
-        return this.item-representation; item-id, detailed
+        item = this.catalog.read; item-id
+        if not detailed
+            item.in-stock = false
+        return item
 
     /// Search current catalog item names; the limit defaults to ten when omitted.
     ///
@@ -171,31 +168,13 @@ class catalog-api
     ///
     /// @returns HTTP 204 with no response body; HTTP 404 if the item does not exist.
     @[endpoint; method = 'DELETE', path = '/items/{item-id}', summary = 'Delete a catalog item']
-    async function delete-item http-response; (
+    async function delete-item none; (
         /// Identifier of the catalog item to remove.
         @[path;] @[request-example; value = '2'] item-id int,
     )
         catalog = this.catalog
         catalog.delete; item-id
-        return create-response; 204, '', ''
-
-    /// Check that a catalog item exists without downloading its representation.
-    /// Uses the same representation and negotiation as GET, preserving Content-Type,
-    /// Content-Length, and Vary while the native router removes the wire body.
-    ///
-    /// ```console
-    /// curl -I http://127.0.0.1:3187/api/items/2
-    /// ```
-    ///
-    /// @returns HTTP 200 and headers only, or HTTP 404 and no body for a missing item.
-    @[endpoint; method = 'HEAD', path = '/items/{item-id}', summary = 'Check a catalog item']
-    async function head-item item-response; (
-        /// Identifier of the catalog item whose existence to check.
-        @[path;] @[request-example; value = '2'] item-id int,
-        /// Include stock availability, exactly as for the corresponding GET request.
-        @[query;] @[request-example; value = 'true'] detailed bool = false,
-    )
-        return this.item-representation; item-id, detailed
+        return none
 
     /// Discover the methods supported on a catalog item resource.
     ///
@@ -207,9 +186,31 @@ class catalog-api
     ///
     /// @returns HTTP 204 with Allow: GET, PUT, PATCH, DELETE, HEAD, OPTIONS and no body.
     @[endpoint; method = 'OPTIONS', path = '/items/{item-id}', summary = 'Discover catalog item methods']
-    async function item-options http-response; (
+    async function item-options none; (
         /// Item-resource identifier; OPTIONS does not require that this item exists.
         @[path; name = 'item-id'] @[request-example; value = '2'] _item-id int,
     )
         # Keep Allow in sync with the /items/{item-id} endpoint registrations.
-        return (create-response; 204, '', '').with-header; 'allow', 'GET, PUT, PATCH, DELETE, HEAD, OPTIONS'
+        response = this.response
+        if response != none
+            response.set-header; 'allow', 'GET, PUT, PATCH, DELETE, HEAD, OPTIONS'
+        return none
+
+    /// Inspect the invocation's method, target, protocol, addresses, headers, and cookie.
+    /// Forwarded client/scheme information is trusted only by the application's proxy policy.
+    /// @returns This request's metadata, or no value outside a routed invocation.
+    @[endpoint; method = 'GET', path = '/request', summary = 'Inspect request context']
+    async function request-info request-summary|none; (
+        /// Demonstrates per-response status control without throwing an exception.
+        @[query;] status int = 200,
+    )
+        request = this.request
+        response = this.response
+        if request != none
+            if response != none
+                response.set-status; status
+                marker = request.header-value; 'x-request-id'
+                if marker != none
+                    response.set-header; 'x-request-id', marker
+            return summarize-request; request
+        return none

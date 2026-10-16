@@ -42,15 +42,19 @@ template files at runtime.
 
 ## Application model
 
-Create an application with `create-application`, add controllers with `application.mount`, add static content with `application.static-directory`, optionally replace the listen address with `application.with-address`, and start it with `application.serve`.
+Create an application with `create-application`, compose selected annotated API classes through the native consumer integration, add static content with `application.static-directory`, optionally replace the listen address with `application.with-address`, and start it with `application.serve`.
 
-A controller implements `controller.routes`. The framework passes that callback a `routes` value scoped to the controller's mount prefix. The callback registers relative handlers with `routes.get` and returns the routes. Handlers are ordinary reusable Terrane asynchronous functions returning `string`; safe handlers may declare `throws throwable`, which becomes HTTP 500 on failure. Use a distinct parameter name such as `registered-routes` to avoid shadowing the `routes` type.
+Annotated endpoints are instance methods of selected classes that use the public
+`api` trait. The framework copies each mounted source into a request-local invocation
+and attaches optional request and response contexts to that copy; it never mutates
+the mounted source or passes request context as a handler parameter. Mutable response
+operations share request-local backing, while ordinary collection state is copied by
+value. Applications that need shared state must opt into explicit shared-reference
+state, as the catalog demo does.
 
-For handlers that need client identity, `routes.get-with-client` accepts an asynchronous function from `client-info` to `string`. `client-info.peer-ip` returns the TCP peer and `client-info.client-ip` returns the resolved client address, each as projected `ip-addr|none` (`IpAddr` imported with a kebab-case alias). Identity is resolved independently of the client allowlist, so logging does not require configuring that list.
-
-`routes.endpoint` accepts an asynchronous `http-request` to `http-response` callback with a `throws throwable` bound. Path, query, and body conversion failures are input errors and return HTTP 422 before the callback runs. Handler failures, including template-render failures, propagate to the HTTP boundary and return HTTP 500.
-
-The public model therefore exposes neither Axum's `Router` nor its move-and-return registration pattern. `application` and `routes` own that native state and preserve Terrane's ordinary consuming-builder semantics internally.
+The `routes` value is internal routing transport, not an application authoring API.
+The public model exposes neither Axum's `Router` nor its move-and-return registration
+pattern.
 
 Listener creation uses core `listen-tcp`, then consumes the listener through `into-native` before passing it to Axum. The package neither declares nor imports Tokio directly; Tokio remains underneath core and Axum, with one compiler-bound runtime owner. Core's automatic backlog policy now applies to this server, rather than Axum/Tokio's direct-bind default. Peer metadata uses core's `native-socket-address`, preserving direct/client allowlist and forwarded-header behavior. Axum still owns HTTP serving and WebSockets; no HTTP-specific adapter is added to the compiler or platform support.
 
@@ -60,7 +64,6 @@ or projected-method boundary; `http-errors/typed-catch-fields` removes the error
 payload codec once typed catches expose the original descriptor's fields. These are
 removal criteria, not capabilities or scheduled compiler changes.
 
-A root controller uses the prefix `/`. The framework merges root routes and nests non-root controller prefixes, allowing exact root routes, prefixed controllers, and static directories to coexist. Configuration rejects duplicate mount paths rather than assigning order-dependent precedence.
 
 ## YAML composition
 
@@ -87,9 +90,9 @@ Forwarded headers are trusted only when the direct-connection list is non-empty 
 
 An empty list is permissive independently of the other list. Invalid addresses and networks fail when serving begins. Rejected requests receive HTTP `403 Forbidden`, including WebSocket upgrade requests.
 
-With no direct allowlist, forwarded headers are ignored and the client IP is the TCP peer. With a trusted proxy, missing or malformed forwarded identity remains `none`, never the proxy's IP: a non-empty client allowlist denies the request, while an empty client allowlist permits it with unresolved identity. A non-empty direct allowlist still rejects peers outside it.
+With no direct allowlist, forwarded headers are ignored and the client IP is the TCP peer. With a trusted proxy, missing or malformed forwarded identity remains `none`, never the proxy's IP: a non-empty client allowlist denies the request, while an empty client allowlist permits it with unresolved identity. The request context exposes peer and client addresses separately, as well as whether the direct peer was trusted.
 
-This policy supports a single trusted edge proxy. Rightmost extraction is not multi-hop trusted-chain traversal: deployments with multiple proxy hops must normalize identity at the edge before using this policy.
+This policy supports a single trusted edge proxy. Rightmost extraction is not multi-hop trusted-chain traversal: deployments with multiple proxy hops must normalize identity at the edge before using this policy. Effective scheme metadata follows trusted-proxy provenance: RFC `Forwarded` proto is considered first, legacy `X-Forwarded-Proto` only when `Forwarded` is absent, and malformed trusted scheme metadata remains unknown (`none`).
 
 Header-value parsing is provided by projected upstream `client-ip` with its `forwarded-header` feature, directly over Axum's borrowed `HeaderMap`. Terrane retains trust decisions, independent allowlists, and network matching over projected `ipnet` values. Denied requests convert projected `StatusCode::FORBIDDEN` through Axum's `IntoResponse` implementation. No handwritten header grammar or Rust adapter is maintained here.
 
@@ -97,52 +100,38 @@ The direct `ConnectInfo<SocketAddr>` lookup and `into_make_service_with_connect_
 
 ## WebSockets
 
-Controllers register a WebSocket endpoint with `routes.websocket`. Its reusable asynchronous handler receives a Terrane `websocket-session`, not an Axum extractor or Rust stream.
+WebSocket endpoints are handled by the framework's internal route registration. Their asynchronous handlers receive a Terrane `websocket-session`, not an Axum extractor or Rust stream.
 
 `websocket-session.receive` returns a `websocket-event`. Text events carry `event.text`; close, binary, ping, and pong events retain their protocol kind. `send-text` sends a text frame and `close` performs an explicit close. Transport failures use the ordinary `dependency-error` contract. The framework catches a handler's dependency failure after upgrade so one failed session does not terminate the HTTP server.
 
 The current typed payload surface is text-first. Binary event payloads and explicit ping/pong payload APIs remain future additions; non-text events are identified without exposing Axum's message enum.
 
-## Statuses, redirects, and HTTP errors
+## Response control
 
-Use `http-response` as the general response mechanism. `create-response(status,
-content-type, body)` accepts already-encoded text; `create-json-response(status,
-document)` uses Terrane's built-in JSON encoder. Add headers by retaining the result of
-`.with-header; name, value`. Annotated handlers can return these responses directly,
-without forced status 200 or a second encoding pass. `create-redirect-response(location,
-status = 303)` supports 301, 302, 303, 307, and 308.
+Return a typed body (or `none`) and use the class's optional `response` context to
+set status, headers, content type/length, `Vary`, or a redirect. The server applies
+these overrides after successful handler completion. Throw `http-error` for an early
+error status; unexpected handler failures remain HTTP 500.
 
-Returned responses accept final statuses 200–599; informational statuses and protocol
-upgrades are not ordinary response values. Explicit `Content-Type` headers override
-the content-type field case-insensitively, with the last value winning and exactly
-one sent. Other repeated headers, including `Set-Cookie`, remain ordered and repeated.
+The listener is plain TCP, not TLS. Terminate TLS at a trusted proxy and rely on
+forwarded scheme/identity metadata only when the TCP peer matches the configured
+direct allowlist. See the annotation and proxy-security guides for the class API,
+request metadata, and trust rules.
 
-For early error exits, `throw http-error; 403` generates 403 Forbidden with a `Forbidden`
-body. Supply a detail string, or use `throw (create-http-error; response)` to preserve an
-explicit 400–599 response's JSON body and custom headers. This also works for text GET and
-client-aware GET handlers. Other
-exceptions and invalid responses remain HTTP 500, without exposing their details.
-
-Caught Terrane throwables do not currently expose original object fields. As a package-only
-implementation, `http-error` transports its response through a private built-in-JSON payload
-in the preserved message, with human-readable `render` output. Applications must not mutate
-or depend on that payload. Normal success and redirect responses do not use this codec.
-
-The annotation consumer builds OpenAPI and model schemas as document values, then encodes
-the complete document with the built-in JSON codec. It does not concatenate JSON syntax.
-
-An `api-documentation` annotation on one selected class or callable sets the document-wide
-API title and version. Its declaration comment supplies Markdown overview content, or an
-explicit `description` overrides it. The catalog demo sets **Terrane Catalog API**, version
-**0.1.0**, and includes a getting-started overview rendered on Stoplight's opening page.
-
-Declaration comments preserve CommonMark, including fenced code examples. Repeatable
-`request-example` annotations on parameters and `response-example` annotations on handlers
-provide named OpenAPI examples, with values authored as JSON source text. XML examples use
-the same serializer as real XML responses. The catalog demo shows these descriptions and
-examples in Stoplight, alongside its format selector. Request bodies remain JSON regardless
-of the chosen response format; explicit `http-response` values remain handler-controlled.
+The annotation consumer constructs OpenAPI and model schemas as document values and
+encodes the result with the built-in JSON codec. `api-documentation` supplies the
+document title, version, and overview. Repeatable request/response examples provide
+named OpenAPI examples authored as JSON text; request bodies remain JSON regardless
+of the negotiated response format.
 
 ## Current boundary
 
-Text GET handlers and WebSockets remain available without consumers. `routes.endpoint` adds explicit request/response callbacks for GET, POST, PUT, PATCH, DELETE, HEAD, and OPTIONS. The annotation consumer supports class-based route groups, typed scalar and model request/response values, JSON/YAML/XML response negotiation, HTML and plain-text handlers, static directories, authored examples, Markdown descriptions, and OpenAPI generation. The catalog demo shares one seeded in-memory store across requests and demonstrates all seven methods. Dependency/state injection, general middleware, authentication metadata, and streaming responses remain outside this surface; applications use typed Terrane APIs rather than native extractor traits, service types, lifetimes, or borrowing.
+The class-bound annotation consumer supports GET, POST, PUT, PATCH, DELETE, HEAD, and
+OPTIONS, typed scalar and model request/response values, JSON/YAML/XML response negotiation, HTML and plain-text
+handlers, static directories, authored examples, Markdown descriptions, and OpenAPI
+generation. HEAD suppresses the body while preserving representation metadata;
+metadata-only handlers may provide a known length without retrieving a body. The
+catalog demo shares one seeded in-memory store across requests. Dependency/state
+injection, general middleware, authentication metadata, and streaming responses
+remain outside this surface; applications use typed Terrane APIs rather than native
+extractor traits, service types, lifetimes, or borrowing.
