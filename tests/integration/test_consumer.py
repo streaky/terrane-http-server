@@ -12,6 +12,8 @@ import socket
 import tempfile
 import unittest
 import time
+from xml.etree import ElementTree
+import yaml
 
 
 PACKAGE = Path(__file__).resolve().parents[2]
@@ -99,6 +101,25 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
     def test_invalid_method(self):
         self.check("@[endpoint; path = '/trace', method = 'TRACE']\nasync function trace string;\n    return 'trace'\n", ["trace"], origin="trace")
 
+    def test_malformed_response_example_is_rejected(self):
+        self.check("from /streaky/http-server/annotations import response-example\n"
+            "@[endpoint; path = '/example']\n@[response-example; value = '{broken']\n"
+            "async function example string;\n    return 'ok'\n", ["example"], origin="example")
+
+    def test_duplicate_response_example_names_are_rejected(self):
+        self.check("from /streaky/http-server/annotations import response-example\n"
+            "@[endpoint; path = '/example']\n@[response-example; value = 'null']\n"
+            "@[response-example; value = '1']\nasync function example string;\n    return 'ok'\n",
+            ["example"], origin="example")
+
+    def test_default_response_format_must_be_enabled(self):
+        self.check("from /streaky/http-server/annotations import route-group\n"
+            "from /core/collections import list\n"
+            "@[route-group; response-formats = (list; 'yaml'), default-response-format = 'json']\n"
+            "class api\n    @[endpoint; path = '/example']\n"
+            "    async function example string;\n        return 'ok'\n",
+            ["api", "api::example"], origin="example")
+
     def test_all_supported_methods_and_scalar_responses(self):
         (self.directory / "package.toml").write_text('\n'.join([
             'package = "http-annotation-test"',
@@ -122,18 +143,39 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
             '"/http-annotation-test::final-upgrade", '
             '"/http-annotation-test::nonfinite-model", "/http-annotation-test::nonfinite-model::single", '
             '"/http-annotation-test::tampered-error", "/http-annotation-test::quoted-default", '
+            '"/http-annotation-test::xml-api", "/http-annotation-test::xml-api::value", '
+            '"/http-annotation-test::xml-api::nothing", '
+            '"/http-annotation-test::yaml-api", "/http-annotation-test::yaml-api::value", '
             '"/http-annotation-test::quoted-default::label"]',
         ]))
         (self.directory / "src/main.trn").write_text(r"""namespace http-annotation-test
-from /streaky/http-server/annotations import endpoint, body, query
+from /streaky/http-server/annotations import endpoint, body, query, route-group, response-example
 from /streaky/http-server import create-application, http-response, create-response, create-json-response, create-redirect-response, http-error, create-http-error, controller, routes, client-info
 from /streaky/http-server import http-response as explicit-response
 from /streaky/http-server import http-header
-from /generated/http-server import annotated-controller
+from /generated/http-server import mount-annotated
 from /core/process import arguments
 from /core/collections import list
 from /core/errors import throwable, coercion-error
-from /core/documents import document-map-entries, make-document-string, make-document-map
+from /core/documents import document-value, document-map-entries, make-document-none, make-document-string, make-document-map
+
+@[route-group; prefix = '/xml', response-formats = (list; 'yaml', 'xml'), default-response-format = 'xml']
+class xml-api
+    @[endpoint; path = '/value']
+    @[response-example; value = '"<café & units>"']
+    async function value string;
+        return '<café & units>'
+
+    @[endpoint; path = '/nothing']
+    @[response-example; value = 'null']
+    async function nothing document-value;
+        return make-document-none;
+
+@[route-group; prefix = '/yaml', response-formats = (list; 'yaml', 'xml')]
+class yaml-api
+    @[endpoint; path = '/value']
+    async function value string;
+        return 'yaml-default'
 
 class tree-node
     name string
@@ -204,7 +246,14 @@ async function created explicit-response;
     response = response.with-header; 'set-cookie', 'first=1'
     return response.with-header; 'set-cookie', 'second=2'
 
-@[endpoint; path = '/redirect']
+/// An explicit redirect with a documentation example.
+/// ````terrane
+/// @returns This marker is code, not response documentation.
+/// ```
+/// ````
+/// @returns The empty redirect body; follow the Location header.
+@[endpoint; path = '/redirect', content-type = 'text/plain']
+@[response-example; value = '""']
 async function redirect http-response;
     return create-redirect-response; '/method', 307
 
@@ -274,7 +323,7 @@ class text-controller implements controller
 
 async function main throws throwable;
     app = create-application;
-    app = app.mount; '/', (instance annotated-controller;)
+    app = mount-annotated; app
     app = app.mount; '/text', (instance text-controller;)
     supplied = arguments;
     address = supplied[0].text
@@ -328,10 +377,10 @@ main
             finally:
                 connection.close()
             self.assertEqual(request("GET", "/method"), 7)
-            def raw_request(path):
+            def raw_request(path, headers=None):
                 connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
                 try:
-                    connection.request("GET", path)
+                    connection.request("GET", path, headers=headers or {})
                     response = connection.getresponse()
                     return response.status, response.getheaders(), response.read()
                 finally:
@@ -376,6 +425,10 @@ main
             responses = schema["paths"]["/created"]["get"]["responses"]
             self.assertNotIn("200", responses)
             self.assertIn("default", responses)
+            redirect = schema["paths"]["/redirect"]["get"]
+            self.assertIn("@returns", redirect["description"])
+            self.assertNotIn("```", redirect["responses"]["default"]["description"])
+            self.assertEqual(redirect["responses"]["default"]["content"]["text/plain"]["examples"]["default"]["value"], "")
             default = schema["paths"]["/quoted-default"]["get"]["parameters"][0]
             self.assertEqual(default["schema"]["default"], special)
             self.assertFalse(default["required"])
@@ -408,6 +461,23 @@ main
                 expected_type = "boolean" if isinstance(value, bool) else "integer" if isinstance(value, int) else "string"
                 self.assertEqual(operations[method.lower()]["responses"]["200"]["content"]["application/json"]["schema"]["type"], expected_type)
             model_schema = schema["paths"]["/models"]["post"]["requestBody"]
+            status, headers, payload = raw_request("/xml/value")
+            self.assertEqual((status, dict(headers)["content-type"]), (200, "application/xml"))
+            self.assertEqual(ElementTree.fromstring(payload).text, "<café & units>")
+            self.assertEqual(dict(headers)["vary"], "Accept")
+            status, headers, payload = raw_request("/yaml/value")
+            self.assertEqual((status, dict(headers)["content-type"], yaml.safe_load(payload)),
+                (200, "application/yaml", "yaml-default"))
+            self.assertEqual(raw_request("/xml/value", {"Accept": "application/json"})[0], 406)
+            self.assertEqual(raw_request("/method", {"Accept": "application/yaml"})[0], 406)
+            xml_schema = schema["paths"]["/xml/value"]["get"]["responses"]["200"]["content"]
+            self.assertEqual(set(xml_schema), {"application/xml", "application/yaml"})
+            self.assertEqual(ElementTree.fromstring(xml_schema["application/xml"]["examples"]["default"]["value"]).text,
+                "<café & units>")
+            null_content = schema["paths"]["/xml/nothing"]["get"]["responses"]["200"]["content"]
+            self.assertIsNone(null_content["application/yaml"]["examples"]["default"]["value"])
+            self.assertEqual(ElementTree.fromstring(null_content["application/xml"]["examples"]["default"]["value"]).get(
+                "{http://www.w3.org/2001/XMLSchema-instance}nil"), "true")
             model_schema = schema["components"]["schemas"][model_schema["content"]["application/json"]["schema"]["$ref"].split("/")[-1]]
             self.assertNotIn("internal", model_schema["properties"])
             self.assertNotIn("description", model_schema)

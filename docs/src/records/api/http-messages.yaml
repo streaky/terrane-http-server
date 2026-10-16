@@ -25,6 +25,8 @@ documentation:
         the request body, is bounded to two MiB, and rejects malformed JSON or invalid UTF-8.
         Generated annotation adapters convert input failures to HTTP 422 before calling
         the selected handler.
+        Its `accept` field owns the combined HTTP `Accept` header values, allowing callers to
+        select a response before consuming the request body.
 
         `http-response` is the general response value. It holds `status`, `content-type`,
         an already-encoded text `body`, and an ordered list of `http-header` values.
@@ -41,6 +43,22 @@ documentation:
         creates an empty response with a `Location` header; supported codes are 301, 302,
         303, 307, and 308. Annotated handlers may return `http-response` directly: adapters
         preserve its status, headers, content type, and body without encoding it again.
+
+        `select-response-format(accept, formats, default-format)` chooses an enabled `json`,
+        `yaml`, or `xml` representation. Supply a nonempty enabled list and an enabled
+        default. Missing preferences use that default; quality values, wildcards, and specific
+        exclusions are honored, and an empty result means no representation is acceptable.
+        `response-media-type(format)` gives the corresponding `application/json`,
+        `application/yaml`, or `application/xml` media type.
+
+        `encode-response-document(document, format)` encodes the common document tree.
+        `create-document-response(status, document, format)` builds the encoded response and
+        adds `Vary: Accept`; it does not read request headers itself. YAML emits block
+        collections with exact JSON-compatible scalar quoting. XML uses a `response` root,
+        named map/model fields, wrapped arrays of `item` elements, and `xsi:nil="true"` for
+        null. XML field names must match `[A-Za-z_][A-Za-z0-9_.-]*`; forbidden names or control
+        characters throw rather than producing malformed output. The annotation guide shows
+        API-level enabled/default format selection and authored media examples.
 
         `create-error-response(status, detail = '')` accepts 400–599 and uses the standard
         reason phrase when detail is omitted. `throw http-error; 403` therefore returns

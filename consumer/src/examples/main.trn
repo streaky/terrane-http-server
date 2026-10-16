@@ -1,0 +1,69 @@
+namespace http-server-consumer/examples
+
+from /core/collections import list, range
+from /core/documents import document-value, document-map-entries, make-document-none, make-document-string
+from /core/documents/json import parse-json, default-json-options
+from /terrane/annotation-consumer-protocol import get, at, text, consumer-error
+from /http-server-consumer/documents import object-value
+from /streaky/http-server import encode-response-document
+
+function xml-example string throws consumer-error; value document-value, origin document-value
+    try
+        return encode-response-document; value, 'xml'
+    catch
+        throw (instance consumer-error; origin, 'HTTP example cannot be represented as XML')
+
+function declaration-examples document-value throws consumer-error; declaration document-value, content-type string
+    applications = get; declaration, 'annotations'
+    examples = instance document-map-entries;
+    seen list of string = list
+    for index in (range; 0, (applications.length;))
+        application = at; applications, index
+        identity = text; (get; application, 'identity')
+        request-example = identity == '/streaky/http-server/annotations::request-example'
+        response-example = identity == '/streaky/http-server/annotations::response-example'
+        if request-example or response-example
+            payload = get; application, 'payload'
+            pairs = get; payload, 'value'
+            name string = 'default'
+            summary string = ''
+            description string = ''
+            value string = ''
+            for pair-index in (range; 0, (pairs.length;))
+                pair = at; pairs, pair-index
+                key = text; (get; (at; pair, 0), 'value')
+                field = at; pair, 1
+                field-value = get; field, 'value'
+                if key == 'name'
+                    name = text; field-value
+                else if key == 'summary'
+                    summary = text; field-value
+                else if key == 'description'
+                    description = text; field-value
+                else if key == 'value'
+                    value = text; field-value
+            if name == ''
+                throw (instance consumer-error; declaration, 'HTTP example name must not be empty')
+            for previous in seen
+                if previous == name
+                    throw (instance consumer-error; declaration, 'duplicate HTTP example name: ' + name)
+            seen.append; name
+            parsed = parse-json; value, (default-json-options;)
+            if parsed.failed
+                throw (instance consumer-error; declaration, 'HTTP example value must contain valid JSON')
+            example-value = parsed.value
+            if content-type == 'text/html' or content-type == 'text/plain'
+                if example-value.kind != 'string'
+                    throw (instance consumer-error; declaration, 'text HTTP examples must be JSON strings')
+            if content-type == 'application/xml'
+                example-value = make-document-string; (xml-example; example-value, declaration)
+            fields = instance document-map-entries;
+            fields.append; 'value', example-value
+            if summary != ''
+                fields.append; 'summary', (make-document-string; summary)
+            if description != ''
+                fields.append; 'description', (make-document-string; description)
+            examples.append; name, (object-value; fields, declaration)
+    if seen.length == 0
+        return make-document-none;
+    return object-value; examples, declaration

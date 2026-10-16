@@ -1,0 +1,111 @@
+namespace streaky/http-server
+
+from /core/collections import list, range
+from /core/documents import document-value
+from /core/errors import throwable, coercion-error
+
+public function response-media-type string throws coercion-error; format string
+    switch format
+        case 'json'
+            return 'application/json'
+        case 'yaml'
+            return 'application/yaml'
+        case 'xml'
+            return 'application/xml'
+        case else
+            throw coercion-error
+
+public function create-document-response http-response throws throwable; status int, document document-value, format string
+    body = encode-response-document; document, format
+    response = create-response; status, (response-media-type; format), body
+    return response.with-header; 'vary', 'Accept'
+
+class accept-range
+    media string
+    quality int = 1000
+    valid bool = true
+
+private function accept-quality int; source string
+    pieces = source.split; '.'
+    if pieces.length > 2 or (pieces[0] != '0' and pieces[0] != '1')
+        return -1
+    quality int = 0
+    if pieces[0] == '1'
+        quality = 1000
+    if pieces.length == 2
+        fraction = pieces[1]
+        if fraction.length > 3
+            return -1
+        scale int = 100
+        for digit in (fraction.split; '')
+            if not ('0123456789'.contains; digit)
+                return -1
+            if quality == 1000 and digit != '0'
+                return -1
+            try
+                quality = quality + (digit.radix; 10) * scale
+            catch
+                return -1
+            if scale == 100
+                scale = 10
+            else
+                scale = 1
+    return quality
+
+private function parse-accept-range accept-range; source string
+    parts = source.split; ';'
+    result = instance accept-range;
+    result.media = (parts[0].trim;).lower;
+    seen-quality bool = false
+    for index in (range; 1, parts.length)
+        parameter = parts[index].split; '='
+        if parameter.length != 2
+            result.valid = false
+        else
+            name = (parameter[0].trim;).lower;
+            if name == 'q'
+                if seen-quality
+                    result.valid = false
+                seen-quality = true
+                result.quality = accept-quality; (parameter[1].trim;)
+                if result.quality < 0
+                    result.valid = false
+            else if not seen-quality
+                # Offered representations have no media-type parameters.
+                result.valid = false
+    return result
+
+# Match specificity before quality within each representation: an explicit
+# application/json;q=0 excludes JSON even alongside */*;q=1.
+public function select-response-format string throws coercion-error; accept string, formats list of string, default-format string
+    if accept == ''
+        return default-format
+    ranges list of accept-range = list
+    for source in (accept.split; ',')
+        parsed = parse-accept-range; source
+        if parsed.valid
+            ranges.append; parsed
+    chosen string = ''
+    best-quality int = 0
+    best-specificity int = -1
+    for format in formats
+        media = response-media-type; format
+        quality int = -1
+        specificity int = -1
+        for candidate in ranges
+            matched int = -1
+            if candidate.media == media
+                matched = 2
+            else if candidate.media == 'application/*'
+                matched = 1
+            else if candidate.media == '*/*'
+                matched = 0
+            if matched > specificity or (matched == specificity and candidate.quality > quality)
+                if matched >= 0
+                    specificity = matched
+                    quality = candidate.quality
+        if quality > 0 and (quality > best-quality or (quality == best-quality and specificity > best-specificity) or (quality == best-quality and specificity == best-specificity and format == default-format))
+            chosen = format
+            best-quality = quality
+            best-specificity = specificity
+    return chosen

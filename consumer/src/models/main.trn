@@ -8,6 +8,7 @@ from /core/collections import list, range, map
 from /core/documents import document-value, document-map-entries, make-document-none, make-document-string, make-document-bool, make-document-map
 from /http-server-consumer/documents import object-value, list-value, type-schema, source-quote, documented-schema
 from /core/errors import replace-error
+from /http-server-consumer/formats import named-xml-schema
 
 function model-error; declaration document-value, message string
     throw (instance consumer-error; declaration, message)
@@ -129,7 +130,11 @@ function model-field-schema document-value throws consumer-error; kind string, d
         item-kind = kind.replace; 'list of ', ''
         items = instance document-map-entries;
         items.append; 'type', (make-document-string; 'array')
-        items.append; 'items', (model-field-schema; item-kind, declarations, field)
+        item-schema = model-field-schema; item-kind, declarations, field
+        items.append; 'items', (named-xml-schema; item-schema, 'item', field)
+        xml = instance document-map-entries;
+        xml.append; 'wrapped', (make-document-bool; true)
+        items.append; 'xml', (object-value; xml, field)
         return (object-value; items, field)
     if is-model; kind, declarations
         return (model-reference; kind, declarations)

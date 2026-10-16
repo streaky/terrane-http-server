@@ -29,12 +29,13 @@ documentation:
         selected classes and may declare `throws throwable`. Path and query parameters are
         `string`, `int`, or `bool`; query defaults must be compile-time scalar values of the
         declared type. Results may be JSON-encoded scalars, `document-value`, selected
-        ordinary model classes, or `string` for `text/html` and `text/plain`. Returning
-        `http-response` bypasses the automatic 200 response and encoding: the handler owns
-        status, headers, content type, and body. A body may be a decoded `document-value`
-        or a selected model class. Model schemas and codecs derive from their actual fields,
-        including nested model values. Schemas are assembled as document trees and encoded
-        with Terrane's built-in canonical JSON encoder, not JSON string concatenation.
+        ordinary model classes, or `string` for `text/html` and `text/plain`. Automatically
+        encoded responses can negotiate JSON, YAML, or XML when enabled on their route group.
+        `http-response` bypasses automatic encoding: the handler owns status, headers, content
+        type, and body. A body may be a decoded `document-value` or a selected model class.
+        Model schemas and codecs derive from actual fields, including nested values. Schemas
+        are assembled as document trees and encoded with Terrane's canonical JSON encoder.
+        Request bodies remain JSON: response negotiation never changes how inputs are decoded.
 
         Explicit `operation-id` values remain unchanged. Otherwise the consumer derives a
         unique URL-safe ID from the canonical declaration identity, so documentation viewers
@@ -65,6 +66,39 @@ documentation:
             @[query;] quantity int = 1,
         )
             return item-id * quantity
+      response: null
+      diagnostic: null
+      markdown: null
+    - type: example
+      id: examples-and-formats
+      title: Authored examples and negotiated response formats
+      language: terrane
+      mode: illustrative
+      target: null
+      timeout-ms: null
+      source: |-
+        from /core/collections import list
+        from /streaky/http-server/annotations import route-group, endpoint, body, request-example, response-example
+
+        class count-input
+            /// Requested number of units.
+            quantity int
+
+        @[route-group; prefix = '/api', response-formats = (list; 'json', 'yaml', 'xml'), default-response-format = 'json']
+        class count-api
+            /// Echo a typed count, without saving it.
+            ///
+            /// ```console
+            /// curl -H 'Content-Type: application/json' -H 'Accept: application/yaml' \
+            ///   -d '{"quantity":3}' http://localhost:3187/api/count
+            /// ```
+            /// @returns The supplied count in the negotiated representation.
+            @[endpoint; method = 'POST', path = '/count']
+            @[response-example; name = 'three', value = '{"quantity":3}']
+            async function echo-count count-input; (
+                @[body;] @[request-example; name = 'three', value = '{"quantity":3}'] value count-input,
+            )
+                return value
       response: null
       diagnostic: null
       markdown: null
@@ -128,9 +162,34 @@ documentation:
             strict boolean conversion, missing required values, and malformed JSON fail with
             HTTP 422 before calling the handler. The generated endpoint callback accepts the
             ordinary `throws throwable` effect, so handler failures propagate to the HTTP
-            boundary as HTTP 500 rather than being converted into input errors. Generated
-            responses default to `application/json`. A returned string is a JSON string, not raw
-            JSON text; string endpoints may instead select `text/html` or `text/plain`.
+            boundary as HTTP 500 rather than being converted into input errors.
+            Generated responses default to `application/json`. A returned string is a JSON
+            string, not raw JSON text; string endpoints may instead select `text/html` or
+            `text/plain`. Request bodies remain JSON: response negotiation never changes
+            how inputs are decoded.
+
+            A route group may enable negotiated automatic responses with `response-formats`
+            (a list drawn from `json`, `yaml`, and `xml`) and choose a `default-response-format`.
+            Omitting formats enables JSON only; an empty default selects the first enabled
+            format, while an explicit default must be enabled. `Accept` chooses among enabled
+            formats using quality values and wildcard specificity; a specific zero-quality
+            exclusion overrides a broader wildcard. No acceptable choice produces HTTP 406
+            before the handler runs. Automatic success responses include `Vary: Accept`.
+            OpenAPI advertises each enabled media type; `x-default-response-content-type`
+            records the configured default, because OpenAPI has no standard default-media field.
+            Explicit `http-response` values remain handler-controlled; HTML and plain-text
+            endpoint content types bypass automatic serialization. Validation errors keep their
+            JSON 422 body; explicit HTTP errors and unexpected failures keep their existing
+            response/error behavior.
+
+            JSON uses the canonical document representation. YAML responses use
+            `application/yaml` with readable block collections and JSON-compatible scalar
+            quoting. XML responses use `application/xml`, with a `response` root; model/map
+            fields become child elements, arrays use a wrapper with `item` children, and null
+            uses `xsi:nil="true"` with the standard XML Schema instance namespace. Empty strings
+            are empty non-nil elements. XML map keys must match `[A-Za-z_][A-Za-z0-9_.-]*`;
+            unsupported names and XML-forbidden control characters fail response construction
+            instead of producing malformed XML. Request bodies remain JSON.
 
             Body and result types may be explicitly selected public Terrane model classes
             with canonical default constructors. The consumer uses their public non-static
@@ -155,6 +214,25 @@ documentation:
             to expose its comment; selecting the class alone still supplies its type/default
             contracts but not field documentation. Undocumented or unselected field comments
             are omitted from OpenAPI, rather than rendered as a placeholder description.
+            Use repeatable `request-example` annotations on parameter declarations and
+            `response-example` annotations on handlers. Each has `name` (default `default`),
+            optional `summary` and `description`, and required `value` as JSON source text.
+            JSON parsing preserves scalar, array, object, and null values; names must be
+            nonempty and unique on that declaration. Examples document useful calls and
+            responses but do not constrain runtime behavior. Body examples remain JSON even
+            when responses negotiate YAML or XML. OpenAPI examples belong to their matching
+            media types and parameter/request-body objects.
+            YAML examples retain the parsed structured value; XML examples are serialized
+            strings using the same encoder as runtime responses. Text/HTML examples must
+            contain a JSON string. Invalid example JSON or duplicate names fail compilation.
+
+            Declaration comments support CommonMark, including paragraphs, emphasis, links,
+            lists, and fenced code blocks. Keep `@returns` as the final documentation section:
+            it describes the automatic 200 response (or the default response for an explicit
+            `http-response` handler), independently of the operation description. See
+            [OpenAPI rich-text formatting](https://spec.openapis.org/oas/v3.1.0.html#rich-text-formatting)
+            and the [Media Type Object](https://spec.openapis.org/oas/v3.1.0.html#media-type-object)
+            for the specification details.
 
             End an endpoint's documentation with `@returns ` followed by the response
             description. The marker must start a documentation line; following lines belong

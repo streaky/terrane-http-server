@@ -75,3 +75,12 @@ function test-final-response-rejects-informational-statuses;
         catch coercion-error
             rejected = true
         assert-equal-bool; rejected, true
+
+function test-repeated-accept-headers-preserve-specific-exclusions throws throwable;
+    builder = request-builder::new;
+    builder = builder.header; 'accept', 'application/json;q=0'
+    builder = builder.header; 'accept', '*/*;q=1'
+    native = builder.body; (native-body::empty;)
+    request = instance http-request; move native, '/'
+    selected = select-response-format; request.accept, (list; 'json', 'yaml'), 'json'
+    assert-equal-string; selected, 'yaml'

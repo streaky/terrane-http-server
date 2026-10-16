@@ -1,0 +1,96 @@
+namespace streaky/http-server
+
+from /core/collections import list
+from /core/documents import document-value, make-document-string
+from /core/documents/json import canonical-json
+from /core/errors import throwable, coercion-error
+
+public function encode-response-document string throws throwable; document document-value, format string
+    switch format
+        case 'json'
+            return response-json; document
+        case 'yaml'
+            return response-yaml; document, ''
+        case 'xml'
+            return '<?xml version="1.0" encoding="UTF-8"?>\n<response xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"' + (response-xml; document, 'response') + '\n'
+        case else
+            throw coercion-error
+
+private function response-json string throws coercion-error; document document-value
+    encoded = canonical-json; document
+    if encoded.failed
+        throw coercion-error
+    return encoded.value.encoded
+
+# JSON quoting is also YAML 1.2 quoting. Only collections use block syntax;
+# exact numbers and string keys never pass through lossy coercion.
+private function yaml-block bool; value document-value
+    return (value.kind == 'map' or value.kind == 'list') and (value.length;) > 0
+
+private function response-yaml string throws throwable; document document-value, indent string
+    if not (yaml-block; document)
+        return indent + (response-json; document) + '\n'
+    result string = ''
+    index int = 0
+    while index < (document.length;)
+        if document.kind == 'map'
+            key = document.key; index
+            field = document.field; key
+            if field.failed
+                throw coercion-error
+            value = field.value
+            # Quoted keys preserve arbitrary document keys and YAML-looking text.
+            prefix = indent + (response-json; (make-document-string; key)) + ':'
+        else
+            field = document.item; index
+            if field.failed
+                throw coercion-error
+            value = field.value
+            prefix = indent + '-'
+        if yaml-block; value
+            result = result + prefix + '\n' + (response-yaml; value, (indent + '  '))
+        else
+            result = result + prefix + ' ' + (response-json; value) + '\n'
+        index = index + 1
+    return result
+
+private function xml-name bool; name string
+    valid bool = rust
+        let mut bytes = name.bytes();
+        bytes.next().is_some_and(|b| b.is_ascii_alphabetic() || b == b'_')
+            && bytes.all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.'))
+    return valid
+
+private function xml-text string throws throwable; value string
+    valid bool = rust
+        value.chars().all(|c| matches!(c as u32, 0x9 | 0xA | 0xD | 0x20..=0xD7FF | 0xE000..=0xFFFD | 0x10000..=0x10FFFF))
+    if not valid
+        throw coercion-error
+    return value.replace; (list; '&', '<', '>', '\r'), (list; '&amp;', '&lt;', '&gt;', '&#13;')
+
+# The caller owns the opening element name. Maps use named children; lists are
+# wrapped and use item children; none uses xsi:nil instead of an ambiguous empty
+# string. Root response declares the namespace once for the whole tree.
+private function response-xml string throws throwable; document document-value, element-name string
+    if document.kind == 'none'
+        return ' xsi:nil="true"/>'
+    content string = ''
+    if document.kind == 'map' or document.kind == 'list'
+        index int = 0
+        while index < (document.length;)
+            name = 'item'
+            if document.kind == 'map'
+                name = document.key; index
+                if not (xml-name; name)
+                    throw coercion-error
+                child = document.field; name
+            else
+                child = document.item; index
+            if child.failed
+                throw coercion-error
+            content = content + '<' + name + (response-xml; child.value, name)
+            index = index + 1
+    else
+        content = xml-text; document.scalar
+    return '>' + content + '</' + element-name + '>'
+

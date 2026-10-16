@@ -1,25 +1,44 @@
 namespace http-server-demo
 
-from /streaky/http-server/annotations import endpoint, path, query, body, route-group
+from /streaky/http-server/annotations import endpoint, path, query, body, route-group, request-example, response-example
 from /streaky/http-server import http-error
 from /core/collections import list
 
-@[route-group; prefix = '/api']
+@[route-group; prefix = '/api', response-formats = (list; 'json', 'yaml', 'xml'), default-response-format = 'json']
 class catalog-api
     /// Check that the catalog service is running.
-    /// @returns The JSON string "ok" when the service is accepting requests.
+    ///
+    /// This lightweight endpoint is useful for **health checks** and deployment probes.
+    ///
+    /// ```console
+    /// curl -i -H 'Accept: application/json' http://127.0.0.1:3187/api/health
+    /// ```
+    ///
+    /// Accepted representations are JSON (default), YAML, and XML.
+    /// @returns The string "ok", encoded in the negotiated response format.
     @[endpoint; method = 'GET', path = '/health', summary = 'Service health']
+    @[response-example; name = 'healthy', summary = 'Service is ready', value = '"ok"']
     async function health string;
         return 'ok'
 
     /// Look up a catalog item. Detailed responses include stock information.
+    ///
+    /// Use the item identifier in the path and optionally request its stock details:
+    /// `GET /api/items/1?detailed=true`. The response follows the item's typed model.
+    ///
+    /// ```console
+    /// curl -H 'Accept: application/yaml' 'http://127.0.0.1:3187/api/items/1?detailed=true'
+    /// ```
+    ///
+    /// You can also request XML; unsupported Accept preferences receive 406.
     /// @returns The catalog item, with stock availability populated only when detailed is true.
     @[endpoint; method = 'GET', path = '/items/{item-id}', summary = 'Read a catalog item']
+    @[response-example; name = 'detailed', summary = 'Item with stock details', value = '{"id":1,"name":"Terrane notebook","price-cents":1200,"in-stock":true}']
     async function read-item item-response; (
         /// Catalog identifier of the item to retrieve; this demo provides item 1.
-        @[path;] item-id int,
+        @[path;] @[request-example; value = '1'] item-id int,
         /// Include stock availability; otherwise in-stock is reported as false.
-        @[query;] detailed bool = false,
+        @[query;] @[request-example; value = 'true'] detailed bool = false,
     )
         if item-id != 1
             throw http-error; 404, 'Catalog item not found'
@@ -29,13 +48,26 @@ class catalog-api
         return create-item-response; 1, 'Terrane notebook', 1200, available
 
     /// Search the catalog; the limit defaults to ten when omitted.
+    ///
+    /// Search is case-sensitive and currently matches terms containing **notebook**.
+    /// A zero or negative limit returns an empty result list.
+    ///
+    /// - `term` is required.
+    /// - `limit` defaults to ten.
+    ///
+    /// ```console
+    /// curl 'http://127.0.0.1:3187/api/search?term=notebook&limit=1'
+    /// ```
+    ///
+    /// See the [demo overview](/about) for more about this stateless catalog.
     /// @returns The search inputs, whether anything matched, and the matching catalog items.
     @[endpoint; method = 'GET', path = '/search', summary = 'Search the catalog']
+    @[response-example; name = 'notebook-match', summary = 'One matching notebook', value = '{"term":"notebook","limit":1,"matches":true,"items":[{"id":1,"name":"Terrane notebook","price-cents":1200,"in-stock":true}]}']
     async function search search-response; (
         /// Case-sensitive search text; the demo matches text containing "notebook".
-        @[query;] term string,
+        @[query;] @[request-example; value = '"notebook"'] term string,
         /// Maximum number of results; zero or negative values produce no matches.
-        @[query;] limit int = 10,
+        @[query;] @[request-example; value = '1'] limit int = 10,
     )
         matched = limit > 0 and (term.contains; 'notebook')
         results list of item-response = list
@@ -44,11 +76,22 @@ class catalog-api
         return create-search-response; term, limit, matched, results
 
     /// Price a catalog order without persisting it.
+    ///
+    /// Send a JSON request body with an item identifier and quantity. Request bodies
+    /// remain JSON regardless of the selected response representation.
+    ///
+    /// ```console
+    /// curl -H 'Content-Type: application/json' -H 'Accept: application/xml' \
+    ///   -d '{"item-id":1,"quantity":3}' http://127.0.0.1:3187/api/orders/quote
+    /// ```
+    ///
+    /// The XML response is negotiated independently of the JSON input.
     /// @returns The item, requested quantity, and total price in cents; no order is saved.
     @[endpoint; method = 'POST', path = '/orders/quote', summary = 'Price a catalog order']
+    @[response-example; name = 'three-notebooks', summary = 'Quote for three notebooks', value = '{"item-id":1,"quantity":3,"total-cents":3600}']
     async function quote-order quote-output; (
         /// Item and quantity to price; an omitted quantity retains its default of zero.
-        @[body;] order order-input,
+        @[body;] @[request-example; name = 'three-notebooks', value = '{"item-id":1,"quantity":3}'] order order-input,
     )
         if order.item-id != 1
             throw http-error; 404, 'Catalog item not found'

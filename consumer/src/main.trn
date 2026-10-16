@@ -8,6 +8,8 @@ from /http-server-consumer/rendering import make-code-engine, render-code
 from /streaky/template import template-engine, template-value, text-value, bool-value, list-value as template-list-value, object-value as template-object-value
 from /http-server-consumer/documents import object-value, list-value, encode-document, type-schema, source-quote, operation-documentation, declaration-documentation
 from /http-server-consumer/models import is-model, model-reference, model-schemas, model-codecs, model-encoder, model-decoder
+from /http-server-consumer/examples import declaration-examples
+from /http-server-consumer/formats import read-response-policy, format-list-source, xml-response-schema, format-media-type
 
 function template-operations list of template-value throws consumer-error; operations list of operation, owner string
     values list of template-value = list
@@ -177,10 +179,12 @@ function make-operation operation throws consumer-error; declaration document-va
     prefix string = '/'
     documented bool = true
     target = 'selected-handler' + index
+    group-policy = make-document-none;
     if pieces.length == 3
         owner = pieces[0] + '::' + pieces[1]
         group = route-group-record; declarations, owner, declaration
         group-meta = annotation; group, 'route-group', '/streaky/http-server/annotations'
+        group-policy = group-meta
         prefix = metadata-string; group-meta, 'prefix', group
         route-shape; prefix, group
         if prefix != '/' and (prefix.contains.end; '/')
@@ -207,6 +211,8 @@ function make-operation operation throws consumer-error; declaration document-va
         fail; declaration, 'HTTP response content-type must be application/json, text/html, or text/plain'
     if not result-explicit and content-type != 'application/json' and result-kind != 'string'
         fail; declaration, 'HTML and plain-text endpoints must return string'
+    policy = read-response-policy; group-policy, declaration
+    structured = not result-explicit and content-type == 'application/json'
     operation-id = metadata-string; metadata, 'operation-id', declaration
     if operation-id == ''
         try
@@ -231,6 +237,9 @@ function make-operation operation throws consumer-error; declaration document-va
         fail; declaration, 'HTTP handler signature must expose parameters'
     if (parameters.length;) == 0
         adapter = '    async function adapt-handler' + index + ' http-response throws throwable; _request http-request\n'
+    if structured
+        adapter = '    async function adapt-handler' + index + ' http-response throws throwable; request http-request\n'
+        adapter = adapter + '        response-format = select-response-format; request.accept, ' + (format-list-source; policy) + ', ' + (source-quote; policy.default-format) + '\n        if response-format == \'\'\n            return (create-response; 406, \'text/plain; charset=utf-8\', \'No acceptable response representation\').with-header; \'vary\', \'Accept\'\n'
     names list of string = list
     locations list of string = list
     path-names list of string = list
@@ -293,6 +302,9 @@ function make-operation operation throws consumer-error; declaration document-va
             parameter-documentation = declaration-documentation; record
             if parameter-documentation != ''
                 parameter-entries.append; 'description', (make-document-string; parameter-documentation)
+            examples = declaration-examples; record, 'application/json'
+            if examples.kind != 'none'
+                parameter-entries.append; 'examples', examples
             parameter-schema-entries = instance document-map-entries;
             parameter-schema-entries.append; 'type', (make-document-string; (schema-type; kind))
             initial = source-quote; ''
@@ -344,13 +356,16 @@ function make-operation operation throws consumer-error; declaration document-va
             adapter = adapter + '        parameter-value' + body-index + ' = body-value\n'
         media-entries = instance document-map-entries;
         media-entries.append; 'schema', body-schema
+        body-record = parameter-record; declarations, identity, (text; (get; body-parameter, 'name')), declaration
+        examples = declaration-examples; body-record, 'application/json'
+        if examples.kind != 'none'
+            media-entries.append; 'examples', examples
         media-value = object-value; media-entries, declaration
         media-entries = instance document-map-entries;
         media-entries.append; 'application/json', media-value
         content-value = object-value; media-entries, declaration
         request-entries = instance document-map-entries;
         request-entries.append; 'required', (make-document-bool; true)
-        body-record = parameter-record; declarations, identity, (text; (get; body-parameter, 'name')), declaration
         body-documentation = declaration-documentation; body-record
         if body-documentation != ''
             request-entries.append; 'description', (make-document-string; body-documentation)
@@ -361,23 +376,46 @@ function make-operation operation throws consumer-error; declaration document-va
     if result-explicit
         if result-description == ''
             result-description = 'Explicit response status; HTTP error responses may also occur'
-        response-entries.append; 'default', (response-description; result-description, declaration)
+        examples = declaration-examples; declaration, content-type
+        if examples.kind == 'none'
+            response-entries.append; 'default', (response-description; result-description, declaration)
+        else
+            media-entries = instance document-map-entries;
+            media-entries.append; 'examples', examples
+            content-entries = instance document-map-entries;
+            content-entries.append; content-type, (object-value; media-entries, declaration)
+            response-entries.append; 'default', (response-with-content; result-description, (object-value; content-entries, declaration), declaration)
     else
         response-schema = object-value; (instance document-map-entries;), declaration
         if result-model
             response-schema = model-reference; result-kind, declarations
         else if not result-document
             response-schema = type-schema; (schema-type; result-kind)
-        media-entries = instance document-map-entries;
-        media-entries.append; 'schema', response-schema
-        media-value = object-value; media-entries, declaration
         content-entries = instance document-map-entries;
-        content-entries.append; content-type, media-value
+        media-types list of string = list;
+        if structured
+            for format in policy.formats
+                media-types.append; (format-media-type; format, declaration)
+            entries.append; 'x-default-response-content-type', (make-document-string; (format-media-type; policy.default-format, declaration))
+        else
+            media-types.append; content-type
+        for media-type in media-types
+            media-entries = instance document-map-entries;
+            media-schema = response-schema
+            if media-type == 'application/xml'
+                media-schema = xml-response-schema; response-schema, declaration
+            media-entries.append; 'schema', media-schema
+            examples = declaration-examples; declaration, media-type
+            if examples.kind != 'none'
+                media-entries.append; 'examples', examples
+            content-entries.append; media-type, (object-value; media-entries, declaration)
         content-value = object-value; content-entries, declaration
         if result-description == ''
             result-description = 'Successful response'
         response-entries.append; '200', (response-with-content; result-description, content-value, declaration)
     response-entries.append; '422', (response-description; 'Request validation failed', declaration)
+    if structured
+        response-entries.append; '406', (response-description; 'No enabled response representation satisfies Accept', declaration)
     response-entries.append; '500', (response-description; 'Handler or response construction failed', declaration)
     if not result-explicit
         response-entries.append; 'default', (response-description; 'HTTP error response', declaration)
@@ -389,7 +427,7 @@ function make-operation operation throws consumer-error; declaration document-va
     adapter = adapter + '\n'
     if result-explicit
         adapter = adapter + '        return result\n'
-    else if content-type != 'application/json'
+    else if not structured
         adapter = adapter + '        return create-response; 200, ' + (source-quote; content-type) + ', result\n'
     else
         if result-document
@@ -401,7 +439,7 @@ function make-operation operation throws consumer-error; declaration document-va
         else
             factory = 'make-document-' + result-kind
             adapter = adapter + '        document = ' + factory + '; result\n'
-        adapter = adapter + '        return create-json-response; 200, document\n'
+        adapter = adapter + '        return create-document-response; 200, document, response-format\n'
     mounted-path = path
     if prefix != '/'
         mounted-path = prefix + path

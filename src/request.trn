@@ -19,7 +19,7 @@ public class http-request
     private values list of string = list
     private query url-query = instance url-query;
     private body native-body|none = none
-
+    accept string = ''
     private function construct; request native-request, route-pattern string
         uri = (request.uri;).clone;
         actual-path = uri.path;
@@ -45,6 +45,7 @@ public class http-request
         if parsed.failed
             throw coercion-error
         this.query = parsed.value.query
+        this.accept = request-accept-header; ref request
         this.body = request.into_body;
 
     function path-value string|none; name string
@@ -113,6 +114,17 @@ private function header-name-is-content-type bool; name string
 
 public function create-response http-response; status int, content-type string, body string
     return instance http-response; status, content-type, body
+
+function request-accept-header string; request ref native-request
+    result string = rust
+        let mut combined = String::new();
+        for value in request.headers().get_all("accept").iter() {
+            let Ok(text) = value.to_str() else { return "!invalid-accept".to_owned(); };
+            if !combined.is_empty() { combined.push(','); }
+            combined.push_str(text);
+        }
+        combined
+    return result
 
 # Typed boundaries for the package-owned conversion module; it supplies no HTTP policy.
 class decoded-text

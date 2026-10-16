@@ -6,7 +6,7 @@
 
 The [documentation publication](docs/src/manual.yaml) contains the [general documentation](docs/src/records/guides/introduction.yaml), a complete public API reference, and a [getting-started tutorial](docs/src/records/tutorials/first-server.yaml). These are YAML sources in the shared Terrane manual format; prose, declarations, code, and data examples retain their typed structure rather than being flattened into Markdown.
 
-The [annotation guide](docs/src/records/guides/annotations.yaml) describes the package's explicit native Terrane consumer. `endpoint`, `path`, `query`, and `body` metadata generate class-based route adapters, typed scalar and model-body extraction, JSON or HTML responses, and OpenAPI 3.1 JSON. `route-group` supplies a class mount prefix and controls schema inclusion; repeatable `static-directory` metadata mounts cwd-relative assets. Signatures determine types and query defaults; malformed inputs return 422. Ordinary safe async handlers may throw `throwable`; handler and render failures return HTTP 500.
+The [annotation guide](docs/src/records/guides/annotations.yaml) describes the package's explicit native Terrane consumer. `endpoint`, `path`, `query`, and `body` metadata generate class-based route adapters, typed scalar and JSON model-body extraction, negotiated JSON/YAML/XML or HTML/text responses, and OpenAPI 3.1 JSON. `route-group` supplies a class mount prefix, schema inclusion, enabled response formats, and their default; unspecified formats enable JSON only. Repeatable `static-directory` metadata mounts cwd-relative assets. Signatures determine types and query defaults; malformed inputs return 422, and unsatisfied response `Accept` preferences return 406. Ordinary safe async handlers may throw `throwable`; handler and render failures return HTTP 500.
 
 The [catalog demo](demo/README.md) exercises these capabilities with typed catalog models, AOT template-backed HTML pages, static Stoplight Elements docs, and a prefixed `/api` with OpenAPI at `/api/openapi.json`. Build both native consumers first with `sh packages/http-server/build-consumer.sh`, then build or run the demo through Terrane.
 
@@ -132,6 +132,13 @@ or depend on that payload. Normal success and redirect responses do not use this
 The annotation consumer builds OpenAPI and model schemas as document values, then encodes
 the complete document with the built-in JSON codec. It does not concatenate JSON syntax.
 
+Declaration comments preserve CommonMark, including fenced code examples. Repeatable
+`request-example` annotations on parameters and `response-example` annotations on handlers
+provide named OpenAPI examples, with values authored as JSON source text. XML examples use
+the same serializer as real XML responses. The catalog demo shows these descriptions and
+examples in Stoplight, alongside its format selector. Request bodies remain JSON regardless
+of the chosen response format; explicit `http-response` values remain handler-controlled.
+
 ## Current boundary
 
-Text GET handlers and WebSockets remain available without consumers. `routes.endpoint` adds explicit request/response callbacks for GET, POST, PUT, PATCH, and DELETE. The annotation consumer supports class-based route groups, typed scalar and model request/response values, HTML and plain-text handlers, static directories, and OpenAPI generation. Dependency/state injection, general middleware, authentication metadata, and streaming responses remain outside this surface; applications use typed Terrane APIs rather than native extractor traits, service types, lifetimes, or borrowing.
+Text GET handlers and WebSockets remain available without consumers. `routes.endpoint` adds explicit request/response callbacks for GET, POST, PUT, PATCH, and DELETE. The annotation consumer supports class-based route groups, typed scalar and model request/response values, JSON/YAML/XML response negotiation, HTML and plain-text handlers, static directories, authored examples, Markdown descriptions, and OpenAPI generation. Dependency/state injection, general middleware, authentication metadata, and streaming responses remain outside this surface; applications use typed Terrane APIs rather than native extractor traits, service types, lifetimes, or borrowing.

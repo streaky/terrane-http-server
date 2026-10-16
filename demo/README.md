@@ -44,11 +44,29 @@ final `@returns` section describes its response independently of the operation d
 These descriptions appear in `/api/openapi.json`, which the `/docs/` viewer loads; no
 separate hand-maintained schema is needed.
 
+The catalog API declares illustrative request and response examples with the
+`request-example` and `response-example` annotations. The example values are JSON
+source text, including scalar path/query values and model-shaped body/response objects.
+They document useful calls, not validation rules. The API group enables JSON, YAML,
+and XML automatic responses, defaulting to JSON; clients can choose with `Accept`.
+Unsupported formats return 406 and negotiated replies vary on `Accept`. Request bodies
+continue to use JSON regardless of response format. XML wraps values in a `response`
+root, arrays in a wrapper with `item` children, and null with `xsi:nil="true"`.
+Explicit `http-response` and the site's HTML routes are not automatically serialized.
+
+OpenAPI descriptions preserve CommonMark formatting, so the catalog declarations include
+renderable fenced curl examples alongside prose, lists, emphasis, and links. OpenAPI
+documents media-specific examples according to the [rich-text formatting](https://spec.openapis.org/oas/v3.1.0.html#rich-text-formatting)
+and [Media Type Object](https://spec.openapis.org/oas/v3.1.0.html#media-type-object)
+contracts.
+
 The explicit `[consumers.http-server]` manifest selects every model class and field, route group, API/site class, endpoint method, and annotated parameter. The demo also configures the `template` consumer using the dependency's staged executable. `mount-annotated` mounts the selected classes, and the `catalog-api` group prefix is `/api`; OpenAPI is at `/api/openapi.json` and its schema paths include that prefix. The `site` group disables OpenAPI documentation for its HTML methods. It serves `public/docs` at `/docs` and `public/assets` at `/assets`, relative to the process working directory. Run the demo with `demo` as cwd (the Docker image uses `/app`) so these paths resolve correctly. Generated files and consumer executables live beneath `.trn` and must not be edited by hand.
 
 The runtime uses Debian Trixie: the locally prebuilt binary requires glibc 2.38 or newer, which Debian Bookworm does not provide. Build the binary for the container's Linux architecture.
 
 ## Behavioral tests
+
+The Python integration suites use PyYAML to parse and verify YAML response bodies.
 
 ```console
 sh packages/http-server/build-consumer.sh

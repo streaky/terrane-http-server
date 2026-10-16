@@ -13,6 +13,8 @@ import sys
 import tempfile
 import time
 import unittest
+from xml.etree import ElementTree
+import yaml
 
 
 BINARY = Path(sys.argv.pop(1)).resolve() if len(sys.argv) > 1 else None
@@ -81,11 +83,13 @@ class CatalogHttpTests(unittest.TestCase):
         cls.server.stderr.close()
 
     @classmethod
-    def request(cls, method, path, body=None, content_type="application/json"):
+    def request(cls, method, path, body=None, content_type="application/json", headers=None):
         connection = http.client.HTTPConnection("127.0.0.1", cls.port, timeout=5)
         try:
-            headers = {"Content-Type": content_type} if body is not None else {}
-            connection.request(method, path, body=body, headers=headers)
+            request_headers = dict(headers or {})
+            if body is not None:
+                request_headers["Content-Type"] = content_type
+            connection.request(method, path, body=body, headers=request_headers)
             response = connection.getresponse()
             payload = response.read().decode()
             response_type = response.getheader("Content-Type")
@@ -93,6 +97,50 @@ class CatalogHttpTests(unittest.TestCase):
             return response.status, response_type, parsed
         finally:
             connection.close()
+
+    def test_negotiated_yaml_and_xml_responses(self):
+        path = "/api/search?term=notebook&limit=2"
+        expected = self.request("GET", path)[2]
+        status, content_type, body = self.request("GET", path, headers={"Accept": "application/yaml"})
+        self.assertEqual((status, content_type), (200, "application/yaml"))
+        self.assertEqual(yaml.safe_load(body), expected)
+        status, content_type, body = self.request("GET", path, headers={"Accept": "application/xml"})
+        self.assertEqual((status, content_type), (200, "application/xml"))
+        root = ElementTree.fromstring(body)
+        self.assertEqual(root.tag, "response")
+        self.assertEqual(root.findtext("items/item/name"), expected["items"][0]["name"])
+        self.assertEqual(root.findtext("items/item/price-cents"), str(expected["items"][0]["price-cents"]))
+        status, content_type, body = self.request("GET", "/api/health", headers={"Accept": "application/xml"})
+        self.assertEqual((status, content_type), (200, "application/xml"))
+        self.assertEqual(ElementTree.fromstring(body).text, "ok")
+        self.assertEqual(self.request("GET", "/api/health", headers={"Accept": "image/png"})[0], 406)
+        status, content_type, body = self.request("GET", "/api/health",
+            headers={"Accept": "application/json;q=0,application/yaml;q=0.5,*/*;q=0.1"})
+        self.assertEqual((status, content_type, yaml.safe_load(body)), (200, "application/yaml", "ok"))
+
+    def test_authored_examples_match_real_requests_and_negotiated_responses(self):
+        _, _, schema = self.request("GET", "/api/openapi.json")
+        quote = schema["paths"]["/api/orders/quote"]["post"]
+        request_example = quote["requestBody"]["content"]["application/json"]["examples"]["three-notebooks"]["value"]
+        content = quote["responses"]["200"]["content"]
+        self.assertEqual(set(content), {"application/json", "application/yaml", "application/xml"})
+        for media_type, media in content.items():
+            expected = media["examples"]["three-notebooks"]["value"]
+            status, actual_type, actual = self.request("POST", "/api/orders/quote",
+                json.dumps(request_example), headers={"Accept": media_type})
+            self.assertEqual((status, actual_type), (200, media_type))
+            if media_type == "application/yaml":
+                actual = yaml.safe_load(actual)
+            if media_type == "application/xml":
+                self.assertEqual(ElementTree.tostring(ElementTree.fromstring(actual)),
+                    ElementTree.tostring(ElementTree.fromstring(expected)))
+            else:
+                self.assertEqual(actual, expected)
+        item = schema["paths"]["/api/items/{item-id}"]["get"]
+        parameters = {p["name"]: p["examples"]["default"]["value"] for p in item["parameters"]}
+        path = f'/api/items/{parameters["item-id"]}?detailed={str(parameters["detailed"]).lower()}'
+        self.assertEqual(self.request("GET", path)[2],
+            item["responses"]["200"]["content"]["application/json"]["examples"]["detailed"]["value"])
 
     def test_api_routes_and_scalar_defaults(self):
         self.assertEqual(self.request("POST", "/api/health")[0], 405)

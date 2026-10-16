@@ -48,14 +48,38 @@ function documented-schema document-value throws consumer-error; schema document
     entries.append; 'description', (make-document-string; description)
     return object-value; entries, declaration
 
+function documentation-fence string; line string
+    if (line.contains.start; '    ') or (line.contains.start; '\t')
+        return ''
+    trimmed = line.trim.start;
+    if not (trimmed.contains.start; '```') and not (trimmed.contains.start; '~~~')
+        return ''
+    marker = '`'
+    if trimmed.contains.start; '~'
+        marker = '~'
+    result string = ''
+    for character in (trimmed.split; '')
+        if character != marker
+            break
+        result = result + character
+    return result
+
 function operation-documentation string; declaration document-value, returns bool
     documentation = declaration-documentation; declaration
     result string = ''
     in-returns bool = false
+    fence string = ''
     for line in (documentation.split; '\n')
-        if (line.contains.start; '@returns ')
-            in-returns = true
-            line = line.replace; '@returns ', ''
+        marker = documentation-fence; line
+        if fence == ''
+            if marker != ''
+                fence = marker
+            else if (line.contains.start; '@returns ')
+                in-returns = true
+                line = line.trim.start; '@returns '
+        else if marker.length >= fence.length and (line.trim;) == marker
+            if ((fence.contains.start; '`') and (marker.contains.start; '`')) or ((fence.contains.start; '~') and (marker.contains.start; '~'))
+                fence = ''
         if in-returns == returns
             if result != ''
                 result = result + '\n'
