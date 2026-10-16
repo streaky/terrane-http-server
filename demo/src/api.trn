@@ -1,9 +1,28 @@
 namespace http-server-demo
 
-from /streaky/http-server/annotations import endpoint, path, query, body, route-group, request-example, response-example
+from /streaky/http-server/annotations import endpoint, path, query, body, route-group, request-example, response-example, api-documentation
 from /streaky/http-server import http-error
 from /core/collections import list
 
+/// # Explore the Terrane catalog
+///
+/// Browse the catalog, search for a notebook, and calculate an order quote.
+/// This API is a **stateless demonstration**: quotes are calculated, not saved.
+///
+/// ## Try your first request
+///
+/// ```console
+/// curl 'http://127.0.0.1:3187/api/items/1?detailed=true'
+/// ```
+///
+/// - Item prices and quote totals are in **cents**.
+/// - Request bodies use JSON. Responses support JSON (the default), YAML, and XML.
+/// - Use `Accept: application/yaml` or `Accept: application/xml` to choose a response.
+/// - Malformed inputs return 422; unknown catalog items return 404.
+///
+/// Start with **Read a catalog item**, then try **Price a catalog order** using its
+/// supplied request example. See the [demo overview](/about) for the HTML site.
+@[api-documentation; title = 'Terrane Catalog API', version = '0.1.0']
 @[route-group; prefix = '/api', response-formats = (list; 'json', 'yaml', 'xml'), default-response-format = 'json']
 class catalog-api
     /// Check that the catalog service is running.

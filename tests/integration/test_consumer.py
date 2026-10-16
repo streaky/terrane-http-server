@@ -120,6 +120,14 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
             "    async function example string;\n        return 'ok'\n",
             ["api", "api::example"], origin="example")
 
+    def test_multiple_api_documentation_owners_are_rejected(self):
+        self.check("from /streaky/http-server/annotations import api-documentation\n"
+            "@[api-documentation;]\n@[endpoint; path = '/first']\n"
+            "async function first string;\n    return 'first'\n"
+            "@[api-documentation;]\n@[endpoint; path = '/second']\n"
+            "async function second string;\n    return 'second'\n",
+            ["first", "second"], origin="second")
+
     def test_all_supported_methods_and_scalar_responses(self):
         (self.directory / "package.toml").write_text('\n'.join([
             'package = "http-annotation-test"',
@@ -149,7 +157,7 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
             '"/http-annotation-test::quoted-default::label"]',
         ]))
         (self.directory / "src/main.trn").write_text(r"""namespace http-annotation-test
-from /streaky/http-server/annotations import endpoint, body, query, route-group, response-example
+from /streaky/http-server/annotations import endpoint, body, query, route-group, response-example, api-documentation
 from /streaky/http-server import create-application, http-response, create-response, create-json-response, create-redirect-response, http-error, create-http-error, controller, routes, client-info
 from /streaky/http-server import http-response as explicit-response
 from /streaky/http-server import http-header
@@ -159,6 +167,8 @@ from /core/collections import list
 from /core/errors import throwable, coercion-error
 from /core/documents import document-value, document-map-entries, make-document-none, make-document-string, make-document-map
 
+/// This declaration comment must not override an explicit empty overview.
+@[api-documentation; title = 'Integration fixture', version = '2026.10', description = '']
 @[route-group; prefix = '/xml', response-formats = (list; 'yaml', 'xml'), default-response-format = 'xml']
 class xml-api
     @[endpoint; path = '/value']
@@ -421,6 +431,7 @@ main
                     self.assertNotIn(b"must not escape", payload)
             self.assertEqual(request("GET", "/quoted-default"), special)
             schema = request("GET", "/openapi.json")
+            self.assertNotIn("description", schema["info"])
             self.assertEqual(schema["paths"]["/created"]["get"]["summary"], 'A "quoted" café\nand a backslash \\')
             responses = schema["paths"]["/created"]["get"]["responses"]
             self.assertNotIn("200", responses)

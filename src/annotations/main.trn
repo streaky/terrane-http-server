@@ -25,6 +25,12 @@ class query
 class body
 
 
+@[annotation; targets = (list; (instance annotation-target::class;), (instance annotation-target::callable;)), repeatable = false]
+class api-documentation
+    title string = 'HTTP API'
+    version string = '1.0.0'
+    description string|none = none
+
 @[annotation; targets = (list; (instance annotation-target::class;)), repeatable = false]
 class route-group
     prefix string = '/'

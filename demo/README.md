@@ -44,6 +44,13 @@ final `@returns` section describes its response independently of the operation d
 These descriptions appear in `/api/openapi.json`, which the `/docs/` viewer loads; no
 separate hand-maintained schema is needed.
 
+The selected `catalog-api` class owns the document-wide `api-documentation` annotation:
+its app-authored title is **Terrane Catalog API** and its API version is **0.1.0**.
+The class's Markdown documentation supplies the `/docs/` overview, including a quick-start
+curl command, representation choices, and catalog conventions. Apps can instead set an
+explicit annotation `description`; an empty string suppresses the overview. Only one
+selected declaration may own the API information, even when several route groups are mounted.
+
 The catalog API declares illustrative request and response examples with the
 `request-example` and `response-example` annotations. The example values are JSON
 source text, including scalar path/query values and model-shaped body/response objects.

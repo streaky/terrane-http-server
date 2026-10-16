@@ -10,6 +10,7 @@ from /http-server-consumer/documents import object-value, list-value, encode-doc
 from /http-server-consumer/models import is-model, model-reference, model-schemas, model-codecs, model-encoder, model-decoder
 from /http-server-consumer/examples import declaration-examples
 from /http-server-consumer/formats import read-response-policy, format-list-source, xml-response-schema, format-media-type
+from /http-server-consumer/overview import api-info
 
 function template-operations list of template-value throws consumer-error; operations list of operation, owner string
     values list of template-value = list
@@ -542,10 +543,7 @@ function generate string throws consumer-error; request document-value
                     method-entries.append; (method-key; item.method, request), (item.schema.to-document;)
             paths-entries.append; current.mounted-path, (object-value; method-entries, request)
     path-value = object-value; paths-entries, request
-    info-entries = instance document-map-entries;
-    info-entries.append; 'title', (make-document-string; 'HTTP API')
-    info-entries.append; 'version', (make-document-string; '1.0.0')
-    info-value = object-value; info-entries, request
+    info-value = api-info; declarations
     server-entries = instance document-map-entries;
     server-entries.append; 'url', (make-document-string; '/')
     server-value = object-value; server-entries, request

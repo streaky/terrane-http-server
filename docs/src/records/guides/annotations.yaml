@@ -78,12 +78,17 @@ documentation:
       timeout-ms: null
       source: |-
         from /core/collections import list
-        from /streaky/http-server/annotations import route-group, endpoint, body, request-example, response-example
+        from /streaky/http-server/annotations import route-group, endpoint, body, request-example, response-example, api-documentation
 
         class count-input
             /// Requested number of units.
             quantity int
 
+        /// # Count API
+        ///
+        /// Echo a count without storing it. Requests use **JSON**; choose a response
+        /// representation with the Accept header.
+        @[api-documentation; title = 'Count API', version = '0.1.0']
         @[route-group; prefix = '/api', response-formats = (list; 'json', 'yaml', 'xml'), default-response-format = 'json']
         class count-api
             /// Echo a typed count, without saving it.
@@ -144,6 +149,34 @@ documentation:
             uses prefix `/api`; its schema paths include that prefix and its server URL is
             `/`. A group may set `document = false` to keep its endpoints out of the API
             schema while still serving HTML pages.
+    - id: overview
+      title: API title, version, and overview
+      blocks:
+        - type: markdown
+          markdown: |-
+            Place `api-documentation` on one selected class or callable, such as the API's
+            route-group class or application entry function. Its `title` and `version` set
+            OpenAPI `info.title` and `info.version`, which documentation viewers display as
+            the API name and version. This is the application's API version, not the
+            OpenAPI specification version.
+
+            The annotated declaration's `///` or `/** ... */` documentation becomes
+            `info.description`, providing the overview page's content. It supports the same
+            CommonMark formatting as endpoint descriptions: headings, paragraphs, emphasis,
+            lists, links, and fenced code examples. The entire comment is overview content;
+            the endpoint-only `@returns` convention is not applied here.
+
+            An explicit `description` string overrides the declaration comment, including an
+            empty string to suppress the overview. Omitted `description` (or explicit `none`)
+            uses the comment. With no selected `api-documentation` annotation, the existing
+            `HTTP API` title and `1.0.0` version remain the defaults, with no overview text.
+            Those are also the title/version defaults when the annotation omits those fields.
+
+            API information belongs to the single generated OpenAPI document, not separately
+            to each route group. At most one selected declaration may carry this annotation;
+            multiple owners produce a consumer diagnostic rather than depending on selection
+            order. Remember to include the owning declaration in `[consumers.http-server]`'s
+            `declarations` list. The catalog demo annotates its already-selected API class.
     - id: metadata
       title: Metadata and validation
       blocks:

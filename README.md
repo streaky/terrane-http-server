@@ -132,6 +132,11 @@ or depend on that payload. Normal success and redirect responses do not use this
 The annotation consumer builds OpenAPI and model schemas as document values, then encodes
 the complete document with the built-in JSON codec. It does not concatenate JSON syntax.
 
+An `api-documentation` annotation on one selected class or callable sets the document-wide
+API title and version. Its declaration comment supplies Markdown overview content, or an
+explicit `description` overrides it. The catalog demo sets **Terrane Catalog API**, version
+**0.1.0**, and includes a getting-started overview rendered on Stoplight's opening page.
+
 Declaration comments preserve CommonMark, including fenced code examples. Repeatable
 `request-example` annotations on parameters and `response-example` annotations on handlers
 provide named OpenAPI examples, with values authored as JSON source text. XML examples use
