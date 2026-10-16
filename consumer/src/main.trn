@@ -6,7 +6,7 @@ from /core/documents import document-value, document-map-entries, make-document-
 from /core/errors import replace-error
 from /http-server-consumer/rendering import make-code-engine, render-code
 from /streaky/template import template-engine, template-value, text-value, bool-value, list-value as template-list-value, object-value as template-object-value
-from /http-server-consumer/documents import object-value, list-value, encode-document, type-schema, source-quote
+from /http-server-consumer/documents import object-value, list-value, encode-document, type-schema, source-quote, operation-documentation, declaration-documentation
 from /http-server-consumer/models import is-model, model-reference, model-schemas, model-codecs, model-encoder, model-decoder
 
 function template-operations list of template-value throws consumer-error; operations list of operation, owner string
@@ -218,9 +218,7 @@ function make-operation operation throws consumer-error; declaration document-va
     summary = metadata-string; metadata, 'summary', declaration
     description = metadata-string; metadata, 'description', declaration
     if description == ''
-        documentation = get; declaration, 'documentation'
-        if documentation.kind == 'string'
-            description = text; documentation
+        description = operation-documentation; declaration, false
     entries = instance document-map-entries;
     entries.append; 'operationId', (make-document-string; operation-id)
     entries.append; 'summary', (make-document-string; summary)
@@ -292,6 +290,9 @@ function make-operation operation throws consumer-error; declaration document-va
             parameter-entries.append; 'name', (make-document-string; wire-name)
             parameter-entries.append; 'in', (make-document-string; location)
             parameter-entries.append; 'required', (make-document-bool; not optional)
+            parameter-documentation = declaration-documentation; record
+            if parameter-documentation != ''
+                parameter-entries.append; 'description', (make-document-string; parameter-documentation)
             parameter-schema-entries = instance document-map-entries;
             parameter-schema-entries.append; 'type', (make-document-string; (schema-type; kind))
             initial = source-quote; ''
@@ -349,11 +350,18 @@ function make-operation operation throws consumer-error; declaration document-va
         content-value = object-value; media-entries, declaration
         request-entries = instance document-map-entries;
         request-entries.append; 'required', (make-document-bool; true)
+        body-record = parameter-record; declarations, identity, (text; (get; body-parameter, 'name')), declaration
+        body-documentation = declaration-documentation; body-record
+        if body-documentation != ''
+            request-entries.append; 'description', (make-document-string; body-documentation)
         request-entries.append; 'content', content-value
         entries.append; 'requestBody', (object-value; request-entries, declaration)
     response-entries = instance document-map-entries;
+    result-description = operation-documentation; declaration, true
     if result-explicit
-        response-entries.append; 'default', (response-description; 'Explicit response status; HTTP error responses may also occur', declaration)
+        if result-description == ''
+            result-description = 'Explicit response status; HTTP error responses may also occur'
+        response-entries.append; 'default', (response-description; result-description, declaration)
     else
         response-schema = object-value; (instance document-map-entries;), declaration
         if result-model
@@ -366,7 +374,9 @@ function make-operation operation throws consumer-error; declaration document-va
         content-entries = instance document-map-entries;
         content-entries.append; content-type, media-value
         content-value = object-value; content-entries, declaration
-        response-entries.append; '200', (response-with-content; 'Successful response', content-value, declaration)
+        if result-description == ''
+            result-description = 'Successful response'
+        response-entries.append; '200', (response-with-content; result-description, content-value, declaration)
     response-entries.append; '422', (response-description; 'Request validation failed', declaration)
     response-entries.append; '500', (response-description; 'Handler or response construction failed', declaration)
     if not result-explicit

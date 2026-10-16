@@ -37,6 +37,13 @@ paths or establish their throughput.
 
 Missing model fields retain their Terrane defaults; omitted `quantity` is zero. The codecs do not invent domain constraints such as positive quantities. `src/models.trn` defines the models, `src/api.trn` defines the API class, `src/site.trn` defines pages/static annotations, and `src/main.trn` only starts the configured application.
 
+The demo's `///` comments are also its OpenAPI descriptions: parameter comments describe
+path/query inputs and request bodies, model comments describe object schemas, and field
+comments describe each request/response property, including nested list items. An endpoint's
+final `@returns` section describes its response independently of the operation description.
+These descriptions appear in `/api/openapi.json`, which the `/docs/` viewer loads; no
+separate hand-maintained schema is needed.
+
 The explicit `[consumers.http-server]` manifest selects every model class and field, route group, API/site class, endpoint method, and annotated parameter. The demo also configures the `template` consumer using the dependency's staged executable. `mount-annotated` mounts the selected classes, and the `catalog-api` group prefix is `/api`; OpenAPI is at `/api/openapi.json` and its schema paths include that prefix. The `site` group disables OpenAPI documentation for its HTML methods. It serves `public/docs` at `/docs` and `public/assets` at `/assets`, relative to the process working directory. Run the demo with `demo` as cwd (the Docker image uses `/app`) so these paths resolve correctly. Generated files and consumer executables live beneath `.trn` and must not be edited by hand.
 
 The runtime uses Debian Trixie: the locally prebuilt binary requires glibc 2.38 or newer, which Debian Bookworm does not provide. Build the binary for the container's Linux architecture.

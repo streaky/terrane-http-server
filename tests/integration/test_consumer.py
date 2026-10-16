@@ -113,6 +113,7 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
             '"/http-annotation-test::replace", "/http-annotation-test::change", "/http-annotation-test::remove", '
             '"/http-annotation-test::echo-model", "/http-annotation-test::echo-model::value", '
             '"/http-annotation-test::data-model", "/http-annotation-test::tree-node", '
+            '"/http-annotation-test::data-model::nickname", "/http-annotation-test::data-model::selected", '
             '"/http-annotation-test::failing-handler", "/http-annotation-test::throwing-success", '
             '"/http-annotation-test::created", "/http-annotation-test::redirect", "/http-annotation-test::empty", '
             '"/http-annotation-test::denied", "/http-annotation-test::custom-error", '
@@ -142,10 +143,12 @@ class data-model
     active bool = true
     ratio float = 1.5
     small float32 = 0.5
+    /// Optional display name supplied by the caller.
     nickname string|none
     values list of int16
     count uint8 = 7
     children list of tree-node
+    /// Optional selected node; null means no node was chosen.
     selected tree-node|none
     related list of (tree-node)|none
     private internal string = 'not-public'
@@ -376,6 +379,8 @@ main
             default = schema["paths"]["/quoted-default"]["get"]["parameters"][0]
             self.assertEqual(default["schema"]["default"], special)
             self.assertFalse(default["required"])
+            self.assertNotIn("description", default)
+            self.assertNotIn("description", schema["paths"]["/models"]["post"]["requestBody"])
             self.assertEqual(request("GET", "/method"), 7)
             defaults = request("POST", "/models", "{}")
             self.assertEqual(defaults, {"active": True, "ratio": 1.5, "small": 0.5, "nickname": None,
@@ -405,6 +410,14 @@ main
             model_schema = schema["paths"]["/models"]["post"]["requestBody"]
             model_schema = schema["components"]["schemas"][model_schema["content"]["application/json"]["schema"]["$ref"].split("/")[-1]]
             self.assertNotIn("internal", model_schema["properties"])
+            self.assertNotIn("description", model_schema)
+            self.assertNotIn("description", model_schema["properties"]["active"])
+            for name in ("nickname", "selected"):
+                nullable = model_schema["properties"][name]
+                self.assertIsInstance(nullable.get("description"), str)
+                self.assertNotEqual(nullable["description"].strip(), "")
+                self.assertNotEqual(nullable["description"], "none")
+                self.assertEqual(nullable["anyOf"][1], {"type": "null"})
             child_ref = model_schema["properties"]["children"]["items"]["$ref"]
             child_schema = schema["components"]["schemas"][child_ref.split("/")[-1]]
             self.assertEqual(child_schema["properties"]["children"]["items"]["$ref"], child_ref)

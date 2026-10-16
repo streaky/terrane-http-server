@@ -56,9 +56,12 @@ documentation:
         from /streaky/http-server/annotations import endpoint, path, query
 
         /// Calculate a catalog quantity.
+        /// @returns The item identifier multiplied by the requested quantity.
         @[endpoint; method = 'GET', path = '/items/{item-id}', summary = 'Read an item']
         async function read-item int; (
+            /// Identifier of the catalog item.
             @[path;] item-id int,
+            /// Number of units, defaulting to one.
             @[query;] quantity int = 1,
         )
             return item-id * quantity
@@ -141,6 +144,28 @@ documentation:
             models, including recursive model lists. Supported scalar fields include strings,
             booleans, exact/fixed-width integers, and finite binary floats; scalar/model lists
             and nullable fields need no document-map construction in application code.
+
+            Documentation comments also describe the inputs and outputs in OpenAPI. Put a
+            `///` or `/** ... */` comment immediately before a parameter's transport annotation
+            to populate its parameter or request-body description. Comments on selected model
+            classes describe component schemas; comments on their public fields describe
+            properties, including nested objects, lists, and nullable values. These descriptions
+            do not change validation, defaults, or requiredness.
+            Select each field's canonical declaration in the consumer's `declarations` list
+            to expose its comment; selecting the class alone still supplies its type/default
+            contracts but not field documentation. Undocumented or unselected field comments
+            are omitted from OpenAPI, rather than rendered as a placeholder description.
+
+            End an endpoint's documentation with `@returns ` followed by the response
+            description. The marker must start a documentation line; following lines belong
+            to that response description until the documentation block ends. The preceding
+            prose describes the operation, unless the endpoint annotation supplies an explicit
+            `description`. The returns section applies independently of that override. It
+            describes the automatic 200 response, or the default response for an explicit
+            `http-response` handler. Without a returns section, existing generic response
+            descriptions remain in use. This is an HTTP consumer documentation convention,
+            not a new language annotation or a way to describe arbitrary document-value keys;
+            use selected typed models to document individual object properties.
 
             The consumer rejects unsupported signatures, contradictory parameter metadata,
             duplicate registrations and operation IDs, invalid methods or paths, and the

@@ -6,7 +6,7 @@ from /streaky/template import template-engine, template-value, text-value, bool-
 from /terrane/annotation-consumer-protocol import get, at, text, truth, annotation, consumer-error
 from /core/collections import list, range, map
 from /core/documents import document-value, document-map-entries, make-document-none, make-document-string, make-document-bool, make-document-map
-from /http-server-consumer/documents import object-value, list-value, type-schema, source-quote
+from /http-server-consumer/documents import object-value, list-value, type-schema, source-quote, documented-schema
 from /core/errors import replace-error
 
 function model-error; declaration document-value, message string
@@ -62,6 +62,18 @@ function route-group-class bool; declaration document-value
     metadata = annotation; declaration, 'route-group', '/streaky/http-server/annotations'
     return metadata.kind != 'none'
 
+# Class field summaries carry type/default contracts, not declaration documentation.
+# Resolve their canonical origin, as the codec consumer does, without requiring
+# callers to select field metadata when they do not need field descriptions.
+function field-declaration document-value; field document-value, declarations document-value
+    origin = get; field, 'origin'
+    for index in (range; 0, (declarations.length;))
+        record = at; declarations, index
+        span = get; record, 'span'
+        if (text; (get; record, 'kind')) == 'field' and (text; (get; span, 'file')) == (text; (get; origin, 'file')) and (text; (get; span, 'start')) == (text; (get; origin, 'start')) and (text; (get; span, 'end')) == (text; (get; origin, 'end'))
+            return record
+    return make-document-none;
+
 function model-schema document-value throws consumer-error; kind string, declarations document-value
     cls = class-record; kind, declarations
     fields = get; cls, 'fields'
@@ -83,7 +95,7 @@ function model-schema document-value throws consumer-error; kind string, declara
     entries.append; 'additionalProperties', (make-document-bool; false)
     if required-values.length > 0
         entries.append; 'required', (list-value; required-values, (make-document-none;))
-    return (object-value; entries, (make-document-none;))
+    return documented-schema; (object-value; entries, cls), cls
 
 function schema-field document-value throws consumer-error; field document-value, declarations document-value
     kind = type-name; field
@@ -98,8 +110,8 @@ function schema-field document-value throws consumer-error; field document-value
         alternatives.append; (type-schema; 'null')
         wrapper = instance document-map-entries;
         wrapper.append; 'anyOf', (list-value; alternatives, field)
-        return (object-value; wrapper, field)
-    return schema
+        schema = object-value; wrapper, field
+    return documented-schema; schema, (field-declaration; field, declarations)
 
 function integer-kind bool; kind string
     return kind == 'int' or kind == 'int8' or kind == 'int16' or kind == 'int32' or kind == 'int64' or kind == 'int128' or kind == 'uint8' or kind == 'uint16' or kind == 'uint32' or kind == 'uint64' or kind == 'uint128'

@@ -176,7 +176,7 @@ class CatalogHttpTests(unittest.TestCase):
         self.assertEqual(search["parameters"][1]["schema"]["default"], 10)
         search_schema = resolve(search["responses"]["200"]["content"]["application/json"]["schema"])
         self.assertEqual(search_schema["properties"]["items"]["type"], "array")
-        self.assertEqual(resolve(search_schema["properties"]["items"]["items"])["properties"]["price-cents"], {"type": "integer"})
+        self.assertEqual(resolve(search_schema["properties"]["items"]["items"])["properties"]["price-cents"]["type"], "integer")
         quote = paths["/api/orders/quote"]["post"]
         body_schema = resolve(quote["requestBody"]["content"]["application/json"]["schema"])
         self.assertEqual(body_schema["properties"]["item-id"]["type"], "integer")
@@ -184,6 +184,29 @@ class CatalogHttpTests(unittest.TestCase):
         self.assertNotIn("/", paths)
         operations = [operation["operationId"] for operations in paths.values() for operation in operations.values()]
         self.assertEqual(len(operations), len(set(operations)))
+
+    def test_openapi_exports_comments_for_inputs_outputs_and_nested_fields(self):
+        _, _, schema = self.request("GET", "/api/openapi.json")
+        paths = schema["paths"]
+        for path, method in [
+            ("/api/health", "get"), ("/api/items/{item-id}", "get"),
+            ("/api/search", "get"), ("/api/orders/quote", "post"),
+        ]:
+            operation = paths[path][method]
+            with self.subTest(path=path):
+                self.assertNotIn("@returns", operation["description"])
+                self.assertIn("description", operation["responses"]["200"])
+                self.assertNotEqual(operation["responses"]["200"]["description"], "Successful response")
+                for parameter in operation["parameters"]:
+                    self.assertIn("description", parameter)
+        quote = paths["/api/orders/quote"]["post"]
+        self.assertIn("description", quote["requestBody"])
+        for model in schema["components"]["schemas"].values():
+            self.assertIn("description", model)
+            for field in model["properties"].values():
+                self.assertIsInstance(field.get("description"), str)
+                self.assertNotEqual(field["description"].strip(), "")
+                self.assertNotEqual(field["description"], "none")
 
 
 if __name__ == "__main__":

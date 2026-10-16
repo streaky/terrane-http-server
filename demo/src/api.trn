@@ -7,14 +7,18 @@ from /core/collections import list
 @[route-group; prefix = '/api']
 class catalog-api
     /// Check that the catalog service is running.
+    /// @returns The JSON string "ok" when the service is accepting requests.
     @[endpoint; method = 'GET', path = '/health', summary = 'Service health']
     async function health string;
         return 'ok'
 
     /// Look up a catalog item. Detailed responses include stock information.
+    /// @returns The catalog item, with stock availability populated only when detailed is true.
     @[endpoint; method = 'GET', path = '/items/{item-id}', summary = 'Read a catalog item']
     async function read-item item-response; (
+        /// Catalog identifier of the item to retrieve; this demo provides item 1.
         @[path;] item-id int,
+        /// Include stock availability; otherwise in-stock is reported as false.
         @[query;] detailed bool = false,
     )
         if item-id != 1
@@ -25,9 +29,12 @@ class catalog-api
         return create-item-response; 1, 'Terrane notebook', 1200, available
 
     /// Search the catalog; the limit defaults to ten when omitted.
+    /// @returns The search inputs, whether anything matched, and the matching catalog items.
     @[endpoint; method = 'GET', path = '/search', summary = 'Search the catalog']
     async function search search-response; (
+        /// Case-sensitive search text; the demo matches text containing "notebook".
         @[query;] term string,
+        /// Maximum number of results; zero or negative values produce no matches.
         @[query;] limit int = 10,
     )
         matched = limit > 0 and (term.contains; 'notebook')
@@ -37,8 +44,10 @@ class catalog-api
         return create-search-response; term, limit, matched, results
 
     /// Price a catalog order without persisting it.
+    /// @returns The item, requested quantity, and total price in cents; no order is saved.
     @[endpoint; method = 'POST', path = '/orders/quote', summary = 'Price a catalog order']
     async function quote-order quote-output; (
+        /// Item and quantity to price; an omitted quantity retains its default of zero.
         @[body;] order order-input,
     )
         if order.item-id != 1
