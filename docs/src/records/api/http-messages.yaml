@@ -25,8 +25,11 @@ documentation:
         the request body, is bounded to two MiB, and rejects malformed JSON or invalid UTF-8.
         Generated annotation adapters convert input failures to HTTP 422 before calling
         the selected handler.
-        Its `accept` field owns the combined HTTP `Accept` header values, allowing callers to
-        select a response before consuming the request body.
+        The read-only `accept-value()` accessor returns the combined usable HTTP `Accept`
+        ranges, or `none` when no header was supplied. A present header with no usable ranges
+        returns an empty string. Repeated values are combined, and malformed byte ranges
+        are discarded individually rather than exposing a sentinel or losing valid siblings.
+        Read it before consuming the request body.
 
         `http-response` is the general response value. It holds `status`, `content-type`,
         an already-encoded text `body`, and an ordered list of `http-header` values.
@@ -46,8 +49,11 @@ documentation:
 
         `select-response-format(accept, formats, default-format)` chooses an enabled `json`,
         `yaml`, or `xml` representation. Supply a nonempty enabled list and an enabled
-        default. Missing preferences use that default; quality values, wildcards, and specific
+        default. Pass `none` for a missing header to use that default; an empty string is a
+        present header with no acceptable choice. Quality values, wildcards, and specific
         exclusions are honored, and an empty result means no representation is acceptable.
+        JSON's non-constraining `charset` parameter is ignored. Selecting a format is explicit;
+        unconfigured annotation routes retain their legacy JSON-only behavior and ignore Accept.
         `response-media-type(format)` gives the corresponding `application/json`,
         `application/yaml`, or `application/xml` media type.
 

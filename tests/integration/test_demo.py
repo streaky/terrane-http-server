@@ -83,19 +83,28 @@ class CatalogHttpTests(unittest.TestCase):
         cls.server.stderr.close()
 
     @classmethod
-    def request(cls, method, path, body=None, content_type="application/json", headers=None):
+    def response(cls, method, path, body=None, content_type="application/json", headers=None):
         connection = http.client.HTTPConnection("127.0.0.1", cls.port, timeout=5)
         try:
             request_headers = dict(headers or {})
             if body is not None:
                 request_headers["Content-Type"] = content_type
             connection.request(method, path, body=body, headers=request_headers)
-            response = connection.getresponse()
+            return connection, connection.getresponse()
+        except BaseException:
+            connection.close()
+            raise
+
+    @classmethod
+    def request(cls, method, path, body=None, content_type="application/json", headers=None):
+        connection, response = cls.response(method, path, body, content_type, headers)
+        try:
             payload = response.read().decode()
             response_type = response.getheader("Content-Type")
             parsed = json.loads(payload) if response_type and response_type.startswith("application/json") else payload
             return response.status, response_type, parsed
         finally:
+            response.close()
             connection.close()
 
     def test_negotiated_yaml_and_xml_responses(self):
@@ -108,6 +117,12 @@ class CatalogHttpTests(unittest.TestCase):
         self.assertEqual((status, content_type), (200, "application/xml"))
         root = ElementTree.fromstring(body)
         self.assertEqual(root.tag, "response")
+        schema = self.request("GET", "/api/openapi.json")[2]
+        default_content_type = schema["paths"]["/api/search"]["get"]["x-default-response-content-type"]
+        default_status, actual_default_type, actual_default = self.request("GET", path)
+        self.assertEqual(default_status, 200)
+        self.assertEqual(actual_default_type, default_content_type)
+        self.assertEqual(actual_default, expected)
         self.assertEqual(root.findtext("items/item/name"), expected["items"][0]["name"])
         self.assertEqual(root.findtext("items/item/price-cents"), str(expected["items"][0]["price-cents"]))
         status, content_type, body = self.request("GET", "/api/health", headers={"Accept": "application/xml"})
@@ -117,6 +132,24 @@ class CatalogHttpTests(unittest.TestCase):
         status, content_type, body = self.request("GET", "/api/health",
             headers={"Accept": "application/json;q=0,application/yaml;q=0.5,*/*;q=0.1"})
         self.assertEqual((status, content_type, yaml.safe_load(body)), (200, "application/yaml", "ok"))
+
+    def test_negotiated_responses_include_vary_accept(self):
+        for method, path, body, headers, expected_status in [
+            ("GET", "/api/health", None, {"Accept": "application/json"}, 200),
+            ("GET", "/api/items/99", None, {"Accept": "application/json"}, 404),
+            ("GET", "/api/items/not-an-int", None, {"Accept": "application/json"}, 422),
+            ("GET", "/api/items/%FF", None, {"Accept": "application/json"}, 422),
+            ("GET", "/api/health", None, {"Accept": "image/png"}, 406),
+        ]:
+            with self.subTest(path=path, expected_status=expected_status):
+                connection, response = self.response(method, path, body, headers=headers)
+                try:
+                    self.assertEqual(response.status, expected_status)
+                    self.assertIn("accept", {value.strip().lower() for value in response.getheader("Vary", "").split(",")})
+                    response.read()
+                finally:
+                    response.close()
+                    connection.close()
 
     def test_authored_examples_match_real_requests_and_negotiated_responses(self):
         _, _, schema = self.request("GET", "/api/openapi.json")
@@ -209,9 +242,14 @@ class CatalogHttpTests(unittest.TestCase):
         self.assertEqual((status, content_type), (200, "application/json"))
         self.assertEqual(schema["openapi"], "3.1.0")
         self.assertEqual(schema["servers"], [{"url": "/"}])
+        overview = schema["info"]["description"]
+        self.assertIn("curl", overview)
+        self.assertIn("application/yaml", overview)
+        self.assertIn("```console", overview)
         def resolve(value):
             if "$ref" in value:
-                return schema["components"]["schemas"][value["$ref"].split("/")[-1]]
+                target = resolve(schema["components"]["schemas"][value["$ref"].split("/")[-1]])
+                return {**target, **{key: item for key, item in value.items() if key != "$ref"}}
             return value
 
         paths = schema["paths"]
@@ -223,8 +261,10 @@ class CatalogHttpTests(unittest.TestCase):
         search = paths["/api/search"]["get"]
         self.assertEqual(search["parameters"][1]["schema"]["default"], 10)
         search_schema = resolve(search["responses"]["200"]["content"]["application/json"]["schema"])
-        self.assertEqual(search_schema["properties"]["items"]["type"], "array")
-        self.assertEqual(resolve(search_schema["properties"]["items"]["items"])["properties"]["price-cents"]["type"], "integer")
+        items_schema = resolve(search_schema["properties"]["items"])
+        item_schema = resolve(items_schema["items"])
+        self.assertEqual(items_schema["type"], "array")
+        self.assertEqual(resolve(item_schema)["properties"]["price-cents"]["type"], "integer")
         quote = paths["/api/orders/quote"]["post"]
         body_schema = resolve(quote["requestBody"]["content"]["application/json"]["schema"])
         self.assertEqual(body_schema["properties"]["item-id"]["type"], "integer")
@@ -232,6 +272,15 @@ class CatalogHttpTests(unittest.TestCase):
         self.assertNotIn("/", paths)
         operations = [operation["operationId"] for operations in paths.values() for operation in operations.values()]
         self.assertEqual(len(operations), len(set(operations)))
+        status, xml_type, xml_body = self.request("GET", "/api/search?term=notebook&limit=2",
+            headers={"Accept": "application/xml"})
+        self.assertEqual((status, xml_type), (200, "application/xml"))
+        xml_root = ElementTree.fromstring(xml_body)
+        xml_schema = resolve(search["responses"]["200"]["content"]["application/xml"]["schema"])
+        self.assertEqual(xml_root.tag, xml_schema["xml"]["name"])
+        self.assertEqual(xml_root.find("items").tag, items_schema["xml"].get("name", "items"))
+        self.assertTrue(items_schema["xml"]["wrapped"])
+        self.assertEqual(xml_root.find("items/item").tag, resolve(items_schema["items"])["xml"]["name"])
 
     def test_openapi_exports_comments_for_inputs_outputs_and_nested_fields(self):
         _, _, schema = self.request("GET", "/api/openapi.json")

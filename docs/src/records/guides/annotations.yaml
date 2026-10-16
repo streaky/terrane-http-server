@@ -201,19 +201,32 @@ documentation:
             `text/plain`. Request bodies remain JSON: response negotiation never changes
             how inputs are decoded.
 
-            A route group may enable negotiated automatic responses with `response-formats`
-            (a list drawn from `json`, `yaml`, and `xml`) and choose a `default-response-format`.
-            Omitting formats enables JSON only; an empty default selects the first enabled
-            format, while an explicit default must be enabled. `Accept` chooses among enabled
-            formats using quality values and wildcard specificity; a specific zero-quality
+            A route group opts into negotiated automatic responses by explicitly setting
+            `response-formats` to a nonempty list drawn from `json`, `yaml`, and `xml`.
+            Omitting it, or setting it to `none`, preserves the legacy JSON-only behavior:
+            `Accept` is ignored and does not cause a 406. Free-function endpoints use that
+            same implicit policy. An explicitly empty list is rejected, not replaced with JSON.
+
+            An explicit list enables strict negotiation even if it contains only `json`.
+            An empty `default-response-format` selects the first enabled format; an explicit
+            default must be enabled. Missing `Accept` uses that default. Quality values and
+            wildcard specificity choose among enabled formats; a specific zero-quality
             exclusion overrides a broader wildcard. No acceptable choice produces HTTP 406
-            before the handler runs. Automatic success responses include `Vary: Accept`.
+            before the handler runs. JSON's `charset` parameter is ignored, as specified by
+            [RFC 8259 section 11](https://www.rfc-editor.org/rfc/rfc8259#section-11); unsupported
+            media constraints such as `profile` before `q` remain nonmatching. Malformed byte
+            ranges are discarded individually, preserving usable alternatives and exclusions.
+
+            Every response from a negotiated endpoint varies on `Accept`, including 406,
+            validation 422, thrown HTTP errors, and unexpected/conversion 500 responses.
+            Existing `Vary` values are preserved; an existing `Accept` token or `*` already
+            covers the variation. Error bodies retain their existing media types and handling.
             OpenAPI advertises each enabled media type; `x-default-response-content-type`
-            records the configured default, because OpenAPI has no standard default-media field.
+            records the default, because OpenAPI has no standard default-media field.
+            Format policy is validated once at the selected route-group declaration, including
+            groups without selected methods; errors point to that class rather than a method.
             Explicit `http-response` values remain handler-controlled; HTML and plain-text
-            endpoint content types bypass automatic serialization. Validation errors keep their
-            JSON 422 body; explicit HTTP errors and unexpected failures keep their existing
-            response/error behavior.
+            endpoint content types bypass automatic serialization and negotiation.
 
             JSON uses the canonical document representation. YAML responses use
             `application/yaml` with readable block collections and JSON-compatible scalar
@@ -268,9 +281,12 @@ documentation:
             for the specification details.
 
             End an endpoint's documentation with `@returns ` followed by the response
-            description. The marker must start a documentation line; following lines belong
-            to that response description until the documentation block ends. The preceding
-            prose describes the operation, unless the endpoint annotation supplies an explicit
+            description. The marker must start a documentation line with no indentation and
+            include the following space. A marker inside a valid CommonMark fence is code,
+            not metadata. Backtick openers cannot contain another backtick in their info
+            string, so an inline-code-looking line cannot swallow a following returns section.
+            Following lines belong to that response description until the documentation ends.
+            The preceding prose describes the operation, unless the endpoint supplies an explicit
             `description`. The returns section applies independently of that override. It
             describes the automatic 200 response, or the default response for an explicit
             `http-response` handler. Without a returns section, existing generic response
@@ -308,6 +324,32 @@ documentation:
             rules and requires no Rust code in the application's model classes.
             Non-finite float model outputs are invalid JSON and become HTTP 500 rather
             than a fabricated numeric value or JSON null.
+    - id: implementation-tradeoffs
+      title: Representation implementation tradeoffs
+      blocks:
+        - type: markdown
+          markdown: |-
+            The native annotation consumer depends on the HTTP package so authored XML
+            examples use the exact runtime document encoder. This increases the consumer's
+            dependency/projection and build footprint. That cost is accepted to avoid two
+            subtly different XML contracts; extracting a smaller shared codec dependency is
+            not a committed plan. Revisit only if measured build cost warrants it, while
+            retaining one authoritative encoder.
+
+            Duplicate checks over small, developer-authored format/example name lists use
+            straightforward scans, including quadratic checks where appropriate. A set or a
+            general validation framework is unnecessary for these configuration-sized inputs.
+            XML name validation and escaping likewise remain explicit, auditable operations.
+            Invalid XML keys or characters fail response construction; there is deliberately
+            no silent renaming, lossy coercion, or fallback to another enabled representation.
+
+            YAML intentionally uses JSON-compatible scalar quoting and empty collection
+            syntax while rendering populated collections as readable blocks. This avoids a
+            second scalar escaping contract and preserves exact numbers without float coercion.
+
+            OpenAPI 3.1 permits description and XML metadata alongside a schema reference.
+            Reference resolution must preserve these sibling keywords: response-root names
+            and collection wrappers can differ from the referenced component's metadata.
     - id: consumer-source-templates
       title: Maintaining generated source templates
       blocks:

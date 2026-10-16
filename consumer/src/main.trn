@@ -9,7 +9,7 @@ from /streaky/template import template-engine, template-value, text-value, bool-
 from /http-server-consumer/documents import object-value, list-value, encode-document, type-schema, source-quote, operation-documentation, declaration-documentation
 from /http-server-consumer/models import is-model, model-reference, model-schemas, model-codecs, model-encoder, model-decoder
 from /http-server-consumer/examples import declaration-examples
-from /http-server-consumer/formats import read-response-policy, format-list-source, xml-response-schema, format-media-type
+from /http-server-consumer/formats import response-policy, read-response-policy, selected-response-policy, format-list-source, xml-response-schema, format-media-type
 from /http-server-consumer/overview import api-info
 
 function template-operations list of template-value throws consumer-error; operations list of operation, owner string
@@ -22,6 +22,7 @@ function template-operations list of template-value throws consumer-error; opera
         fields.set; 'path-source', (text-value; (source-quote; item.path))
         fields.set; 'adapter', (text-value; item.adapter)
         fields.set; 'selected', (bool-value; item.owner == owner)
+        fields.set; 'negotiated', (bool-value; item.negotiated)
         values.append; (template-object-value; fields)
     return values
 
@@ -43,8 +44,9 @@ class operation
     owner string
     mounted-path string
     documented bool
+    negotiated bool
 
-    function construct; path string, method string, identity string, schema document-value, adapter string, owner string = '', mounted-path string = '', documented bool = true
+    function construct; path string, method string, identity string, schema document-value, adapter string, owner string = '', mounted-path string = '', documented bool = true, negotiated bool = false
         this.path = path
         this.method = method
         this.identity = identity
@@ -53,6 +55,7 @@ class operation
         this.owner = owner
         this.mounted-path = mounted-path
         this.documented = documented
+        this.negotiated = negotiated
 
 function fail; declaration document-value, message string
     throw (instance consumer-error; declaration, message)
@@ -165,7 +168,7 @@ function route-group-record document-value throws consumer-error; declarations d
     fail; declaration, 'HTTP endpoint method requires its selected class declaration'
     return make-document-none;
 
-function make-operation operation throws consumer-error; declaration document-value, declarations document-value, index int
+function make-operation operation throws consumer-error; declaration document-value, declarations document-value, index int, policies map of string, response-policy
     metadata = annotation; declaration, 'endpoint', '/streaky/http-server/annotations'
     path = metadata-string; metadata, 'path', declaration
     method = metadata-string; metadata, 'method', declaration
@@ -180,12 +183,10 @@ function make-operation operation throws consumer-error; declaration document-va
     prefix string = '/'
     documented bool = true
     target = 'selected-handler' + index
-    group-policy = make-document-none;
     if pieces.length == 3
         owner = pieces[0] + '::' + pieces[1]
         group = route-group-record; declarations, owner, declaration
         group-meta = annotation; group, 'route-group', '/streaky/http-server/annotations'
-        group-policy = group-meta
         prefix = metadata-string; group-meta, 'prefix', group
         route-shape; prefix, group
         if prefix != '/' and (prefix.contains.end; '/')
@@ -212,8 +213,9 @@ function make-operation operation throws consumer-error; declaration document-va
         fail; declaration, 'HTTP response content-type must be application/json, text/html, or text/plain'
     if not result-explicit and content-type != 'application/json' and result-kind != 'string'
         fail; declaration, 'HTML and plain-text endpoints must return string'
-    policy = read-response-policy; group-policy, declaration
+    policy = selected-response-policy; policies, owner, declaration
     structured = not result-explicit and content-type == 'application/json'
+    negotiated = structured and policy.negotiated
     operation-id = metadata-string; metadata, 'operation-id', declaration
     if operation-id == ''
         try
@@ -238,9 +240,9 @@ function make-operation operation throws consumer-error; declaration document-va
         fail; declaration, 'HTTP handler signature must expose parameters'
     if (parameters.length;) == 0
         adapter = '    async function adapt-handler' + index + ' http-response throws throwable; _request http-request\n'
-    if structured
+    if negotiated
         adapter = '    async function adapt-handler' + index + ' http-response throws throwable; request http-request\n'
-        adapter = adapter + '        response-format = select-response-format; request.accept, ' + (format-list-source; policy) + ', ' + (source-quote; policy.default-format) + '\n        if response-format == \'\'\n            return (create-response; 406, \'text/plain; charset=utf-8\', \'No acceptable response representation\').with-header; \'vary\', \'Accept\'\n'
+        adapter = adapter + '        response-format = select-response-format; (request.accept-value;), ' + (format-list-source; policy) + ', ' + (source-quote; policy.default-format) + '\n        if response-format == \'\'\n            return create-response; 406, \'text/plain; charset=utf-8\', \'No acceptable response representation\'\n'
     names list of string = list
     locations list of string = list
     path-names list of string = list
@@ -415,7 +417,7 @@ function make-operation operation throws consumer-error; declaration document-va
             result-description = 'Successful response'
         response-entries.append; '200', (response-with-content; result-description, content-value, declaration)
     response-entries.append; '422', (response-description; 'Request validation failed', declaration)
-    if structured
+    if negotiated
         response-entries.append; '406', (response-description; 'No enabled response representation satisfies Accept', declaration)
     response-entries.append; '500', (response-description; 'Handler or response construction failed', declaration)
     if not result-explicit
@@ -440,11 +442,14 @@ function make-operation operation throws consumer-error; declaration document-va
         else
             factory = 'make-document-' + result-kind
             adapter = adapter + '        document = ' + factory + '; result\n'
-        adapter = adapter + '        return create-document-response; 200, document, response-format\n'
+        if negotiated
+            adapter = adapter + '        return create-document-response; 200, document, response-format\n'
+        else
+            adapter = adapter + '        return create-json-response; 200, document\n'
     mounted-path = path
     if prefix != '/'
         mounted-path = prefix + path
-    return instance operation; path, method, operation-id, schema, adapter, owner, mounted-path, documented
+    return instance operation; path, method, operation-id, schema, adapter, owner, mounted-path, documented, negotiated
 
 
 function static-directory-source string throws consumer-error; declaration document-value, prefix string
@@ -490,8 +495,8 @@ function generate string throws consumer-error; request document-value
             metadata = annotation; declaration, 'route-group', '/streaky/http-server/annotations'
             if metadata.kind != 'none'
                 groups.append; declaration
-    if endpoints.length == 0
-        fail; request, 'HTTP consumer requires at least one annotated endpoint'
+    policies map of string, response-policy = map;
+    policies.set; '', (read-response-policy; (make-document-none;), request)
     imports string = ''
     for index in (range; 0, groups.length)
         group = groups[index]
@@ -499,6 +504,7 @@ function generate string throws consumer-error; request document-value
         pieces = identity.split; '::'
         imports = imports + 'from ' + pieces[0] + ' import ' + pieces[1] + ' as route-source' + index + '\n'
         metadata = annotation; group, 'route-group', '/streaky/http-server/annotations'
+        policies.set; identity, (read-response-policy; metadata, group)
         prefix = metadata-string; metadata, 'prefix', group
         route-shape; prefix, group
         for previous-index in (range; 0, index)
@@ -506,11 +512,13 @@ function generate string throws consumer-error; request document-value
             previous-meta = annotation; previous, 'route-group', '/streaky/http-server/annotations'
             if (metadata-string; previous-meta, 'prefix', previous) == prefix
                 fail; group, 'duplicate HTTP route-group mount prefix'
+    if endpoints.length == 0
+        fail; request, 'HTTP consumer requires at least one annotated endpoint'
     operations list of operation = list
     standalone bool = false
     for index in (range; 0, endpoints.length)
         declaration = endpoints[index]
-        current = make-operation; declaration, declarations, index
+        current = make-operation; declaration, declarations, index, policies
         for previous in operations
             if current.identity == previous.identity
                 fail; declaration, 'duplicate HTTP operation ID'

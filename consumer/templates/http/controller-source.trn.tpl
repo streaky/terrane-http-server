@@ -6,7 +6,7 @@ public class {{ data.name }} implements controller
         this.source = move source
 
 {% endif %}    consuming function routes routes; registered-routes routes
-{% for operation in data.operations %}{% if operation.selected %}        registered-routes = registered-routes.endpoint; (instance http-method::{{ operation.method-key }};), {{ operation.path-source }}, this.adapt-handler{{ operation.index }}
+{% for operation in data.operations %}{% if operation.selected %}        registered-routes = registered-routes.endpoint; (instance http-method::{{ operation.method-key }};), {{ operation.path-source }}, this.adapt-handler{{ operation.index }}{% if operation.negotiated %}, true{% endif %}
 {% endif %}{% endfor %}{% if data.documented %}        registered-routes = registered-routes.endpoint; (instance http-method::get;), '/openapi.json', this.openapi-handler
 {% endif %}        return registered-routes
 {% if data.documented %}

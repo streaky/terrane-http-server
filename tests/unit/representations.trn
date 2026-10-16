@@ -8,7 +8,7 @@ from /core/testing import assert-equal-string, assert-equal-bool
 
 function test-response-negotiation-honors-quality-specificity-and-default throws throwable;
     formats = list; 'json', 'yaml', 'xml'
-    assert-equal-string; (select-response-format; '', formats, 'yaml'), 'yaml'
+    assert-equal-string; (select-response-format; none, formats, 'yaml'), 'yaml'
     assert-equal-string; (select-response-format; '*/*', formats, 'xml'), 'xml'
     assert-equal-string; (select-response-format; 'application/json;q=0, */*;q=1', formats, 'json'), 'yaml'
     assert-equal-string; (select-response-format; 'application/json;q=0.2, application/yaml;q=0.8', formats, 'json'), 'yaml'
@@ -16,6 +16,13 @@ function test-response-negotiation-honors-quality-specificity-and-default throws
     assert-equal-string; (select-response-format; ' APPLICATION/XML ; Q=0.700 , application/json;q=0.6', formats, 'json'), 'xml'
     assert-equal-string; (select-response-format; 'application/yaml;q=0.999, application/xml;q=1.000', formats, 'json'), 'xml'
     assert-equal-string; (select-response-format; 'application/yaml,application/xml', formats, 'xml'), 'xml'
+    assert-equal-string; (select-response-format; '', formats, 'yaml'), ''
+    assert-equal-string; (select-response-format; 'application/json;charset=UTF-8;q=0.7,application/yaml;q=0.6', formats, 'yaml'), 'json'
+    assert-equal-string; (select-response-format; 'application/json;q=0.7;charset="utf-8"', formats, 'yaml'), 'json'
+    assert-equal-string; (select-response-format; 'application/json;profile=other,application/yaml;q=0.3', formats, 'json'), 'yaml'
+    assert-equal-string; (select-response-format; 'application/json;q=0.7, application/yaml;q=0.8;bad', formats, 'json'), 'json'
+    assert-equal-string; (select-response-format; 'application/json;charset=iso-8859-1', formats, 'yaml'), 'json'
+    assert-equal-string; (select-response-format; 'application/json;charset="UTF-8";q=0, */*;q=1', formats, 'json'), 'yaml'
     for accept in (list; 'image/png', '*/*;q=0', 'application/json;q=1.1', 'application/json;q=-1', 'application/json;q=0.1234', 'application/json;q=no', 'application/json;q=1;q=0', 'application/json;profile=other')
         assert-equal-string; (select-response-format; accept, formats, 'json'), ''
     assert-equal-string; (select-response-format; 'application/xml', (list; 'json'), 'json'), ''

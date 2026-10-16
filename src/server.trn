@@ -57,19 +57,19 @@ public class routes
         router = router.route; path, move method-router
         return instance routes; move router
 
-    consuming function endpoint routes; method http-method, path string, handler async function from http-request to http-response throws throwable
+    consuming function endpoint routes; method http-method, path string, handler async function from http-request to http-response throws throwable, vary-accept bool = false
         callback = async function native-response; request native-request
             try
                 typed-request = instance http-request; move request, path
             catch
-                return (status-code::UNPROCESSABLE-ENTITY).into_response;
+                return native-status-response; (status-code::UNPROCESSABLE-ENTITY), vary-accept
             try
                 response = await handler; move typed-request
-                return into-native-response; move response
+                return into-native-response; move response, vary-accept
             catch http-error as error
-                return into-native-http-error; error
+                return into-native-http-error; error, vary-accept
             catch
-                return (status-code::INTERNAL-SERVER-ERROR).into_response;
+                return native-status-response; (status-code::INTERNAL-SERVER-ERROR), vary-accept
         method-router native-method-router = native-method-router::new;
         match method
             case http-method::get

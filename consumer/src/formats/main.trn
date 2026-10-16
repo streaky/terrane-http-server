@@ -1,6 +1,6 @@
 namespace http-server-consumer/formats
 
-from /core/collections import list, range
+from /core/collections import list, range, map
 from /core/documents import document-value, document-map-entries, make-document-string
 from /terrane/annotation-consumer-protocol import get, at, text, scalar, consumer-error
 from /http-server-consumer/documents import source-quote, object-value
@@ -15,19 +15,30 @@ function format-media-type string throws consumer-error; format string, origin d
 class response-policy
     formats list of string = list
     default-format string = 'json'
+    negotiated bool = false
+
+function selected-response-policy response-policy throws consumer-error; policies map of string, response-policy, owner string, declaration document-value
+    selected = policies.get.checked; owner
+    if selected != none
+        return selected
+    throw (instance consumer-error; declaration, 'HTTP route-group response policy was not selected')
 
 function read-response-policy response-policy throws consumer-error; metadata document-value, declaration document-value
     policy = instance response-policy;
     if metadata.kind != 'none'
         values = get; (get; metadata, 'response-formats'), 'value'
-        for index in (range; 0, (values.length;))
-            format = text; (scalar; (at; values, index))
-            if format != 'json' and format != 'yaml' and format != 'xml'
-                throw (instance consumer-error; declaration, 'HTTP response format must be json, yaml, or xml')
-            for previous in policy.formats
-                if previous == format
-                    throw (instance consumer-error; declaration, 'duplicate HTTP response format')
-            policy.formats.append; format
+        if values.kind != 'none'
+            if values.kind != 'list' or (values.length;) == 0
+                throw (instance consumer-error; declaration, 'HTTP response formats must be a nonempty list')
+            policy.negotiated = true
+            for index in (range; 0, (values.length;))
+                format = text; (scalar; (at; values, index))
+                if format != 'json' and format != 'yaml' and format != 'xml'
+                    throw (instance consumer-error; declaration, 'HTTP response format must be json, yaml, or xml')
+                for previous in policy.formats
+                    if previous == format
+                        throw (instance consumer-error; declaration, 'duplicate HTTP response format')
+                policy.formats.append; format
     if policy.formats.length == 0
         policy.formats.append; 'json'
     policy.default-format = policy.formats[0]

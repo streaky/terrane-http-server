@@ -63,25 +63,33 @@ private function parse-accept-range accept-range; source string
             result.valid = false
         else
             name = (parameter[0].trim;).lower;
+            value = (parameter[1].trim;).lower;
             if name == 'q'
                 if seen-quality
                     result.valid = false
                 seen-quality = true
-                result.quality = accept-quality; (parameter[1].trim;)
+                result.quality = accept-quality; value
                 if result.quality < 0
                     result.valid = false
+            else if name == 'charset' and result.media == 'application/json'
+                # RFC 8259 defines no charset parameter: it cannot constrain JSON.
+                continue
             else if not seen-quality
-                # Offered representations have no media-type parameters.
+                # Other media parameters constrain this representation.
                 result.valid = false
     return result
 
 # Match specificity before quality within each representation: an explicit
 # application/json;q=0 excludes JSON even alongside */*;q=1.
-public function select-response-format string throws coercion-error; accept string, formats list of string, default-format string
-    if accept == ''
+public function select-response-format string throws coercion-error; accept string|none, formats list of string, default-format string
+    if accept != none
+        header string = accept
+    else
         return default-format
+    if header == ''
+        return ''
     ranges list of accept-range = list
-    for source in (accept.split; ',')
+    for source in (header.split; ',')
         parsed = parse-accept-range; source
         if parsed.valid
             ranges.append; parsed

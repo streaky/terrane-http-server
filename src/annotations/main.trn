@@ -35,7 +35,7 @@ class api-documentation
 class route-group
     prefix string = '/'
     document bool = true
-    response-formats list of string = (list; 'json')
+    response-formats (list of string)|none = none
     default-response-format string = ''
 
 @[annotation; targets = (list; (instance annotation-target::class;)), repeatable = true]

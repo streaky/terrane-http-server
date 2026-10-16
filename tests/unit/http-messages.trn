@@ -82,5 +82,32 @@ function test-repeated-accept-headers-preserve-specific-exclusions throws throwa
     builder = builder.header; 'accept', '*/*;q=1'
     native = builder.body; (native-body::empty;)
     request = instance http-request; move native, '/'
-    selected = select-response-format; request.accept, (list; 'json', 'yaml'), 'json'
+    selected = select-response-format; (request.accept-value;), (list; 'json', 'yaml'), 'json'
     assert-equal-string; selected, 'yaml'
+
+function test-missing-and-empty-accept-headers-have-distinct-preferences throws throwable;
+    missing = instance http-request; (native-request::new; (native-body::empty;)), '/'
+    assert-equal-string; (select-response-format; (missing.accept-value;), (list; 'json', 'yaml'), 'yaml'), 'yaml'
+    builder = request-builder::new;
+    builder = builder.header; 'accept', ''
+    empty = instance http-request; (builder.body; (native-body::empty;)), '/'
+    assert-equal-string; (select-response-format; (empty.accept-value;), (list; 'json', 'yaml'), 'yaml'), ''
+
+private function mixed-byte-accept-request native-request; exclude bool
+    request native-request = rust
+        let source: &[u8] = if exclude {
+            b"application/json;q=0, text/\xe9, */*;q=1"
+        } else {
+            b"application/json, text/\xe9"
+        };
+        let accept = ::http::HeaderValue::from_bytes(source).expect("valid raw HTTP header bytes");
+        ::http::Request::builder().header("accept", accept).body(::axum::body::Body::empty()).expect("request")
+    return move request
+
+function test-invalid-byte-range-does-not-hide-valid-ranges-or-exclusions throws throwable;
+    for exclude in (list; false, true)
+        request = instance http-request; (mixed-byte-accept-request; exclude), '/'
+        expected = 'json'
+        if exclude
+            expected = 'yaml'
+        assert-equal-string; (select-response-format; (request.accept-value;), (list; 'json', 'yaml'), 'json'), expected

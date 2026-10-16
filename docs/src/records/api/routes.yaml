@@ -31,14 +31,20 @@ documentation:
         [[http-server.guide.proxy-security]].
 
         `endpoint(method: http-method, path: string, handler: async function from http-request
-        to http-response throws throwable) -> routes` registers a typed HTTP callback. The
-        closed `http-method` enum has `get`, `post`, `put`, `patch`, and `delete` variants.
+        to http-response throws throwable, vary-accept: bool = false) -> routes` registers
+        a typed HTTP callback. The closed `http-method` enum has `get`, `post`, `put`, `patch`,
+        and `delete` variants.
         The callback receives decoded path/query access and bounded JSON body decoding,
         and returns an explicit status, content type, body, and additional headers. Path,
         query, and body conversion failures return HTTP 422 before invocation. A caught
         `http-error` preserves its error response, while unrelated callback, render, and
         response conversion failures return HTTP 500. See [[http-server.api.http-messages]]
         and [[http-server.guide.annotations]] for the response factories and generated adapters.
+        Set `vary-accept` when the handler performs content negotiation. It adds the `Accept`
+        token to `Vary` for every response path, including input rejection and failures,
+        preserving existing tokens and avoiding duplicates. It does not select or encode a
+        representation itself. Generated adapters set it only for explicitly negotiated
+        automatic responses; legacy JSON, HTML/text, and explicit-response handlers leave it off.
 
         `websocket(path: string, handler: async function from websocket-session to none
         throws dependency-error) -> routes` registers a WebSocket endpoint. Its callback is
@@ -64,7 +70,7 @@ documentation:
         public class routes
             consuming function get routes; path string, handler async function to string
             consuming function get-with-client routes; path string, handler async function from client-info to string
-            consuming function endpoint routes; method http-method, path string, handler async function from http-request to http-response
+            consuming function endpoint routes; method http-method, path string, handler async function from http-request to http-response throws throwable, vary-accept bool = false
             consuming function websocket routes; path string, handler async function from websocket-session to none throws dependency-error
       response: null
       diagnostic: null

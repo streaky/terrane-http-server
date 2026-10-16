@@ -60,6 +60,9 @@ Unsupported formats return 406 and negotiated replies vary on `Accept`. Request 
 continue to use JSON regardless of response format. XML wraps values in a `response`
 root, arrays in a wrapper with `item` children, and null with `xsi:nil="true"`.
 Explicit `http-response` and the site's HTML routes are not automatically serialized.
+The explicit format list is the opt-in: apps that omit it keep legacy JSON-only responses
+without rejecting `Accept` preferences. An explicit empty list is an error. Negotiated
+validation/error replies keep their usual bodies but also vary on `Accept`.
 
 OpenAPI descriptions preserve CommonMark formatting, so the catalog declarations include
 renderable fenced curl examples alongside prose, lists, emphasis, and links. OpenAPI

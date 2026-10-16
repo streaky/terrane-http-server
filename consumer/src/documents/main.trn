@@ -49,9 +49,23 @@ function documented-schema document-value throws consumer-error; schema document
     return object-value; entries, declaration
 
 function documentation-fence string; line string
-    if (line.contains.start; '    ') or (line.contains.start; '\t')
+    indent int = 0
+    leading bool = true
+    for character in (line.split; '')
+        if leading and character == ' '
+            indent = indent + 1
+        else
+            leading = false
+    if indent > 3
         return ''
-    trimmed = line.trim.start;
+    spaces string = ''
+    index int = 0
+    while index < indent
+        spaces = spaces + ' '
+        index = index + 1
+    trimmed = line.trim.start; spaces
+    if trimmed.contains.start; '\t'
+        return ''
     if not (trimmed.contains.start; '```') and not (trimmed.contains.start; '~~~')
         return ''
     marker = '`'
@@ -62,6 +76,12 @@ function documentation-fence string; line string
         if character != marker
             break
         result = result + character
+    if result.length < 3
+        return ''
+    if marker == '`'
+        remainder = trimmed.trim.start; result
+        if remainder.contains; '`'
+            return ''
     return result
 
 function operation-documentation string; declaration document-value, returns bool

@@ -107,11 +107,40 @@ private function decode-error-response http-response throws throwable; message s
         index = index + 1
     return response
 
-function into-native-http-error native-response; error throwable
+function into-native-http-error native-response; error throwable, vary-accept bool = false
     try
-        return into-native-response; (decode-error-response; error.message)
+        return into-native-response; (decode-error-response; error.message), vary-accept
     catch
-        return (status-code::INTERNAL-SERVER-ERROR).into_response;
+        return native-status-response; (status-code::INTERNAL-SERVER-ERROR), vary-accept
+
+function response-vary-accept http-response; response http-response
+    covered bool = false
+    for header in ref response.headers
+        if header-varies-accept; ref header.name, ref header.value
+            covered = true
+            break
+    if not covered
+        response = response.with-header; 'vary', 'Accept'
+    return move response
+
+private function header-varies-accept bool; name ref string, value ref string
+    covered bool = rust
+        name.eq_ignore_ascii_case("vary") && value.split(',').any(|token| {
+            let token = token.trim();
+            token.eq_ignore_ascii_case("accept") || token == "*"
+        })
+    return covered
+
+# Build fresh fallback responses at the native boundary without borrowing an
+# owned native response through raw Rust. Status selection stays in Terrane.
+function native-status-response native-response; status status-code, vary bool
+    response native-response = rust
+        let mut response = ::axum::response::IntoResponse::into_response(status);
+        if vary {
+            response.headers_mut().append(::http::header::VARY, ::http::HeaderValue::from_static("Accept"));
+        }
+        response
+    return move response
 
 # Own the borrowed canonical reason at the narrow native text boundary.
 private function status-reason string; code status-code

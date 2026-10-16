@@ -55,7 +55,7 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
         if code == "S2061":
             self.assertIsNotNone(origin, "Consumer diagnostics need an expected declaration origin")
             function, _, parameter = origin.partition("::")
-            declaration = re.search(r"\bfunction (" + re.escape(function) + r")\b", written)
+            declaration = re.search(r"\b(?:function|class) (" + re.escape(function) + r")\b", written)
             self.assertIsNotNone(declaration)
             offset = declaration.start(1)
             if parameter:
@@ -118,7 +118,25 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
             "@[route-group; response-formats = (list; 'yaml'), default-response-format = 'json']\n"
             "class api\n    @[endpoint; path = '/example']\n"
             "    async function example string;\n        return 'ok'\n",
-            ["api", "api::example"], origin="example")
+            ["api", "api::example"], origin="api")
+
+    def test_unreferenced_route_group_policy_is_validated_at_the_class(self):
+        for policy in (
+            "response-formats = (list; 'yaml'), default-response-format = 'json'",
+            "response-formats = (list; 'json', 'json')",
+            "response-formats = (list; 'unsupported')",
+        ):
+            with self.subTest(policy=policy):
+                self.check("from /streaky/http-server/annotations import route-group\n"
+                    "from /core/collections import list\n"
+                    f"@[route-group; {policy}]\nclass api\n",
+                    ["api"], origin="api")
+
+    def test_explicit_empty_response_formats_are_rejected_at_the_class(self):
+        self.check("from /streaky/http-server/annotations import route-group\n"
+            "from /core/collections import list\n"
+            "@[route-group; response-formats = (list;)]\nclass api\n",
+            ["api"], origin="api")
 
     def test_multiple_api_documentation_owners_are_rejected(self):
         self.check("from /streaky/http-server/annotations import api-documentation\n"
@@ -127,6 +145,87 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
             "@[api-documentation;]\n@[endpoint; path = '/second']\n"
             "async function second string;\n    return 'second'\n",
             ["first", "second"], origin="second")
+
+    def test_document_wide_info_ownership_encoding_and_overview_precedence(self):
+        (self.directory / "package.toml").write_text('\n'.join([
+            'package = "http-annotation-test"',
+            'artifact = "executable"',
+            '[namespaces]',
+            'http-annotation-test = "src"',
+            '[terrane-dependencies.streaky.http-server]',
+            f'path = "{os.path.relpath(PACKAGE, self.directory)}"',
+            '[consumers.http-server]',
+            f'command = "{os.path.relpath(CONSUMER, self.directory)}"',
+            'declarations = ["/http-annotation-test::api", "/http-annotation-test::api::value"]',
+        ]))
+        title = 'Café "catalog" \\ API'
+        version = "2026.10-preview"
+        overview = "# API overview\n\n```console\ncurl /api/value\n```\n\n@returns This belongs to the overview."
+        override = "**Custom overview**\n\nUse the documented request examples."
+        def literal(value):
+            return "'" + value.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n") + "'"
+
+        base_annotation = (
+            "@[api-documentation; title = " + literal(title)
+            + ", version = " + literal(version)
+        )
+        for annotation, expected_info in [
+            ("", {"title": "HTTP API", "version": "1.0.0"}),
+            (base_annotation + "]", {"title": title, "version": version, "description": overview}),
+            (base_annotation + ", description = " + literal(override) + "]",
+                {"title": title, "version": version, "description": override}),
+        ]:
+            with self.subTest(annotation=annotation):
+                source = (
+                    "namespace http-annotation-test\n"
+                    "from /streaky/http-server/annotations import api-documentation, route-group, endpoint\n"
+                    "from /streaky/http-server import create-application\n"
+                    "from /generated/http-server import mount-annotated\n"
+                    "from /core/process import arguments\n"
+                    "from /core/errors import throwable\n"
+                    + "\n".join("/// " + line if line else "///" for line in overview.splitlines())
+                    + "\n" + (annotation + "\n" if annotation else "")
+                    + "@[route-group; prefix = '/api']\nclass api\n"
+                    "    @[endpoint; path = '/value']\n"
+                    "    async function value string;\n        return 'ready'\n"
+                    "async function main throws throwable;\n"
+                    "    app = mount-annotated; (create-application;)\n"
+                    "    supplied = arguments;\n"
+                    "    app = app.with-address; supplied[0].text\n"
+                    "    await app.serve;\nmain\n"
+                )
+                (self.directory / "src/main.trn").write_text(source)
+                built = subprocess.run([str(COMPILER), "build", str(self.directory)],
+                    capture_output=True, text=True, timeout=300)
+                self.assertEqual(built.returncode, 0, built.stderr)
+                with socket.socket() as reservation:
+                    reservation.bind(("127.0.0.1", 0))
+                    port = reservation.getsockname()[1]
+                server = subprocess.Popen([built.stdout.strip().splitlines()[-1], f"127.0.0.1:{port}"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                try:
+                    deadline = time.monotonic() + 10
+                    while True:
+                        connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+                        try:
+                            connection.request("GET", "/api/openapi.json")
+                            with connection.getresponse() as response:
+                                self.assertEqual(response.status, 200)
+                                self.assertEqual(json.loads(response.read())["info"], expected_info)
+                            break
+                        except OSError:
+                            if time.monotonic() >= deadline or server.poll() is not None:
+                                raise
+                            time.sleep(0.05)
+                        finally:
+                            connection.close()
+                finally:
+                    server.terminate()
+                    try:
+                        server.communicate(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        server.kill()
+                        server.communicate()
 
     def test_all_supported_methods_and_scalar_responses(self):
         (self.directory / "package.toml").write_text('\n'.join([
@@ -153,6 +252,11 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
             '"/http-annotation-test::tampered-error", "/http-annotation-test::quoted-default", '
             '"/http-annotation-test::xml-api", "/http-annotation-test::xml-api::value", '
             '"/http-annotation-test::xml-api::nothing", '
+            '"/http-annotation-test::xml-api::failure", "/http-annotation-test::xml-api::denied", '
+            '"/http-annotation-test::xml-api::invalid-xml", '
+            '"/http-annotation-test::xml-api::model", "/http-annotation-test::xml-api::model::value", '
+            '"/http-annotation-test::legacy-api", "/http-annotation-test::legacy-api::value", '
+            '"/http-annotation-test::json-api", "/http-annotation-test::json-api::value", '
             '"/http-annotation-test::yaml-api", "/http-annotation-test::yaml-api::value", '
             '"/http-annotation-test::quoted-default::label"]',
         ]))
@@ -181,11 +285,46 @@ class xml-api
     async function nothing document-value;
         return make-document-none;
 
+    @[endpoint; path = '/failure']
+    async function failure string throws throwable;
+        throw coercion-error
+
+    @[endpoint; path = '/denied']
+    async function denied string throws throwable;
+        response = create-response; 404, 'text/plain', 'not found'
+        response = response.with-header; 'vary', 'Origin'
+        throw (create-http-error; response)
+
+    @[endpoint; path = '/invalid-xml']
+    async function invalid-xml document-value throws throwable;
+        fields = instance document-map-entries;
+        fields.append; 'bad key', (make-document-string; 'cannot become an XML element')
+        document = make-document-map; fields
+        if document.failed
+            throw coercion-error
+        return document.value
+
+    @[endpoint; method = 'POST', path = '/model']
+    async function model data-model; @[body;] value data-model
+        return value
+
 @[route-group; prefix = '/yaml', response-formats = (list; 'yaml', 'xml')]
 class yaml-api
     @[endpoint; path = '/value']
     async function value string;
         return 'yaml-default'
+
+@[route-group; prefix = '/legacy']
+class legacy-api
+    @[endpoint; path = '/value']
+    async function value int;
+        return 7
+
+@[route-group; prefix = '/json', response-formats = (list; 'json')]
+class json-api
+    @[endpoint; path = '/value']
+    async function value int;
+        return 7
 
 class tree-node
     name string
@@ -261,6 +400,10 @@ async function created explicit-response;
 /// @returns This marker is code, not response documentation.
 /// ```
 /// ````
+///   ~~~console
+/// @returns This tilde-fenced marker is also code.
+///   ~~~
+/// ```inline```
 /// @returns The empty redirect body; follow the Location header.
 @[endpoint; path = '/redirect', content-type = 'text/plain']
 @[response-example; value = '""']
@@ -387,10 +530,10 @@ main
             finally:
                 connection.close()
             self.assertEqual(request("GET", "/method"), 7)
-            def raw_request(path, headers=None):
+            def raw_request(path, headers=None, method="GET", body=None):
                 connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
                 try:
-                    connection.request("GET", path, headers=headers or {})
+                    connection.request(method, path, body=body, headers=headers or {})
                     response = connection.getresponse()
                     return response.status, response.getheaders(), response.read()
                 finally:
@@ -439,6 +582,8 @@ main
             redirect = schema["paths"]["/redirect"]["get"]
             self.assertIn("@returns", redirect["description"])
             self.assertNotIn("```", redirect["responses"]["default"]["description"])
+            self.assertEqual(redirect["responses"]["default"]["description"],
+                "The empty redirect body; follow the Location header.")
             self.assertEqual(redirect["responses"]["default"]["content"]["text/plain"]["examples"]["default"]["value"], "")
             default = schema["paths"]["/quoted-default"]["get"]["parameters"][0]
             self.assertEqual(default["schema"]["default"], special)
@@ -480,7 +625,38 @@ main
             self.assertEqual((status, dict(headers)["content-type"], yaml.safe_load(payload)),
                 (200, "application/yaml", "yaml-default"))
             self.assertEqual(raw_request("/xml/value", {"Accept": "application/json"})[0], 406)
-            self.assertEqual(raw_request("/method", {"Accept": "application/yaml"})[0], 406)
+            for path in ("/method", "/legacy/value"):
+                for accept in ("text/plain", "text/html", "image/png", "application/json;q=0"):
+                    with self.subTest(path=path, accept=accept):
+                        status, headers, payload = raw_request(path, {"Accept": accept})
+                        self.assertEqual((status, dict(headers)["content-type"], json.loads(payload)),
+                            (200, "application/json", 7))
+                        self.assertNotIn("vary", dict(headers))
+                self.assertNotIn("406", schema["paths"][path]["get"]["responses"])
+            for accept in ("application/json; charset=utf-8", 'application/json;charset="UTF-8"',
+                           "application/json, text/\xe9"):
+                status, headers, payload = raw_request("/json/value", {"Accept": accept})
+                self.assertEqual((status, json.loads(payload)), (200, 7))
+                self.assertEqual(dict(headers)["vary"], "Accept")
+            for accept in ("text/plain", "", "application/json;q=0, text/\xe9, */*;q=1"):
+                status, headers, _ = raw_request("/json/value", {"Accept": accept})
+                self.assertEqual(status, 406)
+                self.assertEqual(dict(headers)["vary"], "Accept")
+            for path, expected_status in (("/xml/failure", 500), ("/xml/denied", 404),
+                                          ("/xml/invalid-xml", 500)):
+                for accept, status in (("application/xml", expected_status), ("image/png", 406)):
+                    response_status, headers, _ = raw_request(path, {"Accept": accept})
+                    self.assertEqual(response_status, status)
+                    tokens = {token.strip().lower() for name, value in headers
+                              if name.lower() == "vary" for token in value.split(",")}
+                    self.assertIn("accept", tokens)
+                    if path == "/xml/denied" and status == 404:
+                        self.assertIn("origin", tokens)
+            for body in ("{broken", '{"active":1}'):
+                status, headers, _ = raw_request("/xml/model",
+                    {"Accept": "application/xml", "Content-Type": "application/json"}, "POST", body)
+                self.assertEqual(status, 422)
+                self.assertEqual(dict(headers)["vary"], "Accept")
             xml_schema = schema["paths"]["/xml/value"]["get"]["responses"]["200"]["content"]
             self.assertEqual(set(xml_schema), {"application/xml", "application/yaml"})
             self.assertEqual(ElementTree.fromstring(xml_schema["application/xml"]["examples"]["default"]["value"]).text,
