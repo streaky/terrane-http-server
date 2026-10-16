@@ -88,9 +88,29 @@ status, headers, cookies, and redirects are response-context instructions. A no-
 handler defaults to 204; ordinary typed results default to 200. Failed handlers discard
 partial overrides, and finalized response contexts reject further mutation.
 
+## WebSocket playground
+
+Open `http://127.0.0.1:3187/websocket` (also linked from the home page).
+Choose **Connect**, enter a message, and choose **Send message**. The server replies
+with `echo: ` followed by exactly that text. A connection can exchange multiple
+messages; **Disconnect** performs a normal close, and **Connect** starts another
+session. Messages are not stored, broadcast, or interpreted as catalog mutations.
+
+`src/main.trn` registers `/ws/echo` through the public `application.websocket` method;
+`src/websocket.trn` implements the session callback using `receive` and `send-text`.
+It keeps receiving after a peer `Close` event until `closed`, allowing the transport
+to finish its close handshake rather than sending another close frame.
+The browser uses the current host and port, selecting `ws` or `wss` from the page
+scheme. This does not add TLS termination to the demo's plain TCP listener.
+
+The playground is an AOT-rendered HTML page with a dependency-free script at
+`public/assets/websocket.js`. Its session callback is separate from annotated HTTP
+methods and is not included in `/api/openapi.json`. Upgrade requests still pass
+through the application's normal access policies.
+
 ## Site rendering
 
-Templates live in `templates/home.html` and `templates/about.html`; they use a shared header and footer. The AOT `template` consumer compiles these templates into the binary, so edits to template sources require rebuilding. `.html` rendering escapes values automatically; do not apply a safe filter to untrusted values. Each render uses a fresh context. No template source files or runtime template roots are needed in deployment; only public static assets must accompany the executable.
+Templates live in `templates/home.html`, `templates/about.html`, and `templates/websocket.html`; they use a shared header and footer. The AOT `template` consumer compiles these templates into the binary, so edits to template sources require rebuilding. `.html` rendering escapes values automatically; do not apply a safe filter to untrusted values. Each render uses a fresh context. No template source files or runtime template roots are needed in deployment; only public static assets must accompany the executable.
 
 The demo currently constructs the compiled engine inside each `render-page` call and
 assigns that request's title and heading. This is a simple isolation example, not a
@@ -99,7 +119,7 @@ retain a compiled engine and pass independent context maps to `fetch-context`, a
 HTTP source consumer does. The `/api/health` load baseline does not measure these HTML
 paths or establish their throughput.
 
-Missing model fields retain their Terrane defaults; omitted `quantity` is zero. The codecs do not invent domain constraints such as positive quantities. `src/models.trn` defines the models, `src/api.trn` defines the API class, `src/site.trn` defines pages/static annotations, and `src/main.trn` only starts the configured application.
+Missing model fields retain their Terrane defaults; omitted `quantity` is zero. The codecs do not invent domain constraints such as positive quantities. `src/models.trn` defines the models, `src/api.trn` defines the API class, `src/site.trn` defines pages/static annotations, `src/websocket.trn` defines the echo session, and `src/main.trn` composes and starts the application.
 
 The demo's `///` comments are also its OpenAPI descriptions: parameter comments describe
 path/query inputs and request bodies, model comments describe object schemas, and field

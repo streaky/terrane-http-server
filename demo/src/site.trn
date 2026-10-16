@@ -31,6 +31,10 @@ class site uses api
     async function about string throws throwable;
         return render-page; 'about.html', 'About — Terrane Catalog', 'About this demo'
 
+    @[endpoint; method = 'GET', path = '/websocket', content-type = 'text/html', summary = 'WebSocket playground']
+    async function websocket-playground string throws throwable;
+        return render-page; 'websocket.html', 'WebSocket — Terrane Catalog', 'WebSocket playground'
+
     @[endpoint; method = 'GET|HEAD', path = '/catalog-note', content-type = 'text/plain']
     async function catalog-note string|none;
         request = this.request
