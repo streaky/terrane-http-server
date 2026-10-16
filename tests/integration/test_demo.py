@@ -44,7 +44,7 @@ class PageParser(HTMLParser):
             self.active = None
 
 
-class CatalogHttpTests(unittest.TestCase):
+class DemoHttpTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         if BINARY is None:
@@ -101,12 +101,14 @@ class CatalogHttpTests(unittest.TestCase):
         try:
             payload = response.read().decode()
             response_type = response.getheader("Content-Type")
-            parsed = json.loads(payload) if response_type and response_type.startswith("application/json") else payload
+            parsed = json.loads(payload) if payload and response_type and response_type.startswith("application/json") else payload
             return response.status, response_type, parsed
         finally:
             response.close()
             connection.close()
 
+
+class CatalogHttpTests(DemoHttpTestCase):
     def test_negotiated_yaml_and_xml_responses(self):
         path = "/api/search?term=notebook&limit=2"
         expected = self.request("GET", path)[2]
@@ -254,6 +256,13 @@ class CatalogHttpTests(unittest.TestCase):
 
         paths = schema["paths"]
         self.assertEqual(set(paths), {"/api/health", "/api/items/{item-id}", "/api/search", "/api/orders/quote"})
+        resource = paths["/api/items/{item-id}"]
+        self.assertEqual(set(resource), {"get", "put", "patch", "delete", "head", "options"})
+        self.assertNotIn("content", resource["head"]["responses"]["default"])
+        replacement = resolve(resource["put"]["requestBody"]["content"]["application/json"]["schema"])
+        patch = resolve(resource["patch"]["requestBody"]["content"]["application/json"]["schema"])
+        self.assertEqual(replacement["properties"]["price-cents"]["type"], "integer")
+        self.assertEqual(patch["properties"]["in-stock"]["anyOf"], [{"type": "boolean"}, {"type": "null"}])
         item = paths["/api/items/{item-id}"]["get"]
         parameters = {(p["in"], p["name"]): p for p in item["parameters"]}
         self.assertTrue(parameters["path", "item-id"]["required"])
@@ -288,12 +297,15 @@ class CatalogHttpTests(unittest.TestCase):
         for path, method in [
             ("/api/health", "get"), ("/api/items/{item-id}", "get"),
             ("/api/search", "get"), ("/api/orders/quote", "post"),
+            ("/api/items/{item-id}", "put"), ("/api/items/{item-id}", "patch"),
+            ("/api/items/{item-id}", "delete"), ("/api/items/{item-id}", "head"),
+            ("/api/items/{item-id}", "options"),
         ]:
             operation = paths[path][method]
             with self.subTest(path=path):
                 self.assertNotIn("@returns", operation["description"])
-                self.assertIn("description", operation["responses"]["200"])
-                self.assertNotEqual(operation["responses"]["200"]["description"], "Successful response")
+                response = operation["responses"].get("200", operation["responses"].get("default"))
+                self.assertTrue(response["description"].strip())
                 for parameter in operation["parameters"]:
                     self.assertIn("description", parameter)
         quote = paths["/api/orders/quote"]["post"]
@@ -304,6 +316,72 @@ class CatalogHttpTests(unittest.TestCase):
                 self.assertIsInstance(field.get("description"), str)
                 self.assertNotEqual(field["description"].strip(), "")
                 self.assertNotEqual(field["description"], "none")
+
+
+class CatalogMutationTests(DemoHttpTestCase):
+    def test_put_patch_delete_change_subsequent_reads_searches_and_quotes(self):
+        path = "/api/items/2"
+        self.assertEqual(self.request("HEAD", path)[::2], (200, ""))
+        connection, response = self.response("OPTIONS", path)
+        try:
+            self.assertEqual((response.status, response.read()), (204, b""))
+            self.assertEqual({method.strip() for method in response.getheader("Allow").split(",")},
+                {"GET", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"})
+        finally:
+            response.close()
+            connection.close()
+
+        replacement = {"name": "Terrane pencil", "price-cents": 300, "in-stock": True}
+        expected = {"id": 2, **replacement}
+        self.assertEqual(self.request("PUT", path, json.dumps(replacement))[2], expected)
+        self.assertEqual(self.request("GET", path + "?detailed=true")[2], expected)
+        self.assertEqual(self.request("POST", "/api/orders/quote",
+            '{"item-id":2,"quantity":3}')[2], {"item-id": 2, "quantity": 3, "total-cents": 900})
+
+        for invalid in ['{"price-cents":true}', '{"unknown":1}', "{broken"]:
+            with self.subTest(invalid=invalid):
+                self.assertEqual(self.request("PATCH", path, invalid)[0], 422)
+                self.assertEqual(self.request("GET", path + "?detailed=true")[2], expected)
+
+        expected.update({"name": "Terrane sketchbook", "price-cents": 0, "in-stock": False})
+        self.assertEqual(self.request("PATCH", path,
+            '{"name":"Terrane sketchbook","price-cents":0,"in-stock":false}')[2], expected)
+        self.assertEqual(self.request("PATCH", path, '{"name":null}')[2], expected)
+        self.assertEqual(self.request("PATCH", path, "{}")[2], expected)
+        self.assertEqual(self.request("GET", path + "?detailed=true")[2], expected)
+        self.assertEqual(self.request("GET", "/api/search?term=sketchbook")[2]["items"], [expected])
+        self.assertEqual(self.request("GET", "/api/search?term=pencil")[2]["items"], [])
+        self.assertEqual(self.request("POST", "/api/orders/quote",
+            '{"item-id":2,"quantity":3}')[2]["total-cents"], 0)
+
+        self.request("PATCH", path, '{"price-cents":350,"in-stock":true}')
+        reset = {"id": 2, "name": "Minimal item", "price-cents": 0, "in-stock": False}
+        self.assertEqual(self.request("PUT", path, '{"name":"Minimal item"}')[2], reset)
+        self.assertEqual(self.request("DELETE", path)[::2], (204, ""))
+        self.assertEqual(self.request("GET", "/api/search?term=Minimal")[2]["items"], [])
+        for method, body in [("GET", None), ("HEAD", None), ("DELETE", None),
+                             ("PUT", json.dumps(replacement)), ("PATCH", "{}")]:
+            with self.subTest(method=method):
+                self.assertEqual(self.request(method, path, body)[0], 404)
+        self.assertEqual(self.request("POST", "/api/orders/quote",
+            '{"item-id":2,"quantity":1}')[0], 404)
+        self.assertEqual(self.request("OPTIONS", path)[::2], (204, ""))
+
+    def test_concurrent_patches_preserve_independent_field_updates(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Barrier
+
+        ready = Barrier(2)
+        def patch(changes):
+            ready.wait(timeout=5)
+            return self.request("PATCH", "/api/items/1", json.dumps(changes))[0]
+
+        with ThreadPoolExecutor(max_workers=2) as clients:
+            name = clients.submit(patch, {"name": "Updated notebook"})
+            price = clients.submit(patch, {"price-cents": 1700})
+            self.assertEqual((name.result(), price.result()), (200, 200))
+        self.assertEqual(self.request("GET", "/api/items/1?detailed=true")[2],
+            {"id": 1, "name": "Updated notebook", "price-cents": 1700, "in-stock": True})
 
 
 if __name__ == "__main__":

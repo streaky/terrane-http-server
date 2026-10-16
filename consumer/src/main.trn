@@ -91,7 +91,11 @@ function method-key string throws consumer-error; value string, record document-
             return 'patch'
         case 'DELETE'
             return 'delete'
-    throw (instance consumer-error; record, 'HTTP method must be GET, POST, PUT, PATCH, or DELETE')
+        case 'HEAD'
+            return 'head'
+        case 'OPTIONS'
+            return 'options'
+    throw (instance consumer-error; record, 'HTTP method must be GET, POST, PUT, PATCH, DELETE, HEAD, or OPTIONS')
 
 function schema-type string; kind string
     if kind == 'int'
@@ -376,7 +380,14 @@ function make-operation operation throws consumer-error; declaration document-va
         entries.append; 'requestBody', (object-value; request-entries, declaration)
     response-entries = instance document-map-entries;
     result-description = operation-documentation; declaration, true
-    if result-explicit
+    if method == 'HEAD'
+        if result-description == ''
+            result-description = 'Response headers only; no response body'
+        response-key = '200'
+        if result-explicit
+            response-key = 'default'
+        response-entries.append; response-key, (response-description; result-description, declaration)
+    else if result-explicit
         if result-description == ''
             result-description = 'Explicit response status; HTTP error responses may also occur'
         examples = declaration-examples; declaration, content-type

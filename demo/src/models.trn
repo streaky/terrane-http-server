@@ -40,6 +40,24 @@ class quote-output
     /// Total price in cents, calculated as quantity times the item's unit price.
     total-cents int
 
+/// A complete replacement for an existing catalog item; its identifier stays in the path.
+class item-input
+    /// Replacement display name; omitted values use the empty-string model default.
+    name string
+    /// Replacement unit price in cents; omitted values use zero.
+    price-cents int
+    /// Replacement stock availability; omitted values use false.
+    in-stock bool
+
+/// Partial item changes; omitted or null fields leave their stored values unchanged.
+class item-patch
+    /// New display name, or null to retain the current name.
+    name string|none = none
+    /// New unit price in cents, or null to retain the current price; zero is an update.
+    price-cents int|none = none
+    /// New availability, or null to retain it; false is an update.
+    in-stock bool|none = none
+
 function create-item-response item-response; id int, name string, price-cents int, in-stock bool
     value = instance item-response;
     value.id = id

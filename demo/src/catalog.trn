@@ -1,0 +1,54 @@
+namespace http-server-demo
+
+from /core/collections import list, map
+from /streaky/http-server import http-error
+
+# API-controller copies retain one shared identity. Synchronous mutations keep the
+# shared-reference lock for their whole read/modify/write operation, never across await.
+function create-catalog shared ref catalog-store;
+    return shared ref (instance catalog-store;)
+
+class catalog-store
+    private items map of int, item-response
+
+    function construct;
+        this.items.set; 1, (create-item-response; 1, 'Terrane notebook', 1200, true)
+        this.items.set; 2, (create-item-response; 2, 'Terrane pencil', 250, true)
+
+    function read item-response; item-id int
+        found = this.items.get.checked; item-id
+        if found != none
+            return found
+        throw http-error; 404, 'Catalog item not found'
+
+    function search list of item-response; term string, limit int
+        results list of item-response = list
+        for _item-id, item in this.items
+            if results.length < limit and (item.name.contains; term)
+                results.append; item
+        return results
+
+    mutable function replace-item item-response; item-id int, replacement item-input
+        this.read; item-id
+        item = create-item-response; item-id, replacement.name, replacement.price-cents, replacement.in-stock
+        this.items.set; item-id, item
+        return item
+
+    mutable function patch item-response; item-id int, changes item-patch
+        item = this.read; item-id
+        name = changes.name
+        if name != none
+            item.name = name
+        price = changes.price-cents
+        if price != none
+            item.price-cents = price
+        available = changes.in-stock
+        if available != none
+            item.in-stock = available
+        this.items.set; item-id, item
+        return item
+
+    mutable function delete; item-id int
+        removed = this.items.remove.checked; item-id
+        if removed == none
+            throw http-error; 404, 'Catalog item not found'

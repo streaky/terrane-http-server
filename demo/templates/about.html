@@ -1,4 +1,4 @@
 {% include "header.html" %}
-  <p>Catalog lookup, search, and quote pricing are stateless examples. Quotes are calculated from the current catalog price and are not stored.</p>
+  <p>The catalog is seeded at startup and stored in memory. PUT replaces items, PATCH changes selected fields, and DELETE removes them until restart. Lookup, search, and quotes read the current catalog; quotes themselves are not stored. HEAD checks item existence, and OPTIONS lists the supported methods.</p>
   <p><a href="/">Back to the catalog home</a></p>
 {% include "footer.html" %}

@@ -320,9 +320,10 @@ documentation:
 
             Consult [[http-server.api.application]] and
             [[http-server.api.routes]] for every available builder and handler
-            contract. Rich request extraction, structured HTTP responses,
-            additional HTTP methods, binary WebSocket payloads, and graceful
-            shutdown are not current public APIs.
+            contract. Typed request extraction, structured responses, and GET, POST, PUT,
+            PATCH, DELETE, HEAD, and OPTIONS operations are covered by
+            [[http-server.guide.annotations]]. Binary WebSocket payloads and graceful
+            shutdown remain outside the current public APIs.
       sections: []
   see-also:
     - http-server.guide.application-routing

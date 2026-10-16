@@ -1,6 +1,6 @@
 # Annotated catalog demo
 
-A real HTTP service built with class-based annotated APIs, ordinary typed Terrane models, and AOT-compiled templates. The catalog API provides item lookup, search, and stateless order quote pricing; a separate site serves template-backed HTML pages, Stoplight Elements documentation, and static assets.
+A real HTTP service built with class-based annotated APIs, ordinary typed Terrane models, and AOT-compiled templates. One in-memory catalog is seeded at startup; GET/search/quotes read it, PUT and PATCH update it, and DELETE removes items. HEAD checks existence without a body, and OPTIONS advertises the item resource's methods. A separate site serves template-backed HTML pages, Stoplight Elements documentation, and static assets.
 
 From the Terrane repository root:
 
@@ -24,7 +24,42 @@ curl http://127.0.0.1:3187/docs/
 curl http://127.0.0.1:3187/assets/site.css
 ```
 
-The notebook costs 1200 cents, so three cost 3600 cents. The order body is decoded into an `order-input` model; quote responses use `quote-output`. Invalid model bodies and malformed scalar path/query parameters return 422 before a handler runs. Handler or template-render failures return 500. Quotes are calculated from the catalog and are not persisted.
+The initial notebook costs 1200 cents, so three cost 3600 cents. The order body is decoded into an `order-input` model; quote responses use `quote-output` and the current stored price. Invalid model bodies and malformed scalar path/query parameters return 422 before a handler runs. Handler or template-render failures return 500. Quotes are not stored; catalog changes last until the process restarts.
+
+## Modify the in-memory catalog
+
+Startup seeds item 1 (the notebook) and item 2 (a pencil costing 250 cents).
+The API holds one `shared ref catalog-store`, backed by an ordered map keyed by item ID.
+Synchronous store methods keep each read/modify/write operation together; controller copies
+share that store rather than independently copying the catalog.
+
+```console
+curl -I http://127.0.0.1:3187/api/items/2
+curl -i -X OPTIONS http://127.0.0.1:3187/api/items/2
+curl -X PUT -H 'Content-Type: application/json' \
+  -d '{"name":"Terrane pencil","price-cents":300,"in-stock":true}' \
+  http://127.0.0.1:3187/api/items/2
+curl -X PATCH -H 'Content-Type: application/json' \
+  -d '{"price-cents":350,"in-stock":false}' http://127.0.0.1:3187/api/items/2
+curl 'http://127.0.0.1:3187/api/items/2?detailed=true'
+curl -H 'Content-Type: application/json' -d '{"item-id":2,"quantity":3}' \
+  http://127.0.0.1:3187/api/orders/quote
+curl -i -X DELETE http://127.0.0.1:3187/api/items/2
+curl -i http://127.0.0.1:3187/api/items/2
+```
+
+PUT replaces all editable fields of an existing item; omitted fields reset to model defaults
+(empty name, zero price, false availability). PATCH changes only non-null supplied fields;
+missing or null fields are unchanged, while zero and false are real updates. It accepts a
+partial JSON object, not JSON Patch or JSON Merge Patch. Both return the resulting item in
+the negotiated JSON/YAML/XML format. They do not create missing items.
+
+DELETE returns 204 without a body. Deleted identifiers return 404 for reads, writes, quotes,
+and repeated deletes. Restarting restores the seed data. HEAD returns 200 or 404 with no
+body. OPTIONS returns 204 and `Allow: GET, PUT, PATCH, DELETE, HEAD, OPTIONS`, even for a
+missing item; it describes this route and does not implement CORS.
+
+## Site rendering
 
 Templates live in `templates/home.html` and `templates/about.html`; they use a shared header and footer. The AOT `template` consumer compiles these templates into the binary, so edits to template sources require rebuilding. `.html` rendering escapes values automatically; do not apply a safe filter to untrusted values. Each render uses a fresh context. No template source files or runtime template roots are needed in deployment; only public static assets must accompany the executable.
 

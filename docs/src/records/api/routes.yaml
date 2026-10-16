@@ -32,8 +32,10 @@ documentation:
 
         `endpoint(method: http-method, path: string, handler: async function from http-request
         to http-response throws throwable, vary-accept: bool = false) -> routes` registers
-        a typed HTTP callback. The closed `http-method` enum has `get`, `post`, `put`, `patch`,
-        and `delete` variants.
+        `get`, `post`, `put`, `patch`, `delete`, `head`, and `options` variants. GET may
+        also be served for HEAD by the framework; register an explicit HEAD endpoint to
+        override that behavior. HEAD responses are bodyless on the wire. OPTIONS invokes
+        only an explicitly registered handler and does not enable automatic CORS behavior.
         The callback receives decoded path/query access and bounded JSON body decoding,
         and returns an explicit status, content type, body, and additional headers. Path,
         query, and body conversion failures return HTTP 422 before invocation. A caught
@@ -66,6 +68,8 @@ documentation:
             put
             patch
             delete
+            head
+            options
 
         public class routes
             consuming function get routes; path string, handler async function to string

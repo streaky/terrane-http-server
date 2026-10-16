@@ -239,6 +239,8 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
             f'command = "{os.path.relpath(CONSUMER, self.directory)}"',
             'declarations = ["/http-annotation-test::read", "/http-annotation-test::create", '
             '"/http-annotation-test::replace", "/http-annotation-test::change", "/http-annotation-test::remove", '
+            '"/http-annotation-test::head-read", "/http-annotation-test::method-options", '
+            '"/http-annotation-test::head-scalar", '
             '"/http-annotation-test::echo-model", "/http-annotation-test::echo-model::value", '
             '"/http-annotation-test::data-model", "/http-annotation-test::tree-node", '
             '"/http-annotation-test::data-model::nickname", "/http-annotation-test::data-model::selected", '
@@ -374,6 +376,19 @@ async function change bool;
 @[endpoint; path = '/method', method = 'DELETE']
 async function remove string;
     return 'deleted'
+@[endpoint; path = '/method', method = 'HEAD']
+async function head-read http-response;
+    response = create-response; 202, 'text/plain', 'hidden'
+    return (response.with-header; 'x-head', 'explicit')
+
+@[endpoint; path = '/head-scalar', method = 'HEAD']
+async function head-scalar bool;
+    return true
+
+@[endpoint; path = '/method', method = 'OPTIONS']
+async function method-options http-response;
+    response = create-response; 204, 'text/plain', ''
+    return (response.with-header; 'allow', 'GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS')
 
 @[endpoint; path = '/failure', content-type = 'text/html']
 async function failing-handler string throws throwable;
@@ -538,6 +553,15 @@ main
                     return response.status, response.getheaders(), response.read()
                 finally:
                     connection.close()
+            status, headers, payload = raw_request("/method", method="HEAD")
+            self.assertEqual((status, payload), (202, b""))
+            self.assertEqual(dict(headers)["x-head"], "explicit")
+            status, headers, payload = raw_request("/head-scalar", method="HEAD")
+            self.assertEqual((status, payload), (200, b""))
+            self.assertEqual(dict(headers)["content-type"], "application/json")
+            status, headers, payload = raw_request("/method", method="OPTIONS")
+            self.assertEqual((status, payload), (204, b""))
+            self.assertEqual(dict(headers)["allow"], "GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS")
             status, headers, payload = raw_request("/created")
             self.assertEqual(status, 201)
             self.assertEqual(dict(headers)["content-type"], "application/json")
@@ -612,10 +636,13 @@ main
                     request("POST", "/models", invalid, status=422)
             schema = request("GET", "/openapi.json")
             operations = schema["paths"]["/method"]
-            self.assertEqual(set(operations), {method.lower() for method in expected})
+            self.assertEqual(set(operations), {method.lower() for method in expected} | {"head", "options"})
             for method, value in expected.items():
                 expected_type = "boolean" if isinstance(value, bool) else "integer" if isinstance(value, int) else "string"
                 self.assertEqual(operations[method.lower()]["responses"]["200"]["content"]["application/json"]["schema"]["type"], expected_type)
+            self.assertNotIn("content", operations["head"]["responses"]["default"])
+            self.assertIn("default", operations["options"]["responses"])
+            self.assertNotIn("content", schema["paths"]["/head-scalar"]["head"]["responses"]["200"])
             model_schema = schema["paths"]["/models"]["post"]["requestBody"]
             status, headers, payload = raw_request("/xml/value")
             self.assertEqual((status, dict(headers)["content-type"]), (200, "application/xml"))

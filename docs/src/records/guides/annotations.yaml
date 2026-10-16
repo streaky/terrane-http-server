@@ -149,6 +149,14 @@ documentation:
             uses prefix `/api`; its schema paths include that prefix and its server URL is
             `/`. A group may set `document = false` to keep its endpoints out of the API
             schema while still serving HTML pages.
+
+            Source classes have ordinary value semantics. A collection field alone is not
+            shared mutable application state across copied callback receivers. The native
+            catalog demo instead initializes one explicit `shared ref catalog-store` whose
+            ordered map is seeded during mounting. Short synchronous store methods perform
+            complete operations on that shared identity; handlers retain a local owning
+            reference before invoking mutations. No store operation suspends or retains a
+            lock across `await`. Changes are process-local and disappear on restart.
     - id: overview
       title: API title, version, and overview
       blocks:
@@ -298,7 +306,10 @@ documentation:
             duplicate registrations and operation IDs, invalid methods or paths, and the
             reserved `/api/openapi.json` route. Declaration documentation provides a
             description when explicit metadata does not provide one. GET, POST, PUT, PATCH,
-            and DELETE are the initial operation methods. `route-group` is class metadata
+            DELETE, HEAD, and OPTIONS are supported operation methods. GET may also be
+            served for HEAD by the framework; explicit HEAD registration overrides it and
+            produces a bodyless wire response. OPTIONS requires an explicit handler and
+            does not provide automatic CORS behavior. `route-group` is class metadata
             with `prefix` (default `/`) and `document` (default `true`). `static-directory`
             is repeatable class metadata with an absolute URL `path` and a directory relative
             to the process working directory. Endpoint metadata adds `content-type`, default
