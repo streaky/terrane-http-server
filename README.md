@@ -28,12 +28,6 @@ using the same `TERRANE` executable. Ship the compiler support and template migr
 before this package; a successful build using uncommitted sibling changes is not
 evidence that the package can be merged independently.
 
-This API also requires compiler commit **`3b725be6`** (owned object-field snapshots,
-function-owned collection lowering, and imported trait/base-field retention), or a
-descendant containing those fixes. It is currently on the compiler's
-`fix/request-scoped-value-lowering` branch, not its `main`; land that compiler change
-before merging this package. The native consumer and demo checks below use that compiler.
-
 Projection state is disposable compiler-generated cache under `.trn/projection-cache.json`,
 not a package-root lockfile to commit or refresh. Keep `terrane-dependencies.lock` committed:
 it records resolved dependency versions, sources, and checksums. CLI and editor language

@@ -176,6 +176,12 @@ python packages/http-server/tests/integration/test_consumer.py
 
 The HTTP suite starts the real built application from an isolated directory containing only copied public assets, with no template sources. It checks typed bodies and outputs, defaults, templated HTML pages, static documentation and assets, and the mounted OpenAPI schema. The consumer suite checks malformed declarations through the real compiler/consumer pipeline, plus throwing handlers returning success or HTTP 500 without taking down the server.
 
+The same demo suite also upgrades a raw socket to `/ws/echo`, verifies multiple text
+echoes (including Unicode and an empty message) on one connection, and checks the
+peer-close reply, EOF, and continued HTTP service. It verifies that the playground
+page and JavaScript asset are served with their expected media types. This requires
+no additional WebSocket client library; browser controls are exercised separately.
+
 ## Docker deployment
 
 From the repository root, build the Terrane consumers and demo executable, stage the binary inside the ignored Docker context, then build and start the Compose service:

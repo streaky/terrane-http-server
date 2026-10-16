@@ -2,6 +2,8 @@
 
 Run: python packages/http-server/tests/integration/test_demo.py /path/to/app
 """
+import base64
+import hashlib
 import http.client
 from html.parser import HTMLParser
 import json
@@ -9,6 +11,7 @@ from pathlib import Path
 import socket
 import shutil
 import subprocess
+import struct
 import sys
 import tempfile
 import time
@@ -253,6 +256,67 @@ class CatalogHttpTests(DemoHttpTestCase):
         self.assertEqual(self.request("POST", "/api/orders/quote", b'{"item-id":1,"quantity":1,"invalid":"\xff"}')[0], 422)
         self.assertEqual(self.request("POST", "/api/orders/quote", b'{"item-id":1}' + b' ' * 2097100)[0], 200)
         self.assertEqual(self.request("POST", "/api/orders/quote", b'{}' + b' ' * 2097151)[0], 422)
+
+    def test_websocket_echo_messages_and_clean_peer_close(self):
+        with socket.create_connection(("127.0.0.1", self.port), timeout=5) as connection:
+            key = base64.b64encode(b"terrane-ws-test!").decode()
+            connection.sendall((
+                f"GET /ws/echo HTTP/1.1\r\nHost: 127.0.0.1:{self.port}\r\n"
+                "Upgrade: websocket\r\nConnection: Upgrade\r\n"
+                f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n").encode())
+            with connection.makefile("rb") as stream:
+                self.assertEqual(stream.readline().split()[1], b"101")
+                headers = {}
+                while True:
+                    line = stream.readline()
+                    if line == b"\r\n":
+                        break
+                    self.assertNotEqual(line, b"", "connection ended during upgrade")
+                    name, value = line.split(b":", 1)
+                    headers[name.lower()] = value.strip()
+                expected_accept = base64.b64encode(hashlib.sha1(
+                    (key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode()).digest())
+                self.assertEqual(headers[b"sec-websocket-accept"], expected_accept)
+
+                def read_exact(count):
+                    data = stream.read(count)
+                    self.assertEqual(len(data), count, "connection ended mid-frame")
+                    return data
+
+                def read_frame():
+                    header = read_exact(2)
+                    self.assertEqual(header[1] & 0x80, 0, "server frame must not be masked")
+                    length = header[1] & 0x7f
+                    if length == 126:
+                        length = struct.unpack("!H", read_exact(2))[0]
+                    elif length == 127:
+                        length = struct.unpack("!Q", read_exact(8))[0]
+                    return header[0] & 0x0f, read_exact(length)
+
+                def send_frame(opcode, payload):
+                    mask = b"\x01\x02\x03\x04"
+                    connection.sendall(bytes([0x80 | opcode, 0x80 | len(payload)]) + mask
+                        + bytes(value ^ mask[index % 4] for index, value in enumerate(payload)))
+
+                for text in ("café <b>&</b>", "second", ""):
+                    with self.subTest(message=text):
+                        payload = text.encode("utf-8")
+                        send_frame(1, payload)
+                        self.assertEqual(read_frame(), (1, b"echo: " + payload))
+                send_frame(8, struct.pack("!H", 1000))
+                opcode, payload = read_frame()
+                self.assertEqual(opcode, 8)
+                self.assertEqual(struct.unpack("!H", payload[:2])[0], 1000)
+                self.assertEqual(stream.read(1), b"")
+        self.assertEqual(self.request("GET", "/api/health"), (200, "application/json", "ok"))
+        for path, media_type in (
+            ("/websocket", "text/html"),
+            ("/assets/websocket.js", "text/javascript"),
+        ):
+            with self.subTest(path=path):
+                status, content_type, _ = self.request("GET", path)
+                self.assertEqual(status, 200)
+                self.assertEqual(content_type.split(";")[0], media_type)
 
     def test_html_and_static_files(self):
         for path, title, heading, links in [
