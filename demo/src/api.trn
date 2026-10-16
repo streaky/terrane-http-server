@@ -27,6 +27,12 @@ from /core/collections import list
 class catalog-api
     private catalog shared ref catalog-store = create-catalog;
 
+    private function item-representation item-response; item-id int, detailed bool
+        item = this.catalog.read; item-id
+        if not detailed
+            item.in-stock = false
+        return item
+
     /// Check that the catalog service is running.
     ///
     /// This lightweight endpoint is useful for **health checks** and deployment probes.
@@ -61,10 +67,7 @@ class catalog-api
         /// Include stock availability; otherwise in-stock is reported as false.
         @[query;] @[request-example; value = 'true'] detailed bool = false,
     )
-        item = this.catalog.read; item-id
-        if not detailed
-            item.in-stock = false
-        return item
+        return this.item-representation; item-id, detailed
 
     /// Search current catalog item names; the limit defaults to ten when omitted.
     ///
@@ -174,9 +177,11 @@ class catalog-api
     )
         catalog = this.catalog
         catalog.delete; item-id
-        return create-response; 204, 'application/json', ''
+        return create-response; 204, '', ''
 
     /// Check that a catalog item exists without downloading its representation.
+    /// Uses the same representation and negotiation as GET, preserving Content-Type,
+    /// Content-Length, and Vary while the native router removes the wire body.
     ///
     /// ```console
     /// curl -I http://127.0.0.1:3187/api/items/2
@@ -184,12 +189,13 @@ class catalog-api
     ///
     /// @returns HTTP 200 and headers only, or HTTP 404 and no body for a missing item.
     @[endpoint; method = 'HEAD', path = '/items/{item-id}', summary = 'Check a catalog item']
-    async function head-item http-response; (
+    async function head-item item-response; (
         /// Identifier of the catalog item whose existence to check.
         @[path;] @[request-example; value = '2'] item-id int,
+        /// Include stock availability, exactly as for the corresponding GET request.
+        @[query;] @[request-example; value = 'true'] detailed bool = false,
     )
-        this.catalog.read; item-id
-        return create-response; 200, 'application/json', ''
+        return this.item-representation; item-id, detailed
 
     /// Discover the methods supported on a catalog item resource.
     ///
@@ -205,4 +211,5 @@ class catalog-api
         /// Item-resource identifier; OPTIONS does not require that this item exists.
         @[path; name = 'item-id'] @[request-example; value = '2'] _item-id int,
     )
-        return (create-response; 204, 'application/json', '').with-header; 'allow', 'GET, PUT, PATCH, DELETE, HEAD, OPTIONS'
+        # Keep Allow in sync with the /items/{item-id} endpoint registrations.
+        return (create-response; 204, '', '').with-header; 'allow', 'GET, PUT, PATCH, DELETE, HEAD, OPTIONS'

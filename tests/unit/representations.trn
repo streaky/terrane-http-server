@@ -26,6 +26,11 @@ function test-response-negotiation-honors-quality-specificity-and-default throws
     for accept in (list; 'image/png', '*/*;q=0', 'application/json;q=1.1', 'application/json;q=-1', 'application/json;q=0.1234', 'application/json;q=no', 'application/json;q=1;q=0', 'application/json;profile=other')
         assert-equal-string; (select-response-format; accept, formats, 'json'), ''
     assert-equal-string; (select-response-format; 'application/xml', (list; 'json'), 'json'), ''
+    assert-equal-string; (select-response-format; 'application/xml;charset=UTF-8', formats, 'json'), 'xml'
+    assert-equal-string; (select-response-format; 'application/yaml; charset="UTF-8";q=0.8,application/json;q=0.5', formats, 'json'), 'yaml'
+    assert-equal-string; (select-response-format; 'application/xml;charset="utf-8";q=0, */*;q=1', formats, 'xml'), 'json'
+    assert-equal-string; (select-response-format; 'application/yaml;charset=iso-8859-1', formats, 'json'), ''
+    assert-equal-string; (select-response-format; 'application/xml;charset="utf-16",application/json;q=0.5', formats, 'xml'), 'json'
 
 function test-yaml-roundtrip-preserves-scalars-nested-collections-and-exact-numbers throws throwable;
     original = parse-json; '{"quoted":"yes: café\\n<&>\\r","null":null,"boolean":true,"integer":123456789012345678901234567890,"nested":[{"value":"001"},[],{}]}', (default-json-options;)

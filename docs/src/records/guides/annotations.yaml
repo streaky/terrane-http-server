@@ -220,10 +220,17 @@ documentation:
             default must be enabled. Missing `Accept` uses that default. Quality values and
             wildcard specificity choose among enabled formats; a specific zero-quality
             exclusion overrides a broader wildcard. No acceptable choice produces HTTP 406
-            before the handler runs. JSON's `charset` parameter is ignored, as specified by
-            [RFC 8259 section 11](https://www.rfc-editor.org/rfc/rfc8259#section-11); unsupported
-            media constraints such as `profile` before `q` remain nonmatching. Malformed byte
+            before input validation or handler execution: an unacceptable `Accept` wins
+            over malformed path, query, or body input, returning 406 rather than 422.
+            JSON's `charset` parameter is ignored, as specified by
+            [RFC 8259 section 11](https://www.rfc-editor.org/rfc/rfc8259#section-11). XML and
+            YAML satisfy `charset=utf-8`, case-insensitively and with optional quotes;
+            other charsets do not match those representations. Unsupported media constraints
+            such as `profile` before `q` remain nonmatching. Malformed byte
             ranges are discarded individually, preserving usable alternatives and exclusions.
+            Matching uses the canonical `application/json`, `application/yaml`, and
+            `application/xml` types plus wildcards; aliases such as `text/xml`,
+            `application/x-yaml`, and `text/yaml` are not treated as equivalent.
 
             Every response from a negotiated endpoint varies on `Accept`, including 406,
             validation 422, thrown HTTP errors, and unexpected/conversion 500 responses.
@@ -273,7 +280,8 @@ documentation:
             optional `summary` and `description`, and required `value` as JSON source text.
             JSON parsing preserves scalar, array, object, and null values; names must be
             nonempty and unique on that declaration. Examples document useful calls and
-            responses but do not constrain runtime behavior. Body examples remain JSON even
+            responses but do not constrain runtime behavior and are not checked against their
+            schemas. Body examples remain JSON even
             when responses negotiate YAML or XML. OpenAPI examples belong to their matching
             media types and parameter/request-body objects.
             YAML examples retain the parsed structured value; XML examples are serialized
@@ -293,7 +301,10 @@ documentation:
             include the following space. A marker inside a valid CommonMark fence is code,
             not metadata. Backtick openers cannot contain another backtick in their info
             string, so an inline-code-looking line cannot swallow a following returns section.
-            Following lines belong to that response description until the documentation ends.
+            A bare `@returns` or an indented marker remains ordinary Markdown prose; it
+            does not start a response section and does not produce a diagnostic.
+            After a recognized marker, following lines belong to that response description
+            until the documentation ends.
             The preceding prose describes the operation, unless the endpoint supplies an explicit
             `description`. The returns section applies independently of that override. It
             describes the automatic 200 response, or the default response for an explicit
@@ -308,8 +319,13 @@ documentation:
             description when explicit metadata does not provide one. GET, POST, PUT, PATCH,
             DELETE, HEAD, and OPTIONS are supported operation methods. GET may also be
             served for HEAD by the framework; explicit HEAD registration overrides it and
-            produces a bodyless wire response. OPTIONS requires an explicit handler and
-            does not provide automatic CORS behavior. `route-group` is class metadata
+            produces a bodyless wire response. Typed HEAD handlers should produce the same
+            negotiated representation as GET so the native router can preserve its headers
+            while suppressing its body. An explicit `http-response` HEAD handler owns its
+            headers, including content type, length, and cache variation; an empty body
+            without an explicit length yields `Content-Length: 0`, not GET's encoded length.
+            OPTIONS requires an explicit handler and does not provide automatic CORS behavior.
+            `route-group` is class metadata
             with `prefix` (default `/`) and `document` (default `true`). `static-directory`
             is repeatable class metadata with an absolute URL `path` and a directory relative
             to the process working directory. Endpoint metadata adds `content-type`, default
@@ -361,6 +377,23 @@ documentation:
             OpenAPI 3.1 permits description and XML metadata alongside a schema reference.
             Reference resolution must preserve these sibling keywords: response-root names
             and collection wrappers can differ from the referenced component's metadata.
+
+            XML null values use `xsi:nil="true"` and a root namespace declaration. The
+            OpenAPI 3.1 XML Object has no dedicated nil marker or standalone root
+            namespace-declaration facility for this convention. Nullable schema fields still
+            use `anyOf` with a null branch; XML clients and generators must also follow the
+            documented wire convention.
+
+            Returns-marker detection deliberately follows the strict documented syntax and
+            preserves nonmatching text as prose. The consumer protocol currently reports
+            fatal errors, not non-fatal warnings; turning plausible prose into a build failure
+            would be inappropriate. A warning protocol is not a committed implementation plan.
+
+            Accept matching is deliberately bounded to the supported canonical media types.
+            Unsupported parameter constraints, including quoted values containing commas,
+            remain nonmatching rather than requiring a general quoted-parameter parser.
+            Supporting additional media parameters would require reconsidering that parsing
+            boundary; it is not a committed extension.
     - id: consumer-source-templates
       title: Maintaining generated source templates
       blocks:

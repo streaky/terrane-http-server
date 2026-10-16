@@ -135,6 +135,42 @@ class CatalogHttpTests(DemoHttpTestCase):
             headers={"Accept": "application/json;q=0,application/yaml;q=0.5,*/*;q=0.1"})
         self.assertEqual((status, content_type, yaml.safe_load(body)), (200, "application/yaml", "ok"))
 
+    def test_head_preserves_negotiated_get_headers_without_a_body(self):
+        for path in ["/api/items/1", "/api/items/1?detailed=true",
+                     "/api/items/99", "/api/items/abc", "/api/items/1?detailed=invalid"]:
+            for accept in ["application/json", "application/yaml", "application/xml", "image/png"]:
+                with self.subTest(path=path, accept=accept):
+                    headers = {"Accept": accept}
+                    connection, response = self.response("GET", path, headers=headers)
+                    try:
+                        expected_status = response.status
+                        body = response.read()
+                        expected_headers = {name: response.getheader(name)
+                            for name in ("Content-Type", "Content-Length", "Vary")}
+                        self.assertEqual(int(expected_headers["Content-Length"]), len(body))
+                    finally:
+                        response.close()
+                        connection.close()
+                    connection, response = self.response("HEAD", path, headers=headers)
+                    try:
+                        self.assertEqual(response.status, expected_status)
+                        self.assertEqual(response.read(), b"")
+                        self.assertEqual({name: response.getheader(name) for name in expected_headers},
+                            expected_headers)
+                    finally:
+                        response.close()
+                        connection.close()
+
+    def test_utf8_charset_parameters_select_xml_and_yaml(self):
+        for media_type in ("application/xml", "application/yaml"):
+            for charset in ("utf-8", '"UTF-8"'):
+                with self.subTest(media_type=media_type, charset=charset):
+                    status, response_type, _ = self.request("GET", "/api/health",
+                        headers={"Accept": f"{media_type}; charset={charset}"})
+                    self.assertEqual((status, response_type), (200, media_type))
+            self.assertEqual(self.request("GET", "/api/health",
+                headers={"Accept": f"{media_type}; charset=iso-8859-1"})[0], 406)
+
     def test_negotiated_responses_include_vary_accept(self):
         for method, path, body, headers, expected_status in [
             ("GET", "/api/health", None, {"Accept": "application/json"}, 200),
@@ -142,6 +178,7 @@ class CatalogHttpTests(DemoHttpTestCase):
             ("GET", "/api/items/not-an-int", None, {"Accept": "application/json"}, 422),
             ("GET", "/api/items/%FF", None, {"Accept": "application/json"}, 422),
             ("GET", "/api/health", None, {"Accept": "image/png"}, 406),
+            ("GET", "/api/items/not-an-int", None, {"Accept": "image/png"}, 406),
         ]:
             with self.subTest(path=path, expected_status=expected_status):
                 connection, response = self.response(method, path, body, headers=headers)
@@ -258,7 +295,7 @@ class CatalogHttpTests(DemoHttpTestCase):
         self.assertEqual(set(paths), {"/api/health", "/api/items/{item-id}", "/api/search", "/api/orders/quote"})
         resource = paths["/api/items/{item-id}"]
         self.assertEqual(set(resource), {"get", "put", "patch", "delete", "head", "options"})
-        self.assertNotIn("content", resource["head"]["responses"]["default"])
+        self.assertNotIn("content", resource["head"]["responses"]["200"])
         replacement = resolve(resource["put"]["requestBody"]["content"]["application/json"]["schema"])
         patch = resolve(resource["patch"]["requestBody"]["content"]["application/json"]["schema"])
         self.assertEqual(replacement["properties"]["price-cents"]["type"], "integer")
@@ -325,6 +362,7 @@ class CatalogMutationTests(DemoHttpTestCase):
         connection, response = self.response("OPTIONS", path)
         try:
             self.assertEqual((response.status, response.read()), (204, b""))
+            self.assertIsNone(response.getheader("Content-Type"))
             self.assertEqual({method.strip() for method in response.getheader("Allow").split(",")},
                 {"GET", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"})
         finally:
@@ -357,7 +395,7 @@ class CatalogMutationTests(DemoHttpTestCase):
         self.request("PATCH", path, '{"price-cents":350,"in-stock":true}')
         reset = {"id": 2, "name": "Minimal item", "price-cents": 0, "in-stock": False}
         self.assertEqual(self.request("PUT", path, '{"name":"Minimal item"}')[2], reset)
-        self.assertEqual(self.request("DELETE", path)[::2], (204, ""))
+        self.assertEqual(self.request("DELETE", path), (204, None, ""))
         self.assertEqual(self.request("GET", "/api/search?term=Minimal")[2]["items"], [])
         for method, body in [("GET", None), ("HEAD", None), ("DELETE", None),
                              ("PUT", json.dumps(replacement)), ("PATCH", "{}")]:
@@ -365,7 +403,7 @@ class CatalogMutationTests(DemoHttpTestCase):
                 self.assertEqual(self.request(method, path, body)[0], 404)
         self.assertEqual(self.request("POST", "/api/orders/quote",
             '{"item-id":2,"quantity":1}')[0], 404)
-        self.assertEqual(self.request("OPTIONS", path)[::2], (204, ""))
+        self.assertEqual(self.request("OPTIONS", path), (204, None, ""))
 
     def test_concurrent_patches_preserve_independent_field_updates(self):
         from concurrent.futures import ThreadPoolExecutor

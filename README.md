@@ -23,11 +23,10 @@ using the same `TERRANE` executable. Ship the compiler support and template migr
 before this package; a successful build using uncommitted sibling changes is not
 evidence that the package can be merged independently.
 
-Projection locks are compiler-generated. When refreshing one, use the selected current
-compiler and ensure a second build leaves it byte-identical; do not accept unexplained
-inventory loss as routine cache drift. An editor language server built from an older
-compiler can be another projection writer: align or restart it before future refreshes
-if its output conflicts with the selected CLI.
+Projection state is disposable compiler-generated cache under `.trn/projection-cache.json`,
+not a package-root lockfile to commit or refresh. Keep `terrane-dependencies.lock` committed:
+it records resolved dependency versions, sources, and checksums. CLI and editor language
+servers must use the current compiler; stale servers can recreate the retired filename.
 
 ## Consumer source generation
 

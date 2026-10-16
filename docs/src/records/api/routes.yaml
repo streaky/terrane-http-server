@@ -31,11 +31,16 @@ documentation:
         [[http-server.guide.proxy-security]].
 
         `endpoint(method: http-method, path: string, handler: async function from http-request
-        to http-response throws throwable, vary-accept: bool = false) -> routes` registers
-        `get`, `post`, `put`, `patch`, `delete`, `head`, and `options` variants. GET may
+        to http-response throws throwable, vary-accept: bool = false) -> routes` registers a
+        typed callback using the `get`, `post`, `put`, `patch`, `delete`, `head`, or `options`
+        variant of the closed `http-method` enum. GET may
         also be served for HEAD by the framework; register an explicit HEAD endpoint to
         override that behavior. HEAD responses are bodyless on the wire. OPTIONS invokes
         only an explicitly registered handler and does not enable automatic CORS behavior.
+        An explicit HEAD callback owns its headers: return the corresponding GET representation
+        (the router strips its body) or supply equivalent headers yourself. In particular, an
+        empty response body without a length override yields `Content-Length: 0`; it does not
+        discover GET's content type, encoded length, or `Vary` policy automatically.
         The callback receives decoded path/query access and bounded JSON body decoding,
         and returns an explicit status, content type, body, and additional headers. Path,
         query, and body conversion failures return HTTP 422 before invocation. A caught

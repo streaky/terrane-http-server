@@ -74,6 +74,10 @@ private function parse-accept-range accept-range; source string
             else if name == 'charset' and result.media == 'application/json'
                 # RFC 8259 defines no charset parameter: it cannot constrain JSON.
                 continue
+            else if name == 'charset' and not seen-quality and (result.media == 'application/xml' or result.media == 'application/yaml')
+                # These encoders produce UTF-8; other charset constraints cannot be met.
+                if value != 'utf-8' and value != '"utf-8"'
+                    result.valid = false
             else if not seen-quality
                 # Other media parameters constrain this representation.
                 result.valid = false

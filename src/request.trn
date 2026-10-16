@@ -111,7 +111,8 @@ function into-native-response native-response throws throwable; response http-re
             content-type = header.value
         else
             builder = builder.header; header.name, header.value
-    builder = builder.header; 'content-type', move content-type
+    if content-type != ''
+        builder = builder.header; 'content-type', move content-type
     return builder.body; (body-from-text; move response.body)
 
 private function header-name-is-content-type bool; name string

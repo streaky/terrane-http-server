@@ -63,6 +63,7 @@ declarations = [
   "/http-server-demo::catalog-api::delete-item::item-id",
   "/http-server-demo::catalog-api::head-item",
   "/http-server-demo::catalog-api::head-item::item-id",
+  "/http-server-demo::catalog-api::head-item::detailed",
   "/http-server-demo::catalog-api::item-options",
   "/http-server-demo::catalog-api::item-options::_item-id",
   "/http-server-demo::site",

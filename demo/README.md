@@ -54,10 +54,12 @@ missing or null fields are unchanged, while zero and false are real updates. It 
 partial JSON object, not JSON Patch or JSON Merge Patch. Both return the resulting item in
 the negotiated JSON/YAML/XML format. They do not create missing items.
 
-DELETE returns 204 without a body. Deleted identifiers return 404 for reads, writes, quotes,
-and repeated deletes. Restarting restores the seed data. HEAD returns 200 or 404 with no
-body. OPTIONS returns 204 and `Allow: GET, PUT, PATCH, DELETE, HEAD, OPTIONS`, even for a
-missing item; it describes this route and does not implement CORS.
+DELETE returns 204 without a body or content type. Deleted identifiers return 404 for reads,
+writes, quotes, and repeated deletes. Restarting restores the seed data. HEAD uses the same
+negotiated representation and `detailed` query option as GET, preserving its content type,
+encoded content length, and `Vary: Accept` while sending no body. OPTIONS returns 204 without
+a body or content type and supplies `Allow: GET, PUT, PATCH, DELETE, HEAD, OPTIONS`, even for
+a missing item; it describes this route and does not implement CORS.
 
 ## Site rendering
 
@@ -98,6 +100,10 @@ Explicit `http-response` and the site's HTML routes are not automatically serial
 The explicit format list is the opt-in: apps that omit it keep legacy JSON-only responses
 without rejecting `Accept` preferences. An explicit empty list is an error. Negotiated
 validation/error replies keep their usual bodies but also vary on `Accept`.
+
+Normal browser navigation commonly prefers XML through its `Accept` header, so opening
+an API link can display XML rather than the default JSON. This is intentional negotiation,
+not browser-specific behavior; request `Accept: application/json` to choose JSON explicitly.
 
 OpenAPI descriptions preserve CommonMark formatting, so the catalog declarations include
 renderable fenced curl examples alongside prose, lists, emphasis, and links. OpenAPI
