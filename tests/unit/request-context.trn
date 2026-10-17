@@ -4,6 +4,7 @@ from /deps/axum-core/extract import Request as native-request
 from /deps/ipnet import IpAddr as ip-addr
 from /deps/axum-core/body import Body as native-body
 from /deps/http/request import Builder as request-builder
+from /deps/http import HeaderValue as native-header-value, HeaderName as native-header-name
 from /core/collections import list
 from /core/testing import assert-equal-bool, assert-equal-string, assert-equal-int
 
@@ -89,3 +90,38 @@ function test-request-snapshot-retains-invalid-bytes-without-fabricating-text;
     assert-equal-string; (context.target;), '/metadata?x=1'
     assert-equal-bool; (context.authority;) == none, true
     assert-equal-bool; (context.url;) == none, true
+
+function test-header-snapshot-owns-values-and-detaches-accessor-results;
+    native native-request = rust
+        let mut request = ::http::Request::builder().body(::axum_core::body::Body::empty()).unwrap();
+        request.headers_mut().append("x-tag", ::http::HeaderValue::from_bytes(b"\xff").unwrap());
+        request.headers_mut().append("x-tag", ::http::HeaderValue::from_bytes("café".as_bytes()).unwrap());
+        request.headers_mut().append("x-tag", ::http::HeaderValue::from_static("last"));
+        request
+    original = capture-request-context; ref native, '/'
+    key = native-header-name::from_str; 'x-tag'
+    value = native-header-value::from_str; 'changed'
+    (native.headers_mut;).insert; key, value
+    successor = capture-request-context; ref native, '/'
+    first = original.header-value; 'X-TAG'
+    assert-equal-bool; first != none, true
+    if first != none
+        assert-equal-string; first, 'café'
+    assert-equal-bool; (original.header-value; 'missing') == none, true
+    assert-equal-bool; (original.header-value; 'not a header') == none, true
+    values = original.header-values; 'x-tag'
+    assert-equal-int; values.length, 2
+    assert-equal-string; values[0], 'café'
+    assert-equal-string; values[1], 'last'
+    changed = successor.header-value; 'x-tag'
+    assert-equal-bool; changed != none, true
+    if changed != none
+        assert-equal-string; changed, 'changed'
+    raw = original.header-bytes; 'X-Tag'
+    assert-equal-int; raw.length, 3
+    raw[1] = raw[0]
+    again = original.header-bytes; 'x-tag'
+    invalid = again[0]
+    valid = again[1]
+    assert-equal-int; invalid[0], 255
+    assert-equal-int; valid[0], 99

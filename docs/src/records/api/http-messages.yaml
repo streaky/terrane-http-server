@@ -43,13 +43,17 @@ documentation:
         internal incoming-request transport used by generated adapters; they are not
         public request-context methods. The request context is an immutable metadata
         snapshot and does not own or buffer the body.
-        Capture is currently eager, including copies of all header names and raw values,
-        even if a handler never reads `this.request`. Header-heavy workloads therefore
-        pay a per-request copying cost. Lazy capture or a retained immutable native map
-        could reduce that cost, but neither is implemented; preserving repeated values,
-        invalid bytes, and request-local lifetimes remains required.
-        Overhead depends on build mode and workload; debug-build comparisons do not
-        establish release-throughput costs.
+        Header capture retains an owned native header map behind a shared handle, rather
+        than rebuilding lists of every header name and raw byte value. Copying a request
+        context shares this private immutable snapshot; it does not clone the map again.
+        Capture still clones the native map once, so it is not allocation-free or a
+        transfer of the original request's header storage. Accessors use a short-lived
+        guard and materialize only the requested values, preserving their order, invalid
+        bytes, and independence from later changes to the original request.
+        Header lookup is case-insensitive; text access accepts valid UTF-8 and skips
+        undecodable values. Returned lists and byte values do not expose mutable native
+        storage. No guard is retained across an `await`. Other metadata remains captured
+        eagerly; this is not general lazy request-context construction.
 
         The response context modifies response state for the current invocation:
         `set-status(status)`, `set-header(name, value)` (case-insensitive replacement),

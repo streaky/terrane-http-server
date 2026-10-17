@@ -5,6 +5,7 @@ from /core/errors import coercion-error
 from /deps/axum-core/extract import Request as native-request
 from /deps/ipnet import IpAddr as ip-addr
 from /deps/axum/extract import MatchedPath as matched-path
+from /deps/http import HeaderMap as native-header-map, HeaderValue as native-header-value
 
 /// Adds optional invocation context without imposing a base class or handler parameters.
 public trait api
@@ -23,8 +24,7 @@ public class request-context
     private peer ip-addr|none = none
     private client ip-addr|none = none
     private trusted bool = false
-    private header-names list of string = list
-    private header-data list of bytes = list
+    private headers shared ref (native-header-map of native-header-value)
 
     private function construct; request ref native-request, route-pattern string
         this.verb = request-method; request
@@ -35,8 +35,9 @@ public class request-context
         this.peer = direct-address; request
         this.client = client-address; request
         this.trusted = request-proxy-trust; request
-        this.header-names = request-header-names; request
-        this.header-data = request-header-data; request
+        captured native-header-map of native-header-value = rust
+            request.headers().clone()
+        this.headers = shared ref captured
         this.origin-authority = request-authority; request
         this.origin-scheme = 'http'
         if this.trusted
@@ -86,33 +87,13 @@ public class request-context
         return this.trusted
 
     function header-bytes list of bytes; name string
-        result list of bytes = list
-        key = name.lower;
-        index int = 0
-        while index < this.header-names.length
-            if this.header-names[index] == key
-                result.append; this.header-data[index]
-            index = index + 1
-        return result
+        return read-header-bytes; this.headers, ref name
 
     function header-values list of string; name string
-        result list of string = list
-        for raw in (this.header-bytes; name)
-            value = header-text; ref raw
-            if value != none
-                result.append; value
-        return result
+        return read-header-values; this.headers, ref name
 
     function header-value string|none; name string
-        key = name.lower;
-        index int = 0
-        while index < this.header-names.length
-            if this.header-names[index] == key
-                value = header-text; ref this.header-data[index]
-                if value != none
-                    return value
-            index = index + 1
-        return none
+        return read-header-value; this.headers, ref name
 
     function cookie-value string|none; name string
         for header in (this.header-values; 'cookie')
@@ -181,21 +162,27 @@ private function request-authority string|none; request ref native-request
 private function request-proxy-trust bool; request ref native-request
     return request-proxy-metadata-trusted; request
 
-private function request-header-names list of string; request ref native-request
-    values list of string = rust
-        terrane_collection_support::List::new(request.headers().iter().map(|(name, _)| name.as_str().to_owned()).collect())
-    return values
-
-private function request-header-data list of bytes; request ref native-request
+# Retain native header values; only materialize the requested accessor result.
+# Borrow the native map under the shared handle's short-lived guard, not a clone.
+# A source `ref` to this shared native value currently lowers to Weak, not &HeaderMap.
+private function read-header-bytes list of bytes; headers shared ref (native-header-map of native-header-value), name ref string
     values list of bytes = rust
-        terrane_collection_support::List::new(request.headers().iter().map(|(_, value)| value.as_bytes().to_vec()).collect())
+        let headers = headers.lock().expect("shared reference lock poisoned");
+        terrane_collection_support::List::new(headers.get_all(name.as_str()).iter().map(|value| value.as_bytes().to_vec()).collect())
     return values
 
-private function header-text string|none; value ref bytes
+private function read-header-values list of string; headers shared ref (native-header-map of native-header-value), name ref string
+    values list of string = rust
+        let headers = headers.lock().expect("shared reference lock poisoned");
+        terrane_collection_support::List::new(headers.get_all(name.as_str()).iter().filter_map(|value| std::str::from_utf8(value.as_bytes()).ok().map(str::to_owned)).collect())
+    return values
+
+private function read-header-value string|none; headers shared ref (native-header-map of native-header-value), name ref string
     decoded optional-text = rust
-        match std::str::from_utf8(value) {
-            Ok(value) => OptionalText { value: value.to_owned(), present: true },
-            Err(_) => OptionalText { value: String::new(), present: false },
+        let headers = headers.lock().expect("shared reference lock poisoned");
+        match headers.get_all(name.as_str()).iter().find_map(|value| std::str::from_utf8(value.as_bytes()).ok()) {
+            Some(value) => OptionalText { value: value.to_owned(), present: true },
+            None => OptionalText { value: String::new(), present: false },
         }
     if decoded.present
         return decoded.value
