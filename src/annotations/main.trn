@@ -25,10 +25,18 @@ class query
 class body
 
 
+@[annotation; targets = (list; (instance annotation-target::class;), (instance annotation-target::callable;)), repeatable = false]
+class api-documentation
+    title string = 'HTTP API'
+    version string = '1.0.0'
+    description string|none = none
+
 @[annotation; targets = (list; (instance annotation-target::class;)), repeatable = false]
 class route-group
     prefix string = '/'
     document bool = true
+    response-formats (list of string)|none = none
+    default-response-format string = ''
 
 @[annotation; targets = (list; (instance annotation-target::class;)), repeatable = true]
 class static-directory

@@ -1,46 +1,216 @@
 namespace http-server-demo
 
-from /streaky/http-server/annotations import endpoint, path, query, body, route-group
-from /streaky/http-server import http-error
+from /streaky/http-server/annotations import endpoint, path, query, body, route-group, request-example, response-example, api-documentation
+from /streaky/http-server import api
 from /core/collections import list
 
-@[route-group; prefix = '/api']
-class catalog-api
+/// # Explore the Terrane catalog
+///
+/// Browse the catalog, modify its items, and calculate an order quote.
+/// The catalog is seeded once at startup and stored **in memory** until the process restarts.
+///
+/// ## Try your first request
+///
+/// ```console
+/// curl 'http://127.0.0.1:3187/api/items/1?detailed=true'
+/// ```
+///
+/// - Item prices and quote totals are in **cents**.
+/// - Request bodies use JSON. Responses support JSON (the default), YAML, and XML.
+/// - Use `Accept: application/yaml` or `Accept: application/xml` to choose a response.
+/// - Malformed inputs return 422; unknown or deleted catalog items return 404.
+///
+/// Start with **Read a catalog item**, then try **Price a catalog order** using its
+/// supplied request example. See the [demo overview](/about) for the HTML site.
+@[api-documentation; title = 'Terrane Catalog API', version = '0.1.0']
+@[route-group; prefix = '/api', response-formats = (list; 'json', 'yaml', 'xml'), default-response-format = 'json']
+class catalog-api uses api
+    private catalog shared ref catalog-store = create-catalog;
+
     /// Check that the catalog service is running.
+    ///
+    /// This lightweight endpoint is useful for **health checks** and deployment probes.
+    ///
+    /// ```console
+    /// curl -i -H 'Accept: application/json' http://127.0.0.1:3187/api/health
+    /// ```
+    ///
+    /// Accepted representations are JSON (default), YAML, and XML.
+    /// @returns The string "ok", encoded in the negotiated response format.
     @[endpoint; method = 'GET', path = '/health', summary = 'Service health']
+    @[response-example; name = 'healthy', summary = 'Service is ready', value = '"ok"']
     async function health string;
         return 'ok'
 
     /// Look up a catalog item. Detailed responses include stock information.
-    @[endpoint; method = 'GET', path = '/items/{item-id}', summary = 'Read a catalog item']
+    ///
+    /// Use the item identifier in the path and optionally request its stock details:
+    /// `GET /api/items/1?detailed=true`. The response follows the item's typed model.
+    ///
+    /// ```console
+    /// curl -H 'Accept: application/yaml' 'http://127.0.0.1:3187/api/items/1?detailed=true'
+    /// ```
+    ///
+    /// You can also request XML; unsupported Accept preferences receive 406.
+    /// @returns The catalog item, with stock availability populated only when detailed is true.
+    @[endpoint; method = 'GET|HEAD', path = '/items/{item-id}', summary = 'Read or inspect a catalog item']
+    @[response-example; name = 'detailed', summary = 'Item with stock details', value = '{"id":1,"name":"Terrane notebook","price-cents":1200,"in-stock":true}']
     async function read-item item-response; (
-        @[path;] item-id int,
-        @[query;] detailed bool = false,
+        /// Catalog identifier of the item to retrieve; the demo starts with items 1 and 2.
+        @[path;] @[request-example; value = '1'] item-id int,
+        /// Include stock availability; otherwise in-stock is reported as false.
+        @[query;] @[request-example; value = 'true'] detailed bool = false,
     )
-        if item-id != 1
-            throw http-error; 404, 'Catalog item not found'
-        available = false
-        if detailed
-            available = true
-        return create-item-response; 1, 'Terrane notebook', 1200, available
+        item = this.catalog.read; item-id
+        if not detailed
+            item.in-stock = false
+        return item
 
-    /// Search the catalog; the limit defaults to ten when omitted.
+    /// Search current catalog item names; the limit defaults to ten when omitted.
+    ///
+    /// Search is case-sensitive and reflects PUT, PATCH, and DELETE changes.
+    /// A zero or negative limit returns an empty result list.
+    ///
+    /// - `term` is required.
+    /// - `limit` defaults to ten.
+    ///
+    /// ```console
+    /// curl 'http://127.0.0.1:3187/api/search?term=notebook&limit=1'
+    /// ```
+    ///
+    /// See the [demo overview](/about) for the catalog's in-memory lifecycle.
+    /// @returns The search inputs, whether anything matched, and the matching catalog items.
     @[endpoint; method = 'GET', path = '/search', summary = 'Search the catalog']
+    @[response-example; name = 'notebook-match', summary = 'One matching notebook', value = '{"term":"notebook","limit":1,"matches":true,"items":[{"id":1,"name":"Terrane notebook","price-cents":1200,"in-stock":true}]}']
     async function search search-response; (
-        @[query;] term string,
-        @[query;] limit int = 10,
+        /// Case-sensitive text to find within the current item names.
+        @[query;] @[request-example; value = '"notebook"'] term string,
+        /// Maximum number of results; zero or negative values produce no matches.
+        @[query;] @[request-example; value = '1'] limit int = 10,
     )
-        matched = limit > 0 and (term.contains; 'notebook')
-        results list of item-response = list
-        if matched
-            results.append; (create-item-response; 1, 'Terrane notebook', 1200, true)
-        return create-search-response; term, limit, matched, results
+        results = this.catalog.search; term, limit
+        return create-search-response; term, limit, results.length > 0, results
 
     /// Price a catalog order without persisting it.
+    ///
+    /// Send a JSON request body with an item identifier and quantity. Request bodies
+    /// remain JSON regardless of the selected response representation.
+    ///
+    /// ```console
+    /// curl -H 'Content-Type: application/json' -H 'Accept: application/xml' \
+    ///   -d '{"item-id":1,"quantity":3}' http://127.0.0.1:3187/api/orders/quote
+    /// ```
+    ///
+    /// The XML response is negotiated independently of the JSON input.
+    /// @returns The item, requested quantity, and total price in cents; no order is saved.
     @[endpoint; method = 'POST', path = '/orders/quote', summary = 'Price a catalog order']
+    @[response-example; name = 'three-notebooks', summary = 'Quote for three notebooks', value = '{"item-id":1,"quantity":3,"total-cents":3600}']
     async function quote-order quote-output; (
-        @[body;] order order-input,
+        /// Item and quantity to price; an omitted quantity retains its default of zero.
+        @[body;] @[request-example; name = 'three-notebooks', value = '{"item-id":1,"quantity":3}'] order order-input,
     )
-        if order.item-id != 1
-            throw http-error; 404, 'Catalog item not found'
-        return create-quote-output; 1, order.quantity, order.quantity * 1200
+        item = this.catalog.read; order.item-id
+        return create-quote-output; item.id, order.quantity, order.quantity * item.price-cents
+
+    /// Replace every editable field of an existing catalog item.
+    ///
+    /// The path identifier is preserved. Omitted fields reset to model defaults.
+    /// Later GET, search, and quote requests use the replacement until restart.
+    ///
+    /// ```console
+    /// curl -X PUT -H 'Content-Type: application/json' \
+    ///   -d '{"name":"Terrane pencil","price-cents":300,"in-stock":true}' \
+    ///   http://127.0.0.1:3187/api/items/2
+    /// ```
+    ///
+    /// @returns The complete stored replacement in the negotiated representation.
+    @[endpoint; method = 'PUT', path = '/items/{item-id}', summary = 'Replace a catalog item']
+    @[response-example; value = '{"id":2,"name":"Terrane pencil","price-cents":300,"in-stock":true}']
+    async function replace-item item-response; (
+        /// Identifier of an existing catalog item.
+        @[path;] @[request-example; value = '2'] item-id int,
+        /// Complete editable item data; omitted fields reset rather than retain values.
+        @[body;] @[request-example; value = '{"name":"Terrane pencil","price-cents":300,"in-stock":true}'] replacement item-input,
+    )
+        catalog = this.catalog
+        return catalog.replace-item; item-id, replacement
+
+    /// Update only the supplied, non-null fields of an existing catalog item.
+    ///
+    /// Missing or null fields are unchanged; false and zero are real updates.
+    /// This is a partial JSON object, not the JSON Patch or JSON Merge Patch protocol.
+    ///
+    /// ```console
+    /// curl -X PATCH -H 'Content-Type: application/json' \
+    ///   -d '{"price-cents":350,"in-stock":false}' http://127.0.0.1:3187/api/items/2
+    /// ```
+    ///
+    /// @returns The complete item after applying the changes.
+    @[endpoint; method = 'PATCH', path = '/items/{item-id}', summary = 'Update catalog item fields']
+    @[response-example; value = '{"id":2,"name":"Terrane pencil","price-cents":350,"in-stock":false}']
+    async function patch-item item-response; (
+        /// Identifier of an existing catalog item.
+        @[path;] @[request-example; value = '2'] item-id int,
+        /// Fields to change; missing or null fields keep their previous values.
+        @[body;] @[request-example; value = '{"price-cents":350,"in-stock":false}'] changes item-patch,
+    )
+        catalog = this.catalog
+        return catalog.patch; item-id, changes
+
+    /// Delete an existing item from this process's in-memory catalog.
+    ///
+    /// Later reads, writes, quotes, and repeated deletes for this identifier return 404.
+    /// Restarting the demo restores the initial catalog.
+    ///
+    /// ```console
+    /// curl -i -X DELETE http://127.0.0.1:3187/api/items/2
+    /// ```
+    ///
+    /// @returns HTTP 204 with no response body; HTTP 404 if the item does not exist.
+    @[endpoint; method = 'DELETE', path = '/items/{item-id}', summary = 'Delete a catalog item']
+    async function delete-item none; (
+        /// Identifier of the catalog item to remove.
+        @[path;] @[request-example; value = '2'] item-id int,
+    )
+        catalog = this.catalog
+        catalog.delete; item-id
+        return none
+
+    /// Discover the methods supported on a catalog item resource.
+    ///
+    /// This describes the route, even if the identifier is absent. It does not enable CORS.
+    ///
+    /// ```console
+    /// curl -i -X OPTIONS http://127.0.0.1:3187/api/items/2
+    /// ```
+    ///
+    /// @returns HTTP 204 with Allow: GET, PUT, PATCH, DELETE, HEAD, OPTIONS and no body.
+    @[endpoint; method = 'OPTIONS', path = '/items/{item-id}', summary = 'Discover catalog item methods']
+    async function item-options none; (
+        /// Item-resource identifier; OPTIONS does not require that this item exists.
+        @[path; name = 'item-id'] @[request-example; value = '2'] _item-id int,
+    )
+        # Keep Allow in sync with the /items/{item-id} endpoint registrations.
+        response = this.response
+        if response != none
+            response.set-header; 'allow', 'GET, PUT, PATCH, DELETE, HEAD, OPTIONS'
+        return none
+
+    /// Inspect the invocation's method, target, protocol, addresses, headers, and cookie.
+    /// Forwarded client/scheme information is trusted only by the application's proxy policy.
+    /// @returns This request's metadata, or no value outside a routed invocation.
+    @[endpoint; method = 'GET', path = '/request', summary = 'Inspect request context']
+    async function request-info request-summary|none; (
+        /// Demonstrates per-response status control without throwing an exception.
+        @[query;] status int = 200,
+    )
+        request = this.request
+        response = this.response
+        if request != none
+            if response != none
+                response.set-status; status
+                marker = request.header-value; 'x-request-id'
+                if marker != none
+                    response.set-header; 'x-request-id', marker
+            return summarize-request; request
+        return none

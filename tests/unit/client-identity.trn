@@ -23,8 +23,7 @@ function test-trusted-proxy-resolves-client-without-client-allowlist;
     peer = ip-addr::from_str; '127.0.0.1'
     client = resolve-client-address; ref request, peer, true
     assert-forwarded-address; client, '192.0.2.44/32'
-    if client != none
-        (request.extensions_mut;).insert; client
+    install-proxy-metadata; ref request, client, true
     assert-forwarded-address; (client-address; ref request), '192.0.2.44/32'
 
 function test-trusted-proxy-missing-identity-does-not-become-peer;

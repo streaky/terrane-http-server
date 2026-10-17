@@ -16,3 +16,20 @@ pub fn decode_path_component(value: String) -> Option<String> {
         Err(_) => None,
     }
 }
+
+/// A metadata-only HEAD response has no known body length. Empty's exact zero size hint
+/// would make the router invent Content-Length: 0; this body intentionally has no hint.
+pub fn metadata_only_body() -> axum_core::body::Body {
+    struct MetadataOnly;
+    impl http_body::Body for MetadataOnly {
+        type Data = axum::body::Bytes;
+        type Error = std::convert::Infallible;
+        fn poll_frame(
+            self: std::pin::Pin<&mut Self>,
+            _: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
+            std::task::Poll::Ready(None)
+        }
+    }
+    axum_core::body::Body::new(MetadataOnly)
+}

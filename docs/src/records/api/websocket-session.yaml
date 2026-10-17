@@ -56,7 +56,6 @@ documentation:
   sections: []
   see-also:
     - http-server.api.websocket-event
-    - http-server.api.routes
     - http-server.guide.websockets
 provenance:
   specification: null

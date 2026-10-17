@@ -1,0 +1,34 @@
+namespace http-server-consumer/overview
+
+from /core/collections import range
+from /core/documents import document-value, document-map-entries, make-document-string
+from /terrane/annotation-consumer-protocol import get, at, text, scalar, annotation, consumer-error
+from /http-server-consumer/documents import object-value, declaration-documentation
+
+# Info describes the entire OpenAPI document, not one route-group's paths.
+# Require a single explicit owner instead of letting selection order pick a winner.
+function api-info document-value throws consumer-error; declarations document-value
+    title string = 'HTTP API'
+    version string = '1.0.0'
+    description string = ''
+    found bool = false
+    for index in (range; 0, (declarations.length;))
+        declaration = at; declarations, index
+        metadata = annotation; declaration, 'api-documentation', '/streaky/http-server/annotations'
+        if metadata.kind != 'none'
+            if found
+                throw (instance consumer-error; declaration, 'HTTP API documentation must have exactly one selected owner')
+            found = true
+            title = text; (scalar; (get; metadata, 'title'))
+            version = text; (scalar; (get; metadata, 'version'))
+            explicit-description = scalar; (get; metadata, 'description')
+            if explicit-description.kind == 'string'
+                description = text; explicit-description
+            else
+                description = declaration-documentation; declaration
+    fields = instance document-map-entries;
+    fields.append; 'title', (make-document-string; title)
+    fields.append; 'version', (make-document-string; version)
+    if description != ''
+        fields.append; 'description', (make-document-string; description)
+    return object-value; fields, declarations

@@ -12,6 +12,9 @@ import socket
 import tempfile
 import unittest
 import time
+import textwrap
+from xml.etree import ElementTree
+import yaml
 
 
 PACKAGE = Path(__file__).resolve().parents[2]
@@ -28,7 +31,16 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
         cls.directory = Path(cls.workspace.name)
         (cls.directory / "src").mkdir()
 
-    def check(self, source, selections, origin=None, code="S2061"):
+    def check(self, source, selections, origin=None, code="S2061", class_bound=True):
+        if class_bound and not re.search(r"(?m)^class ", source):
+            lines = source.splitlines(keepends=True)
+            imports = "".join(line for line in lines if line.startswith("from "))
+            body = "".join(line for line in lines if not line.startswith("from "))
+            source = (imports + "from /streaky/http-server/annotations import route-group\n"
+                "@[route-group;]\nclass api uses http-api\n" + textwrap.indent(body, "    "))
+            selections = ["api"] + ["api::" + name for name in selections]
+            if origin is not None:
+                origin = "api::" + origin
         manifest = '\n'.join([
             'package = "http-annotation-test"',
             '[namespaces]',
@@ -42,6 +54,7 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
         (self.directory / "package.toml").write_text(manifest)
         written = (
             "namespace http-annotation-test\nfrom /streaky/http-server/annotations import endpoint, path, query, body\n"
+            "from /streaky/http-server import api as http-api\n"
             + source
             + "\nfunction main int;\n    return 0\n"
         )
@@ -52,8 +65,10 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
         self.assertIn(code, result.stderr)
         if code == "S2061":
             self.assertIsNotNone(origin, "Consumer diagnostics need an expected declaration origin")
-            function, _, parameter = origin.partition("::")
-            declaration = re.search(r"\bfunction (" + re.escape(function) + r")\b", written)
+            parts = origin.split("::")
+            function = parts[-2] if len(parts) == 3 else parts[-1]
+            parameter = parts[-1] if len(parts) == 3 else ""
+            declaration = re.search(r"\b(?:function|class) (" + re.escape(function) + r")\b", written)
             self.assertIsNotNone(declaration)
             offset = declaration.start(1)
             if parameter:
@@ -70,25 +85,68 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
             )
 
     def test_duplicate_method_path(self):
-        self.check("@[endpoint; path = '/same']\nasync function first string;\n    return 'a'\n@[endpoint; path = '/same']\nasync function second string;\n    return 'b'\n", ["first", "second"], origin="second")
+        self.check("from /streaky/http-server/annotations import route-group\n"
+            "@[route-group;]\nclass api uses http-api\n"
+            "    @[endpoint; path = '/same']\n    async function first string;\n        return 'a'\n"
+            "    @[endpoint; path = '/same']\n    async function second string;\n        return 'b'\n",
+            ["api", "api::first", "api::second"], origin="api::second")
 
     def test_missing_selected_parameter(self):
-        self.check("@[endpoint; path = '/search']\nasync function search string; @[query;] term string\n    return term\n", ["search"], origin="search")
+        self.check("from /streaky/http-server/annotations import route-group\n"
+            "@[route-group;]\nclass api uses http-api\n"
+            "    @[endpoint; path = '/search']\n    async function search string; @[query;] term string\n        return term\n",
+            ["api", "api::search"], origin="api::search")
 
     def test_unbound_path_placeholder(self):
-        self.check("@[endpoint; path = '/items/{id}']\nasync function item string;\n    return 'item'\n", ["item"], origin="item")
+        self.check("from /streaky/http-server/annotations import route-group\n"
+            "@[route-group;]\nclass api uses http-api\n"
+            "    @[endpoint; path = '/items/{id}']\n    async function item string;\n        return 'item'\n",
+            ["api", "api::item"], origin="api::item")
+
+    def test_free_endpoint_handler_is_rejected(self):
+        self.check("@[endpoint; path = '/free']\nasync function item string;\n    return 'item'\n",
+            ["item"], origin="item", class_bound=False)
+
+    def test_static_endpoint_handler_is_rejected(self):
+        self.check("from /streaky/http-server/annotations import route-group\n"
+            "@[route-group;]\nclass api uses http-api\n"
+            "    @[endpoint; path = '/static']\n    static async function item string;\n        return 'item'\n",
+            ["api", "api::item"], origin="api::item")
+
+    def test_route_group_requires_api_context_fields(self):
+        self.check("from /streaky/http-server/annotations import route-group\n"
+            "@[route-group;]\nclass api\n"
+            "    @[endpoint; path = '/value']\n    async function value int;\n        return 1\n",
+            ["api", "api::value"], origin="api")
 
     def test_reserved_schema_route(self):
-        self.check("@[endpoint; path = '/openapi.json']\nasync function schema string;\n    return 'schema'\n", ["schema"], origin="schema")
+        self.check("from /streaky/http-server/annotations import route-group\n"
+            "@[route-group;]\nclass api uses http-api\n"
+            "    @[endpoint; path = '/openapi.json']\n    async function schema string;\n        return 'schema'\n",
+            ["api", "api::schema"], origin="api::schema")
 
     def test_conflicting_parameter_transports(self):
-        self.check("@[endpoint; path = '/items/{id}']\nasync function item int; @[path;] @[query;] id int\n    return id\n", ["item", "item::id"], origin="item::id")
+        self.check("from /streaky/http-server/annotations import route-group\n"
+            "@[route-group;]\nclass api uses http-api\n"
+            "    @[endpoint; path = '/items/{id}']\n    async function item int; @[path;] @[query;] id int\n        return id\n",
+            ["api", "api::item", "api::item::id"], origin="api::item::id")
 
     def test_runtime_query_default(self):
-        self.check("function fallback int;\n    return 3\n@[endpoint; path = '/items']\nasync function item int; @[query;] count int = (fallback;)\n    return count\n", ["item", "item::count"], code="T0006")
+        self.check("from /streaky/http-server/annotations import route-group\n"
+            "function fallback int;\n    return 3\n@[route-group;]\nclass api uses http-api\n"
+            "    @[endpoint; path = '/items']\n"
+            "    async function item int; @[query;] count int = (fallback;)\n        return count\n",
+            ["api", "api::item", "api::item::count"], code="T0006")
 
     def test_duplicate_operation_id(self):
         self.check("@[endpoint; path = '/first', operation-id = 'same']\nasync function first string;\n    return 'a'\n@[endpoint; path = '/second', operation-id = 'same']\nasync function second string;\n    return 'b'\n", ["first", "second"], origin="second")
+
+    def test_explicit_operation_id_rejected_for_multi_method_endpoint(self):
+        self.check("from /streaky/http-server/annotations import route-group\n"
+            "@[route-group;]\nclass api uses http-api\n"
+            "    @[endpoint; path = '/value', method = 'GET|HEAD', operation-id = 'value']\n"
+            "    async function value int;\n        return 1\n",
+            ["api", "api::value"], origin="api::value")
 
     def test_synchronous_handler_rejected(self):
         self.check("@[endpoint; path = '/sync']\nfunction sync string;\n    return 'sync'\n", ["sync"], origin="sync")
@@ -99,7 +157,58 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
     def test_invalid_method(self):
         self.check("@[endpoint; path = '/trace', method = 'TRACE']\nasync function trace string;\n    return 'trace'\n", ["trace"], origin="trace")
 
-    def test_all_supported_methods_and_scalar_responses(self):
+    def test_multi_method_sets_reject_duplicate_and_empty_methods(self):
+        for methods in ("GET|GET", "GET|", "|HEAD", "GET||HEAD"):
+            with self.subTest(methods=methods):
+                self.check(f"@[endpoint; path = '/value', method = '{methods}']\n"
+                    "async function value int;\n    return 1\n", ["value"], origin="value")
+
+    def test_malformed_response_example_is_rejected(self):
+        self.check("from /streaky/http-server/annotations import response-example\n"
+            "@[endpoint; path = '/example']\n@[response-example; value = '{broken']\n"
+            "async function example string;\n    return 'ok'\n", ["example"], origin="example")
+
+    def test_duplicate_response_example_names_are_rejected(self):
+        self.check("from /streaky/http-server/annotations import response-example\n"
+            "@[endpoint; path = '/example']\n@[response-example; value = 'null']\n"
+            "@[response-example; value = '1']\nasync function example string;\n    return 'ok'\n",
+            ["example"], origin="example")
+
+    def test_default_response_format_must_be_enabled(self):
+        self.check("from /streaky/http-server/annotations import route-group\n"
+            "from /core/collections import list\n"
+            "@[route-group; response-formats = (list; 'yaml'), default-response-format = 'json']\n"
+            "class api\n    @[endpoint; path = '/example']\n"
+            "    async function example string;\n        return 'ok'\n",
+            ["api", "api::example"], origin="api")
+
+    def test_unreferenced_route_group_policy_is_validated_at_the_class(self):
+        for policy in (
+            "response-formats = (list; 'yaml'), default-response-format = 'json'",
+            "response-formats = (list; 'json', 'json')",
+            "response-formats = (list; 'unsupported')",
+        ):
+            with self.subTest(policy=policy):
+                self.check("from /streaky/http-server/annotations import route-group\n"
+                    "from /core/collections import list\n"
+                    f"@[route-group; {policy}]\nclass api\n",
+                    ["api"], origin="api")
+
+    def test_explicit_empty_response_formats_are_rejected_at_the_class(self):
+        self.check("from /streaky/http-server/annotations import route-group\n"
+            "from /core/collections import list\n"
+            "@[route-group; response-formats = (list;)]\nclass api\n",
+            ["api"], origin="api")
+
+    def test_multiple_api_documentation_owners_are_rejected(self):
+        self.check("from /streaky/http-server/annotations import api-documentation\n"
+            "@[api-documentation;]\n@[endpoint; path = '/first']\n"
+            "async function first string;\n    return 'first'\n"
+            "@[api-documentation;]\n@[endpoint; path = '/second']\n"
+            "async function second string;\n    return 'second'\n",
+            ["first", "second"], origin="second")
+
+    def test_document_wide_info_ownership_encoding_and_overview_precedence(self):
         (self.directory / "package.toml").write_text('\n'.join([
             'package = "http-annotation-test"',
             'artifact = "executable"',
@@ -109,30 +218,171 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
             f'path = "{os.path.relpath(PACKAGE, self.directory)}"',
             '[consumers.http-server]',
             f'command = "{os.path.relpath(CONSUMER, self.directory)}"',
-            'declarations = ["/http-annotation-test::read", "/http-annotation-test::create", '
-            '"/http-annotation-test::replace", "/http-annotation-test::change", "/http-annotation-test::remove", '
-            '"/http-annotation-test::echo-model", "/http-annotation-test::echo-model::value", '
-            '"/http-annotation-test::data-model", "/http-annotation-test::tree-node", '
-            '"/http-annotation-test::failing-handler", "/http-annotation-test::throwing-success", '
-            '"/http-annotation-test::created", "/http-annotation-test::redirect", "/http-annotation-test::empty", '
-            '"/http-annotation-test::denied", "/http-annotation-test::custom-error", '
-            '"/http-annotation-test::invalid-code", "/http-annotation-test::invalid-header", '
-            '"/http-annotation-test::override-content-type", "/http-annotation-test::final-continue", '
-            '"/http-annotation-test::final-upgrade", '
-            '"/http-annotation-test::nonfinite-model", "/http-annotation-test::nonfinite-model::single", '
-            '"/http-annotation-test::tampered-error", "/http-annotation-test::quoted-default", '
-            '"/http-annotation-test::quoted-default::label"]',
+            'declarations = ["/http-annotation-test::api", "/http-annotation-test::api::value"]',
+        ]))
+        title = 'Café "catalog" \\ API'
+        version = "2026.10-preview"
+        overview = "# API overview\n\n```console\ncurl /api/value\n```\n\n@returns This belongs to the overview."
+        override = "**Custom overview**\n\nUse the documented request examples."
+        def literal(value):
+            return "'" + value.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n") + "'"
+
+        base_annotation = (
+            "@[api-documentation; title = " + literal(title)
+            + ", version = " + literal(version)
+        )
+        for annotation, expected_info in [
+            ("", {"title": "HTTP API", "version": "1.0.0"}),
+            (base_annotation + "]", {"title": title, "version": version, "description": overview}),
+            (base_annotation + ", description = " + literal(override) + "]",
+                {"title": title, "version": version, "description": override}),
+        ]:
+            with self.subTest(annotation=annotation):
+                source = (
+                    "namespace http-annotation-test\n"
+                    "from /streaky/http-server/annotations import api-documentation, route-group, endpoint\n"
+                    "from /streaky/http-server import api as http-api, create-application\n"
+                    "from /generated/http-server import mount-annotated\n"
+                    "from /core/process import arguments\n"
+                    "from /core/errors import throwable\n"
+                    + "\n".join("/// " + line if line else "///" for line in overview.splitlines())
+                    + "\n" + (annotation + "\n" if annotation else "")
+                    + "@[route-group; prefix = '/api']\nclass api uses http-api\n"
+                    "    @[endpoint; path = '/value']\n"
+                    "    async function value string;\n        return 'ready'\n"
+                    "async function main throws throwable;\n"
+                    "    app = mount-annotated; (create-application;)\n"
+                    "    supplied = arguments;\n"
+                    "    app = app.with-address; supplied[0].text\n"
+                    "    await app.serve;\nmain\n"
+                )
+                (self.directory / "src/main.trn").write_text(source)
+                built = subprocess.run([str(COMPILER), "build", str(self.directory)],
+                    capture_output=True, text=True, timeout=300)
+                self.assertEqual(built.returncode, 0, built.stderr)
+                with socket.socket() as reservation:
+                    reservation.bind(("127.0.0.1", 0))
+                    port = reservation.getsockname()[1]
+                server = subprocess.Popen([built.stdout.strip().splitlines()[-1], f"127.0.0.1:{port}"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                try:
+                    deadline = time.monotonic() + 10
+                    while True:
+                        connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+                        try:
+                            connection.request("GET", "/api/openapi.json")
+                            with connection.getresponse() as response:
+                                self.assertEqual(response.status, 200)
+                                self.assertEqual(json.loads(response.read())["info"], expected_info)
+                            break
+                        except OSError:
+                            if time.monotonic() >= deadline or server.poll() is not None:
+                                raise
+                            time.sleep(0.05)
+                        finally:
+                            connection.close()
+                finally:
+                    server.terminate()
+                    try:
+                        server.communicate(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        server.kill()
+                        server.communicate()
+
+    def test_all_supported_methods_and_scalar_responses(self):
+        handlers = [
+            "read", "create", "replace", "change", "remove", "head-read", "head-scalar",
+            "method-options", "echo-model", "echo-model::value", "failing-handler",
+            "throwing-success", "created", "redirect", "empty", "denied", "custom-error",
+            "invalid-code", "invalid-header", "override-content-type", "final-continue",
+            "final-upgrade", "nonfinite-model", "nonfinite-model::single", "tampered-error",
+            "quoted-default", "quoted-default::label", "head-metadata",
+            "unicode-length", "unicode-length::length",
+        ]
+        declarations = ["handlers"] + ["handlers::" + name for name in handlers] + [
+            "handlers::optional-result", "handlers::optional-result::present",
+            "data-model", "tree-node", "data-model::nickname", "data-model::selected",
+            "xml-api", "xml-api::value", "xml-api::nothing", "xml-api::failure",
+            "xml-api::denied", "xml-api::invalid-xml", "xml-api::model", "xml-api::model::value",
+            "legacy-api", "legacy-api::value", "json-api", "json-api::value",
+            "yaml-api", "yaml-api::value", "text-api", "text-api::denied",
+        ]
+        (self.directory / "package.toml").write_text('\n'.join([
+            'package = "http-annotation-test"',
+            'artifact = "executable"',
+            '[namespaces]',
+            'http-annotation-test = "src"',
+            '[terrane-dependencies.streaky.http-server]',
+            f'path = "{os.path.relpath(PACKAGE, self.directory)}"',
+            '[consumers.http-server]',
+            f'command = "{os.path.relpath(CONSUMER, self.directory)}"',
+            'declarations = [' + ', '.join(json.dumps("/http-annotation-test::" + name)
+                for name in declarations) + ']',
         ]))
         (self.directory / "src/main.trn").write_text(r"""namespace http-annotation-test
-from /streaky/http-server/annotations import endpoint, body, query
-from /streaky/http-server import create-application, http-response, create-response, create-json-response, create-redirect-response, http-error, create-http-error, controller, routes, client-info
-from /streaky/http-server import http-response as explicit-response
-from /streaky/http-server import http-header
-from /generated/http-server import annotated-controller
+from /streaky/http-server/annotations import endpoint, body, query, route-group, response-example, api-documentation
+from /streaky/http-server import api, response-context, create-application, http-error
+from /generated/http-server import mount-annotated
 from /core/process import arguments
 from /core/collections import list
 from /core/errors import throwable, coercion-error
-from /core/documents import document-map-entries, make-document-string, make-document-map
+from /core/documents import document-value, document-map-entries, make-document-none, make-document-string, make-document-map
+
+/// This declaration comment must not override an explicit empty overview.
+@[api-documentation; title = 'Integration fixture', version = '2026.10', description = '']
+@[route-group; prefix = '/xml', response-formats = (list; 'yaml', 'xml'), default-response-format = 'xml']
+class xml-api uses api
+    @[endpoint; path = '/value', operation-id = 'xmlValue']
+    @[response-example; value = '"<café & units>"']
+    async function value string;
+        return '<café & units>'
+
+    @[endpoint; path = '/nothing']
+    @[response-example; value = 'null']
+    async function nothing document-value;
+        return make-document-none;
+
+    @[endpoint; path = '/failure']
+    async function failure string throws throwable;
+        throw coercion-error
+
+    @[endpoint; path = '/denied']
+    async function denied string throws throwable;
+        response = this.response
+        if response != none
+            response.vary; 'Origin'
+        throw http-error; 404, 'not found'
+
+    @[endpoint; path = '/invalid-xml']
+    async function invalid-xml document-value throws throwable;
+        fields = instance document-map-entries;
+        fields.append; 'bad key', (make-document-string; 'cannot become an XML element')
+        document = make-document-map; fields
+        if document.failed
+            throw coercion-error
+        return document.value
+
+    @[endpoint; method = 'POST', path = '/model']
+    async function model data-model; @[body;] value data-model
+        return value
+
+@[route-group; prefix = '/yaml', response-formats = (list; 'yaml', 'xml')]
+class yaml-api uses api
+    @[endpoint; path = '/value']
+    async function value string;
+        return 'yaml-default'
+
+@[route-group; prefix = '/legacy']
+class legacy-api uses api
+    @[endpoint; path = '/value']
+    async function value int;
+        return 7
+
+@[route-group; prefix = '/json', response-formats = (list; 'json')]
+class json-api uses api
+    @[endpoint; path = '/value']
+    async function value int;
+        return 7
 
 class tree-node
     name string
@@ -142,137 +392,199 @@ class data-model
     active bool = true
     ratio float = 1.5
     small float32 = 0.5
+    /// Optional display name supplied by the caller.
     nickname string|none
     values list of int16
     count uint8 = 7
     children list of tree-node
+    /// Optional selected node; null means no node was chosen.
     selected tree-node|none
     related list of (tree-node)|none
     private internal string = 'not-public'
 
-@[endpoint; path = '/models', method = 'POST']
-async function echo-model data-model; @[body;] value data-model
-    return value
-
-@[endpoint; path = '/nonfinite-model']
-async function nonfinite-model data-model; @[query;] single bool = false
-    value = instance data-model;
-    if single
-        value.small = rust
-            f32::NAN
-    else
-        value.ratio = rust
-            f64::INFINITY
-    return value
-
-@[endpoint; path = '/method']
-async function read int;
-    return 7
-@[endpoint; path = '/method', method = 'POST']
-async function create int;
-    return 8
-@[endpoint; path = '/method', method = 'PUT']
-async function replace bool;
-    return true
-@[endpoint; path = '/method', method = 'PATCH']
-async function change bool;
-    return false
-@[endpoint; path = '/method', method = 'DELETE']
-async function remove string;
-    return 'deleted'
-
-@[endpoint; path = '/failure', content-type = 'text/html']
-async function failing-handler string throws throwable;
-    throw coercion-error
-
-@[endpoint; path = '/throwing-success']
-async function throwing-success string throws throwable;
-    return 'still works'
-
-@[endpoint; path = '/created', summary = 'A "quoted" café\nand a backslash \\']
-async function created explicit-response;
-    entries = instance document-map-entries;
-    entries.append; 'value', (make-document-string; 'say "hello" \\ café\n\t')
-    payload = make-document-map; entries
-    if payload.failed
+@[route-group;]
+class handlers uses api
+    @[endpoint; path = '/optional']
+    async function optional-result none|string; @[query;] present bool = false
+        if present
+            return 'present'
+        return none
+    function controls response-context throws coercion-error;
+        response = this.response
+        if response != none
+            return response
         throw coercion-error
-    response = create-json-response; 201, payload.value
-    response = response.with-header; 'location', '/created/1'
-    response = response.with-header; 'set-cookie', 'first=1'
-    return response.with-header; 'set-cookie', 'second=2'
 
-@[endpoint; path = '/redirect']
-async function redirect http-response;
-    return create-redirect-response; '/method', 307
+    @[endpoint; path = '/models', method = 'POST']
+    async function echo-model data-model; @[body;] value data-model
+        return value
 
-@[endpoint; path = '/empty']
-async function empty http-response;
-    return create-response; 204, 'text/plain', ''
+    @[endpoint; path = '/nonfinite-model']
+    async function nonfinite-model data-model; @[query;] single bool = false
+        value = instance data-model;
+        if single
+            value.small = rust
+                f32::NAN
+        else
+            value.ratio = rust
+                f64::INFINITY
+        return value
 
-@[endpoint; path = '/override-content-type']
-async function override-content-type http-response;
-    response = create-response; 200, 'text/plain', 'content type'
-    response = response.with-header; 'Content-Type', 'application/json'
-    response = response.with-header; 'cOnTeNt-TyPe', 'application/problem+json'
-    response.headers.append; (instance http-header; 'CONTENT-TYPE', 'application/vnd.example+json')
-    return move response
+    @[endpoint; path = '/method']
+    async function read int;
+        return 7
+    @[endpoint; path = '/method', method = 'POST']
+    async function create int;
+        return 8
+    @[endpoint; path = '/method', method = 'PUT']
+    async function replace bool;
+        return true
+    @[endpoint; path = '/method', method = 'PATCH']
+    async function change bool;
+        return false
+    @[endpoint; path = '/method', method = 'DELETE']
+    async function remove string;
+        return 'deleted'
+    @[endpoint; path = '/method', method = 'HEAD', content-type = 'text/plain']
+    async function head-read string throws throwable;
+        response = this.controls;
+        response.set-status; 202
+        response.set-header; 'x-head', 'explicit'
+        return 'hidden'
 
-@[endpoint; path = '/final-100']
-async function final-continue http-response;
-    return create-response; 100, 'text/plain', ''
+    @[endpoint; path = '/head-scalar', method = 'HEAD']
+    async function head-scalar bool;
+        return true
 
-@[endpoint; path = '/final-101']
-async function final-upgrade http-response;
-    return create-response; 101, 'text/plain', ''
+    @[endpoint; path = '/unknown-length', method = 'HEAD']
+    async function head-metadata none throws throwable;
+        response = this.controls;
+        response.set-status; 200
+        response.set-content-type; 'text/plain'
+        return none
 
-@[endpoint; path = '/denied']
-async function denied string;
-    throw http-error; 403
+    @[endpoint; path = '/method', method = 'OPTIONS']
+    async function method-options none throws throwable;
+        response = this.controls;
+        response.set-header; 'allow', 'GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS'
+        return none
 
-@[endpoint; path = '/custom-error']
-async function custom-error http-response;
-    entries = instance document-map-entries;
-    entries.append; 'detail', (make-document-string; 'No café "seat"\nleft')
-    payload = make-document-map; entries
-    if payload.failed
+    @[endpoint; path = '/failure', content-type = 'text/html']
+    async function failing-handler string throws throwable;
         throw coercion-error
-    response = create-json-response; 409, payload.value
-    response = response.with-header; 'x-error', 'capacity'
-    throw (create-http-error; response)
 
-@[endpoint; path = '/invalid-code']
-async function invalid-code http-response;
-    return create-response; 999, 'text/plain', 'must not escape'
+    @[endpoint; path = '/throwing-success']
+    async function throwing-success string throws throwable;
+        return 'still works'
 
-@[endpoint; path = '/invalid-header']
-async function invalid-header http-response;
-    return (create-response; 200, 'text/plain', 'must not escape').with-header; 'x-invalid', 'a\r\nb'
+    @[endpoint; path = '/unicode-length', content-type = 'text/plain']
+    async function unicode-length string throws throwable; @[query;] length int = 21
+        response = this.controls;
+        response.set-content-length; length
+        return 'café é 👩‍💻'
 
-@[endpoint; path = '/tampered-error']
-async function tampered-error string;
-    error = instance http-error; 403
-    error.message = 'not-json'
-    throw error
+    @[endpoint; path = '/created', summary = 'A "quoted" café\nand a backslash \\']
+    async function created document-value throws throwable;
+        entries = instance document-map-entries;
+        entries.append; 'value', (make-document-string; 'say "hello" \\ café\n\t')
+        payload = make-document-map; entries
+        if payload.failed
+            throw coercion-error
+        response = this.controls;
+        response.set-status; 201
+        response.set-header; 'location', '/created/1'
+        response.add-header; 'set-cookie', 'first=1'
+        response.add-header; 'set-cookie', 'second=2'
+        return payload.value
 
-@[endpoint; path = '/quoted-default']
-async function quoted-default string; @[query;] label string = 'say "hello" \\ café\n\t'
-    return label
+    /// An explicit redirect with a documentation example.
+    /// ````terrane
+    /// @returns This marker is code, not response documentation.
+    /// ```
+    /// ````
+    ///   ~~~console
+    /// @returns This tilde-fenced marker is also code.
+    ///   ~~~
+    /// ```inline```
+    /// @returns The empty redirect body; follow the Location header.
+    @[endpoint; path = '/redirect', content-type = 'text/plain']
+    @[response-example; value = '""']
+    async function redirect string throws throwable;
+        response = this.controls;
+        response.redirect; '/method', 307
+        return ''
 
-async function text-denied string;
-    throw http-error; 401
+    @[endpoint; path = '/empty']
+    async function empty none;
+        return none
 
-async function client-denied string; _client client-info
-    throw http-error; 403
+    @[endpoint; path = '/override-content-type', content-type = 'text/plain']
+    async function override-content-type string throws throwable;
+        response = this.controls;
+        response.set-header; 'Content-Type', 'application/json'
+        response.set-header; 'cOnTeNt-TyPe', 'application/problem+json'
+        response.set-content-type; 'application/vnd.example+json'
+        return 'content type'
 
-class text-controller implements controller
-    consuming function routes routes; registered-routes routes
-        registered-routes = registered-routes.get; '/denied', text-denied
-        return registered-routes.get-with-client; '/client-denied', client-denied
+    @[endpoint; path = '/final-100']
+    async function final-continue none throws throwable;
+        response = this.controls;
+        response.set-status; 100
+        return none
+
+    @[endpoint; path = '/final-101']
+    async function final-upgrade none throws throwable;
+        response = this.controls;
+        response.set-status; 101
+        return none
+
+    @[endpoint; path = '/denied']
+    async function denied string throws throwable;
+        throw http-error; 403
+
+    @[endpoint; path = '/custom-error']
+    async function custom-error document-value throws throwable;
+        entries = instance document-map-entries;
+        entries.append; 'detail', (make-document-string; 'No café "seat"\nleft')
+        payload = make-document-map; entries
+        if payload.failed
+            throw coercion-error
+        response = this.controls;
+        response.set-status; 409
+        response.set-header; 'x-error', 'capacity'
+        return payload.value
+
+    @[endpoint; path = '/invalid-code']
+    async function invalid-code string throws throwable;
+        response = this.controls;
+        response.set-status; 999
+        return 'must not escape'
+
+    @[endpoint; path = '/invalid-header']
+    async function invalid-header string throws throwable;
+        response = this.controls;
+        response.set-header; 'x-invalid', 'a\r\nb'
+        return 'must not escape'
+
+    @[endpoint; path = '/tampered-error']
+    async function tampered-error string throws throwable;
+        error = instance http-error; 403
+        error.message = 'not-json'
+        throw error
+
+    @[endpoint; path = '/quoted-default']
+    async function quoted-default string; @[query;] label string = 'say "hello" \\ café\n\t'
+        return label
+
+@[route-group; prefix = '/text']
+class text-api uses api
+    @[endpoint; path = '/denied']
+    async function denied string throws throwable;
+        throw http-error; 401
 
 async function main throws throwable;
     app = create-application;
-    app = app.mount; '/', (instance annotated-controller;)
-    app = app.mount; '/text', (instance text-controller;)
+    app = mount-annotated; app
     supplied = arguments;
     address = supplied[0].text
     app = app.with-address; address
@@ -325,14 +637,36 @@ main
             finally:
                 connection.close()
             self.assertEqual(request("GET", "/method"), 7)
-            def raw_request(path):
+            def raw_request(path, headers=None, method="GET", body=None):
                 connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
                 try:
-                    connection.request("GET", path)
+                    connection.request(method, path, body=body, headers=headers or {})
                     response = connection.getresponse()
                     return response.status, response.getheaders(), response.read()
                 finally:
                     connection.close()
+            status, headers, payload = raw_request("/method", method="HEAD")
+            self.assertEqual((status, payload), (202, b""))
+            self.assertEqual(dict(headers)["x-head"], "explicit")
+            status, headers, payload = raw_request("/head-scalar", method="HEAD")
+            self.assertEqual((status, payload), (200, b""))
+            self.assertEqual(dict(headers)["content-type"], "application/json")
+            status, headers, payload = raw_request("/unknown-length", method="HEAD")
+            self.assertEqual((status, payload), (200, b""))
+            self.assertEqual(dict(headers)["content-type"], "text/plain")
+            self.assertNotIn("content-length", dict(headers))
+            status, headers, payload = raw_request("/optional")
+            self.assertEqual((status, payload), (204, b""))
+            status, headers, payload = raw_request("/optional?present=true")
+            self.assertEqual((status, payload), (200, b'"present"'))
+            status, headers, payload = raw_request("/method", method="OPTIONS")
+            self.assertEqual((status, payload), (204, b""))
+            self.assertEqual(dict(headers)["allow"], "GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS")
+            unicode_body = "café é 👩‍💻".encode("utf-8")
+            status, headers, payload = raw_request("/unicode-length")
+            self.assertEqual((status, payload), (200, unicode_body))
+            self.assertEqual(dict(headers)["content-length"], str(len(unicode_body)))
+            self.assertEqual(raw_request("/unicode-length?length=8")[0], 500)
             status, headers, payload = raw_request("/created")
             self.assertEqual(status, 201)
             self.assertEqual(dict(headers)["content-type"], "application/json")
@@ -351,8 +685,7 @@ main
             self.assertEqual([value for name, value in headers if name.lower() == "content-type"],
                              ["application/vnd.example+json"])
             for path, code, body in [("/denied", 403, b"Forbidden"),
-                                     ("/text/denied", 401, b"Unauthorized"),
-                                     ("/text/client-denied", 403, b"Forbidden")]:
+                                     ("/text/denied", 401, b"Unauthorized")]:
                 with self.subTest(path=path):
                     status, _, payload = raw_request(path)
                     self.assertEqual((status, payload), (code, body))
@@ -369,13 +702,21 @@ main
                     self.assertNotIn(b"must not escape", payload)
             self.assertEqual(request("GET", "/quoted-default"), special)
             schema = request("GET", "/openapi.json")
+            self.assertNotIn("description", schema["info"])
             self.assertEqual(schema["paths"]["/created"]["get"]["summary"], 'A "quoted" café\nand a backslash \\')
             responses = schema["paths"]["/created"]["get"]["responses"]
-            self.assertNotIn("200", responses)
-            self.assertIn("default", responses)
+            self.assertIn("200", responses)
+            redirect = schema["paths"]["/redirect"]["get"]
+            self.assertIn("@returns", redirect["description"])
+            self.assertNotIn("```", redirect["responses"]["200"]["description"])
+            self.assertEqual(redirect["responses"]["200"]["description"],
+                "The empty redirect body; follow the Location header.")
+            self.assertEqual(redirect["responses"]["200"]["content"]["text/plain"]["examples"]["default"]["value"], "")
             default = schema["paths"]["/quoted-default"]["get"]["parameters"][0]
             self.assertEqual(default["schema"]["default"], special)
             self.assertFalse(default["required"])
+            self.assertNotIn("description", default)
+            self.assertNotIn("description", schema["paths"]["/models"]["post"]["requestBody"])
             self.assertEqual(request("GET", "/method"), 7)
             defaults = request("POST", "/models", "{}")
             self.assertEqual(defaults, {"active": True, "ratio": 1.5, "small": 0.5, "nickname": None,
@@ -398,13 +739,80 @@ main
                     request("POST", "/models", invalid, status=422)
             schema = request("GET", "/openapi.json")
             operations = schema["paths"]["/method"]
-            self.assertEqual(set(operations), {method.lower() for method in expected})
+            self.assertEqual(set(operations), {method.lower() for method in expected} | {"head", "options"})
             for method, value in expected.items():
                 expected_type = "boolean" if isinstance(value, bool) else "integer" if isinstance(value, int) else "string"
                 self.assertEqual(operations[method.lower()]["responses"]["200"]["content"]["application/json"]["schema"]["type"], expected_type)
+            self.assertNotIn("content", operations["head"]["responses"]["200"])
+            self.assertNotIn("content", operations["options"]["responses"]["204"])
+            self.assertNotIn("200", operations["options"]["responses"])
+            self.assertNotIn("content", schema["paths"]["/head-scalar"]["head"]["responses"]["200"])
+            unknown_head = schema["paths"]["/unknown-length"]["head"]["responses"]
+            self.assertIn("200", unknown_head)
+            self.assertIn("204", unknown_head)
+            self.assertNotIn("content", unknown_head["200"])
+            self.assertNotIn("content", unknown_head["204"])
+            self.assertEqual(schema["paths"]["/xml/value"]["get"]["operationId"], "xmlValue")
+            self.assertTrue(schema["paths"]["/optional"]["get"]["operationId"].endswith("_get"))
             model_schema = schema["paths"]["/models"]["post"]["requestBody"]
+            status, headers, payload = raw_request("/xml/value")
+            self.assertEqual((status, dict(headers)["content-type"]), (200, "application/xml"))
+            self.assertEqual(ElementTree.fromstring(payload).text, "<café & units>")
+            self.assertEqual(dict(headers)["vary"], "Accept")
+            status, headers, payload = raw_request("/yaml/value")
+            self.assertEqual((status, dict(headers)["content-type"], yaml.safe_load(payload)),
+                (200, "application/yaml", "yaml-default"))
+            self.assertEqual(raw_request("/xml/value", {"Accept": "application/json"})[0], 406)
+            for path in ("/method", "/legacy/value"):
+                for accept in ("text/plain", "text/html", "image/png", "application/json;q=0"):
+                    with self.subTest(path=path, accept=accept):
+                        status, headers, payload = raw_request(path, {"Accept": accept})
+                        self.assertEqual((status, dict(headers)["content-type"], json.loads(payload)),
+                            (200, "application/json", 7))
+                        self.assertNotIn("vary", dict(headers))
+                self.assertNotIn("406", schema["paths"][path]["get"]["responses"])
+            for accept in ("application/json; charset=utf-8", 'application/json;charset="UTF-8"',
+                           "application/json, text/\xe9"):
+                status, headers, payload = raw_request("/json/value", {"Accept": accept})
+                self.assertEqual((status, json.loads(payload)), (200, 7))
+                self.assertEqual(dict(headers)["vary"], "Accept")
+            for accept in ("text/plain", "", "application/json;q=0, text/\xe9, */*;q=1"):
+                status, headers, _ = raw_request("/json/value", {"Accept": accept})
+                self.assertEqual(status, 406)
+                self.assertEqual(dict(headers)["vary"], "Accept")
+            for path, expected_status in (("/xml/failure", 500), ("/xml/denied", 404),
+                                          ("/xml/invalid-xml", 500)):
+                for accept, status in (("application/xml", expected_status), ("image/png", 406)):
+                    response_status, headers, _ = raw_request(path, {"Accept": accept})
+                    self.assertEqual(response_status, status)
+                    tokens = {token.strip().lower() for name, value in headers
+                              if name.lower() == "vary" for token in value.split(",")}
+                    self.assertIn("accept", tokens)
+                    if path == "/xml/denied" and status == 404:
+                        self.assertNotIn("origin", tokens)
+            for body in ("{broken", '{"active":1}'):
+                status, headers, _ = raw_request("/xml/model",
+                    {"Accept": "application/xml", "Content-Type": "application/json"}, "POST", body)
+                self.assertEqual(status, 422)
+                self.assertEqual(dict(headers)["vary"], "Accept")
+            xml_schema = schema["paths"]["/xml/value"]["get"]["responses"]["200"]["content"]
+            self.assertEqual(set(xml_schema), {"application/xml", "application/yaml"})
+            self.assertEqual(ElementTree.fromstring(xml_schema["application/xml"]["examples"]["default"]["value"]).text,
+                "<café & units>")
+            null_content = schema["paths"]["/xml/nothing"]["get"]["responses"]["200"]["content"]
+            self.assertIsNone(null_content["application/yaml"]["examples"]["default"]["value"])
+            self.assertEqual(ElementTree.fromstring(null_content["application/xml"]["examples"]["default"]["value"]).get(
+                "{http://www.w3.org/2001/XMLSchema-instance}nil"), "true")
             model_schema = schema["components"]["schemas"][model_schema["content"]["application/json"]["schema"]["$ref"].split("/")[-1]]
             self.assertNotIn("internal", model_schema["properties"])
+            self.assertNotIn("description", model_schema)
+            self.assertNotIn("description", model_schema["properties"]["active"])
+            for name in ("nickname", "selected"):
+                nullable = model_schema["properties"][name]
+                self.assertIsInstance(nullable.get("description"), str)
+                self.assertNotEqual(nullable["description"].strip(), "")
+                self.assertNotEqual(nullable["description"], "none")
+                self.assertEqual(nullable["anyOf"][1], {"type": "null"})
             child_ref = model_schema["properties"]["children"]["items"]["$ref"]
             child_schema = schema["components"]["schemas"][child_ref.split("/")[-1]]
             self.assertEqual(child_schema["properties"]["children"]["items"]["$ref"], child_ref)

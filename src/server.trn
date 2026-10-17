@@ -4,93 +4,15 @@ from /deps/axum import Router as native-router, serve as native-serve
 from /deps/axum-core/extract import Request as native-request
 from /deps/axum-core/response import Response as native-response
 from /deps/axum/middleware import Next as middleware-next, from_fn as from-fn
-from /deps/axum/routing import MethodRouter as native-method-router
 from /deps/tower-http/services import ServeDir as serve-dir
 from /core/networking import listen-tcp
 from /core/networking/native import native-socket-address as socket-addr
 from /deps/axum/extract/connect-info import IntoMakeServiceWithConnectInfo as into-make-service-with-connect-info
 from /deps/http import StatusCode as status-code
-from /core/errors import dependency-error, throwable
+from /core/errors import throwable, dependency-error
+from /streaky/http-server/internal import routes
 
-enum http-method
-    get
-    post
-    put
-    patch
-    delete
-
-public class routes
-    private router native-router = native-router::new;
-
-    private function construct; router native-router
-        this.router = move router
-
-    consuming function get routes; path string, handler async function to string throws throwable
-        callback = async function native-response;
-            try
-                body = await handler;
-                return into-native-response; (create-response; 200, 'text/plain; charset=utf-8', body)
-            catch http-error as error
-                return into-native-http-error; error
-            catch
-                return (status-code::INTERNAL-SERVER-ERROR).into_response;
-        method-router native-method-router = native-method-router::new;
-        method-router = method-router.get; callback
-        router = move this.router
-        router = router.route; path, move method-router
-        return instance routes; move router
-
-    consuming function get-with-client routes; path string, handler async function from client-info to string throws throwable
-        native-handler = async function native-response; request native-request
-            peer = direct-address; ref request
-            client = client-address; ref request
-            try
-                body = await handler; (instance client-info; peer, client)
-                return into-native-response; (create-response; 200, 'text/plain; charset=utf-8', body)
-            catch http-error as error
-                return into-native-http-error; error
-            catch
-                return (status-code::INTERNAL-SERVER-ERROR).into_response;
-        method-router native-method-router = native-method-router::new;
-        method-router = method-router.get; native-handler
-        router = move this.router
-        router = router.route; path, move method-router
-        return instance routes; move router
-
-    consuming function endpoint routes; method http-method, path string, handler async function from http-request to http-response throws throwable
-        callback = async function native-response; request native-request
-            try
-                typed-request = instance http-request; move request, path
-            catch
-                return (status-code::UNPROCESSABLE-ENTITY).into_response;
-            try
-                response = await handler; move typed-request
-                return into-native-response; move response
-            catch http-error as error
-                return into-native-http-error; error
-            catch
-                return (status-code::INTERNAL-SERVER-ERROR).into_response;
-        method-router native-method-router = native-method-router::new;
-        match method
-            case http-method::get
-                method-router = method-router.get; callback
-            case http-method::post
-                method-router = method-router.post; callback
-            case http-method::put
-                method-router = method-router.put; callback
-            case http-method::patch
-                method-router = method-router.patch; callback
-            case http-method::delete
-                method-router = method-router.delete; callback
-        router = move this.router
-        router = router.route; path, move method-router
-        return instance routes; move router
-
-    consuming function websocket routes; path string, handler async function from websocket-session to none throws dependency-error
-        router = move this.router
-        router = register-websocket; move router, path, move handler
-        return instance routes; move router
-
+# Generated class composition protocol. Endpoints are declared on api-using route groups.
 public interface controller
     consuming function routes routes; registered-routes routes
 
@@ -113,6 +35,10 @@ public class application
             router = router.merge; move nested
         else
             router = router.nest; prefix, move nested
+        return instance application; move router, this.address, (move this.policy)
+
+    consuming function websocket application; path string, handler async function from websocket-session to none throws dependency-error
+        router = register-websocket; (move this.router), path, handler
         return instance application; move router, this.address, (move this.policy)
 
     consuming function static-directory application; prefix string, directory string
@@ -158,15 +84,13 @@ public class application
             direct-allowed bool = false
             if direct != none
                 direct-allowed = direct-policy.permits; direct
-
             trust-forwarded bool = direct-allowed and not (direct-policy.is-permissive;)
             client = resolve-client-address; ref request, direct, trust-forwarded
             client-allowed bool = client-policy.is-permissive;
             if not client-allowed
                 if client != none
                     client-allowed = client-policy.permits; client
-            install-client-address; ref request, client
-
+            install-proxy-metadata; ref request, client, trust-forwarded
             if direct-allowed and client-allowed
                 return await next.run; request
             return (status-code::FORBIDDEN).into_response;

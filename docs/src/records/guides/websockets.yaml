@@ -1,9 +1,7 @@
 format: 1
 id: http-server.guide.websockets
 kind: topic
-
 surface: null
-
 lifecycle:
   status: current
   stability: experimental
@@ -11,93 +9,79 @@ lifecycle:
   deprecated-since: null
   removed-in: null
   replacement: null
-
 documentation:
   status: complete
-  title: "WebSockets"
+  title: WebSockets
   title-style: text
-  summary: >-
-    Register an upgrade endpoint on a controller and use the typed session to receive
-    event kinds, send text frames, and close explicitly.
-  tags:
-    - "http-server"
-    - "websockets"
-    - "networking"
+  summary: WebSocket session capabilities exposed to asynchronous handlers.
+  tags: [http-server, websockets, networking]
   blocks:
     - type: markdown
       markdown: |-
-        WebSocket endpoints are registered with the controller's `routes.websocket`
-        builder. The asynchronous handler receives a Terrane `websocket-session`, not a
-        transport extractor. Exact public signatures are documented on
-        [[http-server.api.routes]], [[http-server.api.websocket-session]], and
-        [[http-server.api.websocket-event]].
+        Register an upgrade endpoint with the consuming public
+        `application.websocket(path, handler)` method and assign its returned application.
+        Its asynchronous handler receives an owned `websocket-session`; no import from
+        the internal routing namespace is required. WebSocket callbacks have session
+        lifetime, not HTTP `api` request/response contexts or ordinary HTTP result encoding.
+
+        Upgrade requests pass through the direct/client access policy. A denied upgrade
+        receives HTTP 403 before its session handler runs.
+
+        The catalog demo includes an interactive `/websocket` playground, linked
+        from its home page. It connects to `/ws/echo`, sends multiple text messages
+        on the same session, and supports disconnecting and reconnecting. The
+        callback echoes each message to that client only; it is not a broadcast
+        service and does not mutate the catalog. WebSocket sessions are separate
+        from the demo's HTTP OpenAPI document.
+    - type: example
+      id: public-websocket
+      title: Registering a text WebSocket
+      language: terrane
+      mode: illustrative
+      target: null
+      timeout-ms: null
+      source: |-
+        namespace websocket-demo
+        from /streaky/http-server import create-application, websocket-session
+        from /core/errors import throwable, dependency-error
+
+        async function echo none throws dependency-error; session websocket-session
+            event = await session.receive;
+            text = event.text
+            if text != none
+                await session.send-text; text
+            await session.close;
+            return none
+
+        async function main throws throwable;
+            app = create-application;
+            app = app.websocket; '/events', echo
+            await app.serve;
+        main
+      response: null
+      diagnostic: null
+      markdown: null
   sections:
-    - id: registering-and-handling
-      title: "Registering and handling a session"
+    - id: session-model
+      title: Session model
       blocks:
         - type: markdown
           markdown: |-
-            Build the endpoint with a path relative to the controller mount and a
-            reusable asynchronous handler. This controller receives one event,
-            echoes a text payload when present, and then closes the session.
-            Mount it on an application as shown in the tutorial.
-        - type: example
-          id: session-operations
-          title: "Text receive, send, and close"
-          language: terrane
-          mode: illustrative
-          target: null
-          timeout-ms: null
-          source: |-
-            namespace websocket-guide
+            `receive` returns an event whose `kind` preserves the transport message-kind spelling and case: a text event uses `text`, while non-text message variants retain names such as `Close`, `Binary`, `Ping`, and `Pong`. Text events carry an optional `text` value. When the incoming stream ends, `receive` returns the distinct lower-case `closed` event kind; a received close frame is `Close`.
 
-            from /streaky/http-server import controller, routes, websocket-session
-            from /core/errors import dependency-error
+            After receiving a peer `Close`, keep receiving until `closed` so the
+            transport can flush its close reply. Do not send text or initiate
+            another close frame after that event. The demo's echo loop follows
+            this pattern; use `close` to initiate a server-side close instead.
 
-            class chat implements controller
-                consuming function routes routes; registered-routes routes
-                    return registered-routes.websocket; '/chat', this.echo
+            `send-text` sends a text frame, and `close` sends an explicit close frame. Transport failures use `dependency-error`; the framework catches an individual handler failure after upgrade so one failed session does not terminate the HTTP server.
 
-                async function echo none throws dependency-error; session websocket-session
-                    event = await session.receive;
-                    text = event.text
-                    if text != none
-                        await session.send-text; text
-                    await session.close;
-                    return none
-          response: null
-          diagnostic: null
-          markdown: null
-        - type: markdown
-          markdown: |-
-            `receive` returns an event whose `kind` preserves the transport message-kind
-            spelling and case: a text event uses `text`, while non-text message variants
-            currently retain names such as `Close`, `Binary`, `Ping`, and `Pong`.
-            Only text events expose `event.text`; other event payloads are `none`.
-            A completed stream returns the distinct lowercase `closed` kind.
-            `send-text` sends a text frame, and `close` sends an explicit close frame.
-    - id: errors-and-limits
-      title: "Errors and limits"
-      blocks:
-        - type: markdown
-          markdown: |-
-            Session receive/send operations and the handler use the declared
-            `dependency-error` contract. The framework catches a handler's dependency error
-            after upgrade so a failed session does not terminate the HTTP server; this is
-            not a general error-to-HTTP recovery mechanism. Upgrade requests still pass
-            through the configured direct/client access policy, and denied upgrades receive
-            403 before a session handler runs.
-
-            The current API does not expose binary payloads, ping/pong payload operations,
-            or richer message types. It also does not promise graceful server shutdown or
-            broader request extraction. See [[http-server.guide.proxy-security]]
-            for trusted identity and upgrade filtering.
+            The current typed payload surface is text-first. Binary event payloads and explicit ping/pong payload APIs are not exposed.
+      sections: []
   see-also:
-    - http-server.api.routes
     - http-server.api.websocket-session
     - http-server.api.websocket-event
     - http-server.guide.proxy-security
-
 provenance:
   specification: null
   conformance: null

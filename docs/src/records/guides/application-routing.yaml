@@ -17,44 +17,40 @@ documentation:
   title: "Application and routing"
   title-style: text
   summary: >-
-    Build an application by composing controller-local routes, static directories,
-    and a listen address with consuming builders.
+    Compose class-bound annotated API endpoints, WebSocket registrations, static directories,
+    and a listen address into an application.
   tags:
-    - "http-server"
     - "routing"
-    - "controllers"
+    - "api"
   blocks:
     - type: markdown
       markdown: |-
-        An application starts with `create-application`. Builders such as `mount`,
-        `static-directory`, and `with-address` consume an application and return its
-        successor, so retain each returned value while assembling the server. A controller
-        implements `controller.routes`; the framework gives it a fresh `routes` builder
-        scoped to that controller, and its callback returns the builder after registering
-        handlers.
-
-        Route paths registered inside a controller are relative to its mount prefix. Use
-        a distinct variable name such as `registered-routes` for the builder; `routes` is
-        also the type name. For exact callable forms, see
-        [[http-server.api.application]], [[http-server.api.routes]], and
-        [[http-server.api.controller]].
+        An application starts with `create-application`. Application composition
+        mounts selected annotated API classes through the package consumer integration;
+        `static-directory` and `with-address` consume an application and return its
+        successor, so retain each result. HTTP endpoint methods on the selected
+        `@route-group` classes declare `uses api`. Generated adapters register handlers
+        through internal routing transport; applications do not author routes directly.
+        WebSocket routing is separate and its public authoring interface is currently
+        outside the documented HTTP API.
   sections:
-    - id: composing-controllers
-      title: "Composing controllers"
+    - id: composing-api-classes
+      title: "Composing API classes"
       blocks:
         - type: markdown
           markdown: |-
-            A controller packages registrations, not a globally shared router. Mounting it
-            at `/` merges its routes into the application root. A non-root prefix nests
-            the controller's relative routes beneath that prefix. This allows root routes,
-            prefixed controllers, and static directories to coexist. Choose distinct mount
-            paths: configuration rejects duplicate paths rather than promising precedence.
+            A route-group class packages annotated HTTP endpoints, not a globally shared
+            router. The consumer composes selected API class instances through the
+            application mount integration and their declared prefixes. A non-root prefix
+            nests endpoint paths beneath that prefix. This allows API classes and static
+            directories to coexist. Choose distinct mount paths: configuration rejects
+            duplicate paths rather than promising precedence.
 
             The following is a structural sketch, not a complete executable project; it
-            emphasizes retaining the consuming builder results.
+            emphasizes retaining the consuming application builder results.
         - type: example
           id: builder-composition
-          title: "Controller-local registration and application composition"
+          title: "Class-bound API composition"
           language: terrane
           mode: illustrative
           target: null
@@ -62,20 +58,19 @@ documentation:
           source: |-
             namespace routing-example
 
-            from /streaky/http-server import controller, routes, create-application
+            from /streaky/http-server import api, create-application
+            from /streaky/http-server/annotations import route-group, endpoint
             from /core/errors import throwable
 
-            class site implements controller
-                consuming function routes routes; registered-routes routes
-                    return registered-routes.get; '/', this.home
-
+            @[route-group; prefix = '/']
+            class site-api uses api
+                @[endpoint; method = 'GET|HEAD', path = '/']
                 async function home string;
-                    return 'Hello from this controller.'
+                    return 'Hello from this API.'
 
             async function main none throws throwable;
                 app = create-application;
-                app = app.mount; '/', (instance site;)
-                app = app.mount; '/admin', (instance site;)
+                app = app.mount-annotated; '/site', (instance site-api;)
                 app = app.static-directory; '/assets', 'public'
                 await app.serve;
                 return none
@@ -83,25 +78,37 @@ documentation:
           diagnostic: null
           markdown: null
     - id: handlers-and-boundaries
-      title: "Handlers and current boundary"
+      title: "Class-bound handlers and request isolation"
       blocks:
         - type: markdown
           markdown: |-
-            The ordinary GET form takes an asynchronous handler returning `string`. The
-            client-aware GET form instead supplies `client-info` to its asynchronous
-            handler. WebSocket registrations use a separate endpoint method. The current
-            API does not expose HTTP method selection, request objects, rich request
-            extractors, structured responses, or general middleware; do not design a
-            controller around those absent facilities.
+            HTTP endpoints are instance methods on a selected `@route-group` class that
+            declares `uses api`. Add `endpoint` metadata to each method; `method` accepts
+            canonical uppercase methods such as `GET`, `HEAD`, or `GET|HEAD`. The latter
+            registers both operations, with method-specific OpenAPI operations. A HEAD
+            response suppresses the body while retaining representation metadata.
 
-            To start accepting connections, await the composed application's `serve` method.
+            The public `api` trait supplies optional `this.request` and `this.response`
+            fields. Narrow each from `none` before using it. A generated adapter copies the
+            mounted source into a local invocation for every request, attaches that request's
+            contexts to the copy, then calls the instance method. The mounted source is not
+            mutated, and simultaneous requests do not share these contexts. Helper methods
+            called on that invocation see the same contexts.
+
+            Ordinary class fields follow value semantics; a collection field is not
+            automatically shared between invocations. For persistent application data,
+            deliberately keep an explicit shared reference to a store. Keep mutations to
+            that shared store appropriately synchronized, and do not retain request context
+            as application state.
+
+            WebSocket registrations remain separate from annotated HTTP methods. To start
+            accepting connections, await the composed application's `serve` method.
             Binding and serving errors are surfaced by that operation through its declared
-            throwable contract; it is not an error-to-HTTP recovery hook or a graceful
-            shutdown API. Consult the API reference for its exact behavior and signature.
+            throwable contract; it is not an error-to-HTTP recovery hook or graceful
+            shutdown API.
   see-also:
     - http-server.api.application
-    - http-server.api.routes
-    - http-server.api.controller
+    - http-server.guide.annotations
     - http-server.guide.configuration
     - http-server.tutorial.first-server
 

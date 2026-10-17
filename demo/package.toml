@@ -12,7 +12,7 @@ path = "../../template"
 
 [consumers.template]
 command = "../../template/.trn/consumers/template"
-args = ["--namespace", "generated/template/http-server-demo", "--root", "templates", "--template", "home.html", "--template", "about.html"]
+args = ["--namespace", "generated/template/http-server-demo", "--root", "templates", "--template", "home.html", "--template", "about.html", "--template", "websocket.html"]
 declarations = ["/http-server-demo::main"]
 
 [consumers.http-server]
@@ -35,6 +35,27 @@ declarations = [
   "/http-server-demo::quote-output::item-id",
   "/http-server-demo::quote-output::quantity",
   "/http-server-demo::quote-output::total-cents",
+  "/http-server-demo::item-input",
+  "/http-server-demo::item-input::name",
+  "/http-server-demo::item-input::price-cents",
+  "/http-server-demo::item-input::in-stock",
+  "/http-server-demo::item-patch",
+  "/http-server-demo::item-patch::name",
+  "/http-server-demo::item-patch::price-cents",
+  "/http-server-demo::item-patch::in-stock",
+  "/http-server-demo::request-summary",
+  "/http-server-demo::request-summary::method",
+  "/http-server-demo::request-summary::target",
+  "/http-server-demo::request-summary::path",
+  "/http-server-demo::request-summary::route-pattern",
+  "/http-server-demo::request-summary::http-version",
+  "/http-server-demo::request-summary::scheme",
+  "/http-server-demo::request-summary::authority",
+  "/http-server-demo::request-summary::peer-ip",
+  "/http-server-demo::request-summary::client-ip",
+  "/http-server-demo::request-summary::via-trusted-proxy",
+  "/http-server-demo::request-summary::tags",
+  "/http-server-demo::request-summary::cookie",
   "/http-server-demo::catalog-api",
   "/http-server-demo::catalog-api::health",
   "/http-server-demo::catalog-api::read-item",
@@ -45,7 +66,22 @@ declarations = [
   "/http-server-demo::catalog-api::search::limit",
   "/http-server-demo::catalog-api::quote-order",
   "/http-server-demo::catalog-api::quote-order::order",
+  "/http-server-demo::catalog-api::replace-item",
+  "/http-server-demo::catalog-api::replace-item::item-id",
+  "/http-server-demo::catalog-api::replace-item::replacement",
+  "/http-server-demo::catalog-api::patch-item",
+  "/http-server-demo::catalog-api::patch-item::item-id",
+  "/http-server-demo::catalog-api::patch-item::changes",
+  "/http-server-demo::catalog-api::delete-item",
+  "/http-server-demo::catalog-api::delete-item::item-id",
+  "/http-server-demo::catalog-api::item-options",
+  "/http-server-demo::catalog-api::item-options::_item-id",
+  "/http-server-demo::catalog-api::request-info",
+  "/http-server-demo::catalog-api::request-info::status",
   "/http-server-demo::site",
   "/http-server-demo::site::home",
   "/http-server-demo::site::about",
+  "/http-server-demo::site::websocket-playground",
+  "/http-server-demo::site::catalog-note",
+  "/http-server-demo::site::catalog-redirect",
 ]

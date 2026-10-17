@@ -13,37 +13,16 @@ documentation:
   status: complete
   title: "controller"
   title-style: code
-  summary: Interface implemented by application components to construct controller-local routes.
+  summary: Framework application mount boundary, distinct from class-bound endpoint authoring.
   tags: [http-server, controller, routing]
   blocks:
     - type: markdown
       markdown: |-
-        `controller` is a public interface, not a constructible class. Implement its single
-        member `consuming function routes(routes) -> routes` (parameter name in the source is
-        `registered-routes`). The framework provides an empty builder scoped to this
-        controller, consumes it through the callback, and mounts the returned builder.
-        Register relative paths using [[http-server.api.routes]].
-
-        The interface declares no explicit throws clause. Its callback can nevertheless
-        encounter failures from delegated projected routing operations; absence of a
-        declared clause is not a guarantee that all underlying operations are infallible.
-    - type: example
-      id: signature
-      title: Interface declaration
-      language: terrane
-      mode: illustrative
-      target: null
-      timeout-ms: null
-      source: |-
-        public interface controller
-            consuming function routes routes; registered-routes routes
-      response: null
-      diagnostic: null
-      markdown: null
+        HTTP endpoints are authored as instance methods on selected classes using the public `api` trait and endpoint metadata. The framework/application composition mounts selected classes; generated adapters register their handlers through internal routing transport. This page describes the application mount boundary, not HTTP route authoring. See [[http-server.guide.annotations]] and [[http-server.guide.application-routing]].
   sections: []
   see-also:
-    - http-server.api.routes
     - http-server.api.application
+    - http-server.guide.annotations
     - http-server.guide.application-routing
 provenance:
   specification: null

@@ -1,0 +1,82 @@
+namespace http-server-consumer/formats
+
+from /core/collections import list, range, map
+from /core/documents import document-value, document-map-entries, make-document-string
+from /terrane/annotation-consumer-protocol import get, at, text, scalar, consumer-error
+from /http-server-consumer/documents import source-quote, object-value
+from /streaky/http-server import response-media-type
+
+function format-media-type string throws consumer-error; format string, origin document-value
+    try
+        return response-media-type; format
+    catch
+        throw (instance consumer-error; origin, 'HTTP response format must be json, yaml, or xml')
+
+class response-policy
+    formats list of string = list
+    default-format string = 'json'
+    negotiated bool = false
+
+function selected-response-policy response-policy throws consumer-error; policies map of string, response-policy, owner string, declaration document-value
+    selected = policies.get.checked; owner
+    if selected != none
+        return selected
+    throw (instance consumer-error; declaration, 'HTTP route-group response policy was not selected')
+
+function read-response-policy response-policy throws consumer-error; metadata document-value, declaration document-value
+    policy = instance response-policy;
+    if metadata.kind != 'none'
+        values = get; (get; metadata, 'response-formats'), 'value'
+        if values.kind != 'none'
+            if values.kind != 'list' or (values.length;) == 0
+                throw (instance consumer-error; declaration, 'HTTP response formats must be a nonempty list')
+            policy.negotiated = true
+            for index in (range; 0, (values.length;))
+                format = text; (scalar; (at; values, index))
+                if format != 'json' and format != 'yaml' and format != 'xml'
+                    throw (instance consumer-error; declaration, 'HTTP response format must be json, yaml, or xml')
+                for previous in policy.formats
+                    if previous == format
+                        throw (instance consumer-error; declaration, 'duplicate HTTP response format')
+                policy.formats.append; format
+    if policy.formats.length == 0
+        policy.formats.append; 'json'
+    policy.default-format = policy.formats[0]
+    if metadata.kind != 'none'
+        configured = text; (scalar; (get; metadata, 'default-response-format'))
+        if configured != ''
+            found bool = false
+            for format in policy.formats
+                if format == configured
+                    found = true
+            if not found
+                throw (instance consumer-error; declaration, 'default HTTP response format must be enabled')
+            policy.default-format = configured
+    return policy
+
+function format-list-source string throws consumer-error; policy response-policy
+    result = '(list; '
+    for index in (range; 0, policy.formats.length)
+        if index > 0
+            result = result + ', '
+        result = result + (source-quote; policy.formats[index])
+    return result + ')'
+
+function xml-response-schema document-value throws consumer-error; schema document-value, origin document-value
+    return named-xml-schema; schema, 'response', origin
+
+function named-xml-schema document-value throws consumer-error; schema document-value, name string, origin document-value
+    fields = instance document-map-entries;
+    for index in (range; 0, (schema.length;))
+        key = schema.key; index
+        if key != 'xml'
+            fields.append; key, (get; schema, key)
+    xml = instance document-map-entries;
+    existing = get; schema, 'xml'
+    for index in (range; 0, (existing.length;))
+        key = existing.key; index
+        if key != 'name'
+            xml.append; key, (get; existing, key)
+    xml.append; 'name', (make-document-string; name)
+    fields.append; 'xml', (object-value; xml, origin)
+    return object-value; fields, origin

@@ -13,91 +13,133 @@ documentation:
   status: complete
   title: HTTP requests and responses
   title-style: text
-  summary: Typed requests, explicit status/body/header responses, redirects, JSON encoding, and HTTP error exceptions.
+  summary: Request-scoped HTTP contexts, response defaults and overrides, and HTTP errors.
   tags: [http-server, requests, responses]
   blocks:
     - type: markdown
       markdown: |-
-        `routes.endpoint` supplies `http-request` to its asynchronous callback. `path-value`
-        and `query-value` return a decoded string or `none` when the named value is absent.
-        Empty query values remain empty strings, not absent values. Query form decoding
-        interprets a plus as a space; path decoding does not. JSON body reading consumes
-        the request body, is bounded to two MiB, and rejects malformed JSON or invalid UTF-8.
-        Generated annotation adapters convert input failures to HTTP 422 before calling
-        the selected handler.
+        An endpoint method on a class using the public `api` trait receives request-scoped
+        `this.request` and `this.response` contexts. Both are optional outside dispatch;
+        narrow them before use. Helpers called on the same invocation share these contexts.
 
-        `http-response` is the general response value. It holds `status`, `content-type`,
-        an already-encoded text `body`, and an ordered list of `http-header` values.
-        `create-response(status, content-type, body)` constructs it; retain the result of
-        `response.with-header(name, value)` to add a header. Header names are case-insensitive:
-        an explicit `Content-Type` header replaces the response's `content-type`; when several
-        are supplied, the last value wins and exactly one is sent. This also applies to direct
-        additions to the public `headers` list. Other repeated values such as `Set-Cookie` are
-        preserved. Native conversion accepts final statuses 200–599 and validates header
-        syntax; failures produce HTTP 500 rather than an invalid response.
+        The trait fields are publicly assignable, but their attachment is framework-owned.
+        Do not reassign `this.request` or `this.response`. In particular, replacing the
+        response field does not replace the adapter's original finalization context:
+        changes to a replacement object are not sent. Narrow the attached object into a
+        local alias and use its methods instead.
 
-        `create-json-response(status, document)` uses the built-in canonical JSON encoder
-        and throws if encoding fails. `create-redirect-response(location, status = 303)`
-        creates an empty response with a `Location` header; supported codes are 301, 302,
-        303, 307, and 308. Annotated handlers may return `http-response` directly: adapters
-        preserve its status, headers, content type, and body without encoding it again.
+        The request context exposes metadata getters only: `method() -> string`,
+        `target() -> string` (original path and query), `path() -> string`,
+        `route-pattern() -> string`, `http-version() -> string`, `scheme() -> string|none`,
+        `authority() -> string|none`, `url() -> string|none`, `peer-ip() -> string|none`,
+        `client-ip() -> string|none`, and `via-trusted-proxy() -> bool`.
+        `header-value(name) -> string|none` returns the first valid text value;
+        `header-values(name) -> list of string` returns repeated valid text values.
+        Invalid UTF-8 header values are omitted from text accessors but retained by
+        `header-bytes(name) -> list of bytes`. `cookie-value(name) -> string|none`
+        returns the first matching raw cookie value without URL decoding.
 
-        `create-error-response(status, detail = '')` accepts 400–599 and uses the standard
-        reason phrase when detail is omitted. `throw http-error; 403` therefore returns
-        HTTP 403 with `Forbidden` as its text body. Use `create-http-error(response)` instead
-        to wrap an explicit error response and preserve JSON or custom headers. Non-error
-        codes are rejected. The typed route,
-        text GET, and client-aware GET boundaries catch `http-error` by descriptor; unrelated
-        failures remain HTTP 500 without disclosing internal exception details.
+        `path-value`, `query-value`, `accept-value`, and `json-body` belong to the
+        internal incoming-request transport used by generated adapters; they are not
+        public request-context methods. The request context is an immutable metadata
+        snapshot and does not own or buffer the body.
+        Header capture retains an owned native header map behind a shared handle, rather
+        than rebuilding lists of every header name and raw byte value. Copying a request
+        context shares this private immutable snapshot; it does not clone the map again.
+        Capture still clones the native map once, so it is not allocation-free or a
+        transfer of the original request's header storage. Accessors use a short-lived
+        guard and materialize only the requested values, preserving their order, invalid
+        bytes, and independence from later changes to the original request.
+        Header lookup is case-insensitive; text access accepts valid UTF-8 and skips
+        undecodable values. Returned lists and byte values do not expose mutable native
+        storage. No guard is retained across an `await`. Other metadata remains captured
+        eagerly; this is not general lazy request-context construction.
 
-        This package-only exception mechanism uses a private built-in-JSON response payload
-        in the throwable's preserved `message`, because caught Terrane envelopes do not
-        expose the original object's fields. `render` remains human-readable. Do not edit
-        `http-error.message` or depend on its encoding; malformed payloads yield HTTP 500.
-        Ordinary returned responses do not pass through this exception codec.
+        The response context modifies response state for the current invocation:
+        `set-status(status)`, `set-header(name, value)` (case-insensitive replacement),
+        `add-header(name, value)` (preserves repeated values), `set-content-type(value)`,
+        `set-content-length(length)` (for metadata-only HEAD responses), `vary(value)`,
+        `redirect(location, status = 303)`, `set-cookie(name, value)`, and `clear-cookie(name)`.
+        Cookie helpers append `Set-Cookie` with `Path=/; HttpOnly; SameSite=Lax`;
+        clearing additionally uses `Max-Age=0`. `set-content-type` applies to raw/text
+        bodies and must not disagree with a selected structured encoder. `vary` appends
+        variation values. Header and status syntax is checked at the response boundary.
 
-        Removing the exception codec requires typed catches to retain and expose the
-        original descriptor's fields, so the caught `http-error` can carry its response
-        directly. That is a compiler/language follow-up, not a capability implemented by
-        this package. Until then, logging should use `render`, and invalid or mutated
-        payloads must continue to fail closed as HTTP 500.
+        Cookie attributes are currently fixed: helpers do not add `Secure`, even when
+        the effective scheme is HTTPS, and do not offer configurable Path, Domain,
+        lifetime, or SameSite options. When custom attributes are required, append a
+        complete `Set-Cookie` value using `add-header` instead of using the fixed helper.
+        This is a current API limitation, not automatic production cookie policy.
+
+        Successful handler completion finalizes and closes response state; retained
+        aliases cannot modify it afterward. Overrides apply only to normal completion,
+        including deliberately returned error-status bodies. When a handler throws
+        `http-error` or another failure, partial response overrides are discarded.
+
+        A returned typed model, document, or scalar is encoded using the selected JSON,
+        YAML, or XML format and defaults to status 200. A string endpoint configured for
+        text/html uses that configured text type. A handler returning no value defaults
+        to 204 with no body or content type. Explicit `set-status` overrides the default.
+        Generated OpenAPI normally describes the declared return contract, not arbitrary
+        runtime status changes. For a no-value HEAD operation it documents both the
+        default 204 and the 200 metadata-only pattern.
+        Other no-value methods document 204 alone as their generated success status;
+        they do not acquire an inferred 200 response.
+        Finalization suppresses the body and content type for 204 and 205; it suppresses
+        the body but preserves content type for 304. HEAD suppresses the body while
+        preserving representation headers. A metadata-only HEAD handler may return no
+        value and set status 200, content length, and content type; an unknown length
+        must not be represented as zero.
+
+        With a nonempty enabled format list, generated adapters negotiate JSON, YAML, or XML using quality values, wildcards, specific exclusions, and canonical application media types. If no representation is acceptable, the server returns HTTP 406. A missing `Accept` uses the configured enabled default.
+
+        Typed result encoding is performed by generated adapters. YAML emits JSON-compatible scalar quoting. XML uses a `response` root, named fields, wrapped `item` array elements, and `xsi:nil="true"` for null. Invalid XML names and control characters fail rather than producing malformed output.
+
+        Throw `http-error` with a status from 400 through 599 and optional detail text to produce that HTTP error response. The server renders detail as plain text, using the canonical status reason when detail is empty. Malformed payloads fail closed as HTTP 500. Unrelated failures remain HTTP 500 without exposing internal exception details.
+
     - type: example
-      id: response-factory
-      title: Creating a text response
+      id: response-context
+      title: Setting response metadata
       language: terrane
       mode: illustrative
       target: null
       timeout-ms: null
       source: |-
-        from /streaky/http-server import http-request, http-response, create-response
+        from /streaky/http-server import api
 
-        async function home http-response; request http-request
-            return create-response; 200, 'text/plain; charset=utf-8', 'Hello'
+        class catalog-api uses api
+            async function created string;
+                response = this.response
+                if response != none
+                    response.set-status; 201
+                    response.set-header; 'Location', '/items/1'
+                return 'Created'
       response: null
       diagnostic: null
-      markdown: null
     - type: example
-      id: explicit-status-and-errors
-      title: Returning JSON, redirecting, or denying access
+      id: request-context-and-errors
+      title: Handling an item request and throwing an HTTP error
       language: terrane
       mode: illustrative
+      target: null
+      timeout-ms: null
       source: |-
-        from /streaky/http-server import http-response, http-error, create-http-error, create-json-response, create-redirect-response
-        from /core/documents import make-document-string
+        from /streaky/http-server import api, http-error
+        from /streaky/http-server/annotations import route-group, endpoint, path
 
-        async function created http-response;
-            return (create-json-response; 201, (make-document-string; 'Created')).with-header; 'location', '/items/1'
-
-        async function moved http-response;
-            return create-redirect-response; '/items/1', 307
-
-        async function restricted string;
-            throw http-error; 403
-
-        async function conflict http-response;
-            throw (create-http-error; (create-json-response; 409, (make-document-string; 'Already exists')))
+        @[route-group; prefix = '/api']
+        class catalog-api uses api
+            @[endpoint; method = 'GET', path = '/items/{id}']
+            async function show string; (
+                @[path;] id string,
+            )
+                if id == ''
+                    throw http-error; 404, 'Catalog item not found'
+                return id
+      response: null
+      diagnostic: null
   sections: []
-  see-also: [http-server.api.routes, http-server.guide.annotations]
+  see-also: [http-server.api.application, http-server.guide.annotations, http-server.guide.proxy-security, http-server.guide.application-routing]
 provenance:
   specification: null
   conformance: null

@@ -1,0 +1,105 @@
+namespace streaky/http-server/internal
+
+from /streaky/http-server import api, response-context
+from /core/collections import list
+from /core/errors import coercion-error, throwable
+from /core/testing import assert-equal-string, assert-equal-int, assert-equal-bool
+
+class ordinary-api uses api
+    value int = 7
+
+function test-context-is-absent-outside-routing throws throwable;
+    ordinary = instance ordinary-api;
+    assert-equal-bool; ordinary.request == none, true
+    assert-equal-bool; ordinary.response == none, true
+
+function test-response-aliases-share-only-one-finalization throws throwable;
+    response = instance response-context;
+    alias = response
+    alias.set-status; 201
+    alias.set-header; 'X-Test', 'first'
+    response.set-header; 'x-test', 'replacement'
+    response.add-header; 'set-cookie', 'one=1'
+    alias.add-header; 'Set-Cookie', 'two=2'
+    result = response.finish; (encoded-response; 200, 'text/plain', 'body')
+    assert-equal-int; result.status, 201
+    values = result.headers['x-test']
+    assert-equal-string; values[0], 'replacement'
+    cookies = result.headers['set-cookie']
+    assert-equal-int; cookies.length, 2
+    assert-equal-string; cookies[0], 'one=1'
+    assert-equal-string; cookies[1], 'two=2'
+    rejected bool = false
+    try
+        alias.set-status; 202
+    catch coercion-error
+        rejected = true
+    assert-equal-bool; rejected, true
+
+function test-bodyless-status-discards-encoded-body-and-content-type throws throwable;
+    response = instance response-context;
+    response.set-status; 204
+    response.set-content-length; 8
+    result = response.finish; (encoded-response; 200, 'application/json', '{"ok":1}')
+    assert-equal-int; result.status, 204
+    assert-equal-string; result.body, ''
+    assert-equal-string; result.content-type, ''
+    assert-equal-bool; result.supplied, false
+    assert-equal-bool; (result.headers.get.checked; 'content-length') == none, true
+
+function test-invalid-status-and-header-are-rejected throws throwable;
+    for status in (list; 100, 199, 600)
+        response = instance response-context;
+        rejected bool = false
+        try
+            response.set-status; status
+        catch coercion-error
+            rejected = true
+        assert-equal-bool; rejected, true
+    for name in (list; 'bad header', 'x-test\nInjected')
+        response = instance response-context;
+        rejected bool = false
+        try
+            response.set-header; name, 'value'
+        catch coercion-error
+            rejected = true
+        assert-equal-bool; rejected, true
+
+function test-structured-content-type-cannot-disagree-with-encoder throws throwable;
+    response = instance response-context;
+    response.set-content-type; 'application/xml'
+    wire = instance wire-response; 200, 'application/json', 'true', true
+    rejected bool = false
+    try
+        response.finish; wire
+    catch coercion-error
+        rejected = true
+    assert-equal-bool; rejected, true
+
+function test-cookie-helpers-preserve-multiple-set-cookie-values throws throwable;
+    response = instance response-context;
+    response.set-cookie; 'session', 'abc=='
+    response.clear-cookie; 'other'
+    result = response.finish; (encoded-response; 204, '', '')
+    cookies = result.headers['set-cookie']
+    assert-equal-string; cookies[0], 'session=abc==; Path=/; HttpOnly; SameSite=Lax'
+    assert-equal-string; cookies[1], 'other=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax'
+
+function test-discard-closes-retained-response-aliases throws throwable;
+    response = instance response-context;
+    alias = response
+    alias.set-header; 'x-partial', 'discarded'
+    response.discard;
+    rejected bool = false
+    try
+        alias.set-status; 201
+    catch coercion-error
+        rejected = true
+    assert-equal-bool; rejected, true
+    finalized bool = false
+    try
+        response.finish; (encoded-response; 200, 'text/plain', 'body')
+        finalized = true
+    catch coercion-error
+        finalized = false
+    assert-equal-bool; finalized, false

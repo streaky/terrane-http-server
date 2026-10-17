@@ -17,8 +17,8 @@ documentation:
   title: "HTTP server"
   title-style: text
   summary: >-
-    Compose a Terrane application from relative-route controllers and static mounts,
-    then serve it over TCP with optional client-address policy and WebSocket endpoints.
+    Build a Terrane application from class-bound HTTP APIs and static mounts, then
+    serve it over TCP with optional client-address policy and WebSocket endpoints.
   tags:
     - "http-server"
     - "application-server"
@@ -35,14 +35,14 @@ documentation:
         that runtime dependency and native transport boundary. Core's automatic listener
         backlog policy applies; Axum continues to provide HTTP and WebSocket handling.
 
-        The package is experimental: ordinary GET handlers return text, client information
-        is supplied through a dedicated handler form, static directories can be mounted,
-        and WebSocket handlers expose text plus event kinds. Typed HTTP endpoints and an
-        explicit annotation consumer add scalar path/query extraction, Terrane class or
-        JSON document bodies and responses, and generated OpenAPI JSON. Nested model lists,
-        class route groups, HTML pages, and annotated static mounts are supported.
-        See [[http-server.guide.annotations]]. General middleware, dependency/state
-        injection, and a broad WebSocket payload API remain outside the current surface.
+        The package is experimental: class-bound HTTP endpoints use per-invocation
+        request and response contexts, while static directories can be mounted and
+        WebSocket handlers expose text plus event kinds. Typed endpoints support scalar
+        path/query extraction, Terrane class or JSON document bodies and responses,
+        and generated OpenAPI JSON. Nested model lists, class route groups, HTML pages,
+        and annotated static mounts are supported. See
+        [[http-server.guide.annotations]]. General middleware, dependency/state injection,
+        and a broad WebSocket payload API remain outside the current surface.
     - type: example
       id: package-dependency
       title: "Package and capability requirements"
@@ -79,12 +79,12 @@ documentation:
             and [[http-server.guide.websockets]] for focused operational guidance.
 
             The API reference covers [[http-server.api.create-application]],
-            [[http-server.api.application]], [[http-server.api.routes]],
-            [[http-server.api.controller]], [[http-server.api.client-info]],
+            [[http-server.api.application]], [[http-server.api.http-messages]],
             [[http-server.api.access-policy]], [[http-server.api.parse-config-yaml]],
             [[http-server.api.config-result]], [[http-server.api.server-config]],
             [[http-server.api.controller-mount]], [[http-server.api.static-mount]],
-            [[http-server.api.websocket-session]], and [[http-server.api.websocket-event]].
+            [[http-server.api.websocket-session]], and
+            [[http-server.api.websocket-event]].
             API pages define signatures; these guides explain how the pieces fit together.
       sections: []
   see-also:

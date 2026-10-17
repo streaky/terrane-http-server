@@ -2,7 +2,7 @@ namespace http-server-consumer/documents
 
 from /core/documents import document-value, document-map-entries, make-document-none, make-document-map, make-document-list, make-document-string
 from /core/documents/json import canonical-json
-from /terrane/annotation-consumer-protocol import consumer-error
+from /terrane/annotation-consumer-protocol import consumer-error, get, text
 from /core/collections import list
 from /core/errors import replace-error
 
@@ -28,6 +28,83 @@ function type-schema document-value throws consumer-error; kind string
     entries = instance document-map-entries;
     entries.append; 'type', (make-document-string; kind)
     return (object-value; entries, (make-document-none;))
+
+function declaration-documentation string; declaration document-value
+    documentation = get; declaration, 'documentation'
+    if documentation.kind != 'string'
+        return ''
+    return text; documentation
+
+function documented-schema document-value throws consumer-error; schema document-value, declaration document-value
+    description = declaration-documentation; declaration
+    if description == ''
+        return schema
+    entries = instance document-map-entries;
+    index int = 0
+    while index < (schema.length;)
+        key = schema.key; index
+        entries.append; key, (get; schema, key)
+        index = index + 1
+    entries.append; 'description', (make-document-string; description)
+    return object-value; entries, declaration
+
+function documentation-fence string; line string
+    indent int = 0
+    leading bool = true
+    for character in (line.split; '')
+        if leading and character == ' '
+            indent = indent + 1
+        else
+            leading = false
+    if indent > 3
+        return ''
+    spaces string = ''
+    index int = 0
+    while index < indent
+        spaces = spaces + ' '
+        index = index + 1
+    trimmed = line.trim.start; spaces
+    if trimmed.contains.start; '\t'
+        return ''
+    if not (trimmed.contains.start; '```') and not (trimmed.contains.start; '~~~')
+        return ''
+    marker = '`'
+    if trimmed.contains.start; '~'
+        marker = '~'
+    result string = ''
+    for character in (trimmed.split; '')
+        if character != marker
+            break
+        result = result + character
+    if result.length < 3
+        return ''
+    if marker == '`'
+        remainder = trimmed.trim.start; result
+        if remainder.contains; '`'
+            return ''
+    return result
+
+function operation-documentation string; declaration document-value, returns bool
+    documentation = declaration-documentation; declaration
+    result string = ''
+    in-returns bool = false
+    fence string = ''
+    for line in (documentation.split; '\n')
+        marker = documentation-fence; line
+        if fence == ''
+            if marker != ''
+                fence = marker
+            else if (line.contains.start; '@returns ')
+                in-returns = true
+                line = line.trim.start; '@returns '
+        else if marker.length >= fence.length and (line.trim;) == marker
+            if ((fence.contains.start; '`') and (marker.contains.start; '`')) or ((fence.contains.start; '~') and (marker.contains.start; '~'))
+                fence = ''
+        if in-returns == returns
+            if result != ''
+                result = result + '\n'
+            result = result + line
+    return result
 
 function source-quote string throws consumer-error; value string
     try

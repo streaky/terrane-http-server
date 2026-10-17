@@ -1,0 +1,94 @@
+namespace streaky/http-server/internal
+
+from /deps/axum/routing import MethodRouter as native-method-router
+from /deps/axum-core/extract import Request as native-request
+from /deps/axum import Router as native-router
+from /deps/http import StatusCode as status-code
+from /core/errors import throwable
+from /core/documents/json import parse-json, default-json-options
+from /streaky/http-server import http-error
+
+enum http-method
+    get
+    post
+    put
+    patch
+    delete
+    head
+    options
+
+# Registration transport used by generated class controllers, not a handler authoring API.
+public class routes
+    router native-router = native-router::new;
+
+    function construct; router native-router
+        this.router = move router
+
+    consuming function endpoint routes; method http-method, path string, handler async function from incoming-request to wire-response throws throwable, vary-accept bool = false
+        callback = async function native-response; request native-request
+            is-head bool = request-is-head; ref request
+            try
+                typed-request = instance incoming-request; move request, path
+                response = typed-request.response-state;
+            catch
+                return native-status-response; (status-code::UNPROCESSABLE-ENTITY), vary-accept
+            try
+                result = await handler; move typed-request
+                finalized = response.finish; move result
+                return into-native-response; move finalized, vary-accept, is-head
+            catch http-error as error
+                response.discard;
+                return http-error-native; error, vary-accept, is-head
+            catch
+                response.discard;
+                return native-status-response; (status-code::INTERNAL-SERVER-ERROR), vary-accept
+        router = move this.router
+        registered native-method-router = native-method-router::new;
+        match method
+            case http-method::get
+                registered = registered.get; callback
+            case http-method::post
+                registered = registered.post; callback
+            case http-method::put
+                registered = registered.put; callback
+            case http-method::patch
+                registered = registered.patch; callback
+            case http-method::delete
+                registered = registered.delete; callback
+            case http-method::head
+                registered = registered.head; callback
+            case http-method::options
+                registered = registered.options; callback
+        router = router.route; path, registered
+        return instance routes; move router
+
+private function request-is-head bool; request ref native-request
+    value bool = rust
+        request.method() == ::http::Method::HEAD
+    return value
+
+private function status-reason string; code status-code
+    value string = rust
+        code.canonical_reason().unwrap_or("HTTP error").to_owned()
+    return value
+
+private function http-error-native native-response; error throwable, vary bool, is-head bool
+    try
+        encoded = parse-json; error.message, (default-json-options;)
+        if encoded.failed
+            return native-status-response; (status-code::INTERNAL-SERVER-ERROR), vary
+        status-field = encoded.value.field; 'status'
+        detail-field = encoded.value.field; 'detail'
+        if status-field.failed or detail-field.failed
+            return native-status-response; (status-code::INTERNAL-SERVER-ERROR), vary
+        if status-field.value.kind != 'integer' or detail-field.value.kind != 'string'
+            return native-status-response; (status-code::INTERNAL-SERVER-ERROR), vary
+        status int = status-field.value.scalar.radix; 10
+        if status < 400 or status > 599
+            return native-status-response; (status-code::INTERNAL-SERVER-ERROR), vary
+        detail = detail-field.value.scalar
+        if detail == ''
+            detail = status-reason; (status-code::from_u16; status)
+        return into-native-response; (encoded-response; status, 'text/plain; charset=utf-8', detail), vary, is-head
+    catch
+        return native-status-response; (status-code::INTERNAL-SERVER-ERROR), vary

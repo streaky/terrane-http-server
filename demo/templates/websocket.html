@@ -1,0 +1,18 @@
+{% include "header.html" %}
+  <p>Send text over one persistent WebSocket connection. The server replies with <code>echo: </code> followed by your message; nothing is stored or broadcast to other clients.</p>
+  <p>Connection: <strong id="connection-status" role="status">Disconnected</strong></p>
+  <div class="socket-actions">
+    <button id="connect" type="button">Connect</button>
+    <button id="disconnect" type="button" disabled>Disconnect</button>
+  </div>
+  <form id="message-form">
+    <label for="message">Message</label>
+    <input id="message" name="message" type="text" value="Hello, Terrane!" autocomplete="off">
+    <button id="send" type="submit" disabled>Send message</button>
+  </form>
+  <label for="message-log">Message log</label>
+  <textarea id="message-log" rows="10" readonly></textarea>
+  <p>Disconnect and reconnect to start a fresh session. The endpoint is <code>/ws/echo</code>; it is separate from the HTTP OpenAPI document.</p>
+  <p><a href="/">Back to the catalog home</a></p>
+  <script src="/assets/websocket.js" defer></script>
+{% include "footer.html" %}

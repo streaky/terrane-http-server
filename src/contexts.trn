@@ -1,0 +1,257 @@
+namespace streaky/http-server
+
+from /core/collections import list
+from /core/errors import coercion-error
+from /deps/axum-core/extract import Request as native-request
+from /deps/ipnet import IpAddr as ip-addr
+from /deps/axum/extract import MatchedPath as matched-path
+from /deps/http import HeaderMap as native-header-map, HeaderValue as native-header-value
+
+/// Adds optional invocation context without imposing a base class or handler parameters.
+public trait api
+    request request-context|none = none
+    response response-context|none = none
+
+/// An immutable snapshot. It never owns or buffers the request body.
+public class request-context
+    private verb string
+    private original-target string
+    private original-path string
+    private pattern string
+    private version string
+    private origin-scheme string|none = none
+    private origin-authority string|none = none
+    private peer ip-addr|none = none
+    private client ip-addr|none = none
+    private trusted bool = false
+    private headers shared ref (native-header-map of native-header-value)
+
+    private function construct; request ref native-request, route-pattern string
+        this.verb = request-method; request
+        this.original-target = request-target; request
+        this.original-path = request-path; request
+        this.pattern = request-route-pattern; request, route-pattern
+        this.version = request-version; request
+        this.peer = direct-address; request
+        this.client = client-address; request
+        this.trusted = request-proxy-trust; request
+        captured native-header-map of native-header-value = rust
+            request.headers().clone()
+        this.headers = shared ref captured
+        this.origin-authority = request-authority; request
+        this.origin-scheme = 'http'
+        if this.trusted
+            this.origin-scheme = forwarded-scheme; this
+
+    function method string;
+        return this.verb
+
+    function target string;
+        return this.original-target
+
+    function path string;
+        return this.original-path
+
+    function route-pattern string;
+        return this.pattern
+
+    function http-version string;
+        return this.version
+
+    function scheme string|none;
+        return this.origin-scheme
+
+    function authority string|none;
+        return this.origin-authority
+
+    function url string|none;
+        scheme = this.origin-scheme
+        authority = this.origin-authority
+        if scheme != none and authority != none
+            return scheme + '://' + authority + this.original-target
+        return none
+
+    function peer-ip string|none;
+        peer = this.peer
+        if peer != none
+            return address-text; peer
+        return none
+
+    function client-ip string|none;
+        client = this.client
+        if client != none
+            return address-text; client
+        return none
+
+    function via-trusted-proxy bool;
+        return this.trusted
+
+    function header-bytes list of bytes; name string
+        return read-header-bytes; this.headers, ref name
+
+    function header-values list of string; name string
+        return read-header-values; this.headers, ref name
+
+    function header-value string|none; name string
+        return read-header-value; this.headers, ref name
+
+    function cookie-value string|none; name string
+        for header in (this.header-values; 'cookie')
+            for pair in (header.split; ';')
+                trimmed = pair.trim;
+                parts = trimmed.split; '='
+                if parts.length >= 2 and parts[0] == name
+                    return trimmed.trim.start; (name + '=')
+        return none
+
+# Framework capture factory; application handlers receive only the read-only snapshot.
+public function capture-request-context request-context; request ref native-request, route-pattern string
+    return instance request-context; request, route-pattern
+
+private function request-method string; request ref native-request
+    return (request.method;).as_str;
+
+private function address-text string; address ip-addr
+    value string = rust
+        address.to_string()
+    return value
+
+private function request-target string; request ref native-request
+    value string = rust
+        let uri = request.extensions().get::<::axum::extract::OriginalUri>().map(|v| &v.0).unwrap_or(request.uri());
+        uri.path_and_query().map(|v| v.as_str()).unwrap_or("/").to_owned()
+    return value
+
+private function request-path string; request ref native-request
+    value string = rust
+        let uri = request.extensions().get::<::axum::extract::OriginalUri>().map(|v| &v.0).unwrap_or(request.uri());
+        uri.path().to_owned()
+    return value
+
+private function request-route-pattern string; request ref native-request, fallback string
+    matched string|none = ((((request.extensions;).get of matched-path);).map; matched-path-text)
+    if matched != none
+        return matched
+    return fallback
+
+private function matched-path-text string; value ref matched-path
+    return value.as_str;
+
+private function request-version string; request ref native-request
+    value string = rust
+        format!("{:?}", request.version())
+    return value
+
+class optional-text
+    value string = ''
+    present bool = false
+
+private function request-authority string|none; request ref native-request
+    decoded optional-text = rust
+        let value = request.uri().authority().map(|v| v.as_str().to_owned()).or_else(|| {
+            request.headers().get("host").and_then(|v| v.to_str().ok()).map(str::to_owned)
+        });
+        match value {
+            Some(value) => OptionalText { value, present: true },
+            None => OptionalText { value: String::new(), present: false },
+        }
+    if decoded.present
+        return decoded.value
+    return none
+
+private function request-proxy-trust bool; request ref native-request
+    return request-proxy-metadata-trusted; request
+
+# Retain native header values; only materialize the requested accessor result.
+# Borrow the native map under the shared handle's short-lived guard, not a clone.
+# A source `ref` to this shared native value currently lowers to Weak, not &HeaderMap.
+private function read-header-bytes list of bytes; headers shared ref (native-header-map of native-header-value), name ref string
+    values list of bytes = rust
+        let headers = headers.lock().expect("shared reference lock poisoned");
+        terrane_collection_support::List::new(headers.get_all(name.as_str()).iter().map(|value| value.as_bytes().to_vec()).collect())
+    return values
+
+private function read-header-values list of string; headers shared ref (native-header-map of native-header-value), name ref string
+    values list of string = rust
+        let headers = headers.lock().expect("shared reference lock poisoned");
+        terrane_collection_support::List::new(headers.get_all(name.as_str()).iter().filter_map(|value| std::str::from_utf8(value.as_bytes()).ok().map(str::to_owned)).collect())
+    return values
+
+private function read-header-value string|none; headers shared ref (native-header-map of native-header-value), name ref string
+    decoded optional-text = rust
+        let headers = headers.lock().expect("shared reference lock poisoned");
+        match headers.get_all(name.as_str()).iter().find_map(|value| std::str::from_utf8(value.as_bytes()).ok()) {
+            Some(value) => OptionalText { value: value.to_owned(), present: true },
+            None => OptionalText { value: String::new(), present: false },
+        }
+    if decoded.present
+        return decoded.value
+    return none
+
+# Split only outside quoted Forwarded parameter values. Unsupported quoted-pair
+# escapes fail closed rather than treating their punctuation as trusted metadata.
+private function forwarded-parts (list of string)|none; value string, separator string
+    quoted = value.split; '"'
+    if quoted.length % 2 == 0
+        return none
+    result list of string = list
+    current string = ''
+    in-quotes bool = false
+    for part in quoted
+        if in-quotes
+            if part.contains; '\\'
+                return none
+            current = current + '"' + part + '"'
+        else
+            pieces = part.split; separator
+            index int = 0
+            while index < pieces.length
+                current = current + pieces[index]
+                if index + 1 < pieces.length
+                    result.append; current
+                    current = ''
+                index = index + 1
+        in-quotes = not in-quotes
+    result.append; current
+    return result
+
+private function forwarded-scheme string|none; context request-context
+    headers = context.header-values; 'forwarded'
+    standard = context.header-bytes; 'forwarded'
+    if standard.length > 0
+        if headers.length != standard.length
+            return none
+        combined string = ''
+        for header in headers
+            if combined != ''
+                combined = combined + ','
+            combined = combined + header
+        entries = forwarded-parts; combined, ','
+        if entries != none
+            last = entries[entries.length - 1]
+            result string|none = none
+            pairs = forwarded-parts; last, ';'
+            if pairs != none
+                for pair in pairs
+                    parts = pair.split; '='
+                    if parts.length == 2 and ((parts[0].trim;).lower;) == 'proto'
+                        if result != none
+                            return none
+                        value = (parts[1].trim;).lower;
+                        if value == 'http' or value == '"http"'
+                            result = 'http'
+                        else if value == 'https' or value == '"https"'
+                            result = 'https'
+                        else
+                            return none
+                return result
+        return none
+    headers = context.header-values; 'x-forwarded-proto'
+    raw = context.header-bytes; 'x-forwarded-proto'
+    if headers.length != raw.length or headers.length == 0
+        return none
+    legacy-entries = headers[headers.length - 1].split; ','
+    value = ((legacy-entries[legacy-entries.length - 1].trim;).lower;)
+    if value == 'http' or value == 'https'
+        return value
+    return none

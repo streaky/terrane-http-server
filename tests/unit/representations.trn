@@ -1,0 +1,57 @@
+namespace streaky/http-server
+
+from /core/collections import list
+from /core/documents/json import parse-json, default-json-options, canonical-json
+from /core/documents/yaml import parse-yaml, default-yaml-options
+from /core/errors import throwable
+from /core/testing import assert-equal-string, assert-equal-bool
+
+function test-response-negotiation-honors-quality-specificity-and-default throws throwable;
+    formats = list; 'json', 'yaml', 'xml'
+    assert-equal-string; (select-response-format; none, formats, 'yaml'), 'yaml'
+    assert-equal-string; (select-response-format; '*/*', formats, 'xml'), 'xml'
+    assert-equal-string; (select-response-format; 'application/json;q=0, */*;q=1', formats, 'json'), 'yaml'
+    assert-equal-string; (select-response-format; 'application/json;q=0.2, application/yaml;q=0.8', formats, 'json'), 'yaml'
+    assert-equal-string; (select-response-format; 'application/json;q=0.2, application/*;q=0.9', formats, 'json'), 'yaml'
+    assert-equal-string; (select-response-format; ' APPLICATION/XML ; Q=0.700 , application/json;q=0.6', formats, 'json'), 'xml'
+    assert-equal-string; (select-response-format; 'application/yaml;q=0.999, application/xml;q=1.000', formats, 'json'), 'xml'
+    assert-equal-string; (select-response-format; 'application/yaml,application/xml', formats, 'xml'), 'xml'
+    assert-equal-string; (select-response-format; '', formats, 'yaml'), ''
+    assert-equal-string; (select-response-format; 'application/json;charset=UTF-8;q=0.7,application/yaml;q=0.6', formats, 'yaml'), 'json'
+    assert-equal-string; (select-response-format; 'application/json;q=0.7;charset="utf-8"', formats, 'yaml'), 'json'
+    assert-equal-string; (select-response-format; 'application/json;profile=other,application/yaml;q=0.3', formats, 'json'), 'yaml'
+    assert-equal-string; (select-response-format; 'application/json;q=0.7, application/yaml;q=0.8;bad', formats, 'json'), 'json'
+    assert-equal-string; (select-response-format; 'application/json;charset=iso-8859-1', formats, 'yaml'), 'json'
+    assert-equal-string; (select-response-format; 'application/json;charset="UTF-8";q=0, */*;q=1', formats, 'json'), 'yaml'
+    for accept in (list; 'image/png', '*/*;q=0', 'application/json;q=1.1', 'application/json;q=-1', 'application/json;q=0.1234', 'application/json;q=no', 'application/json;q=1;q=0', 'application/json;profile=other')
+        assert-equal-string; (select-response-format; accept, formats, 'json'), ''
+    assert-equal-string; (select-response-format; 'application/xml', (list; 'json'), 'json'), ''
+    assert-equal-string; (select-response-format; 'application/xml;charset=UTF-8', formats, 'json'), 'xml'
+    assert-equal-string; (select-response-format; 'application/yaml; charset="UTF-8";q=0.8,application/json;q=0.5', formats, 'json'), 'yaml'
+    assert-equal-string; (select-response-format; 'application/xml;charset="utf-8";q=0, */*;q=1', formats, 'xml'), 'json'
+    assert-equal-string; (select-response-format; 'application/yaml;charset=iso-8859-1', formats, 'json'), ''
+    assert-equal-string; (select-response-format; 'application/xml;charset="utf-16",application/json;q=0.5', formats, 'xml'), 'json'
+
+function test-yaml-roundtrip-preserves-scalars-nested-collections-and-exact-numbers throws throwable;
+    original = parse-json; '{"quoted":"yes: café\\n<&>\\r","null":null,"boolean":true,"integer":123456789012345678901234567890,"nested":[{"value":"001"},[],{}]}', (default-json-options;)
+    assert-equal-bool; original.failed, false
+    encoded = encode-response-document; original.value, 'yaml'
+    decoded = parse-yaml; encoded, (default-yaml-options;)
+    assert-equal-bool; decoded.failed, false
+    canonical = canonical-json; decoded.value
+    expected = canonical-json; original.value
+    assert-equal-string; canonical.value.encoded, expected.value.encoded
+
+function test-xml-escapes-text-and-encodes-null-and-array-structure throws throwable;
+    parsed = parse-json; '{"text":"<&>\\r","list":[null,"",true]}', (default-json-options;)
+    encoded = encode-response-document; parsed.value, 'xml'
+    assert-equal-bool; (encoded.contains; '<text>&lt;&amp;&gt;&#13;</text>'), true
+    assert-equal-bool; (encoded.contains; '<list><item xsi:nil="true"/><item></item><item>true</item></list>'), true
+    for source in (list; '{"bad name":1}', '{"text":"\\u0000"}')
+        invalid = parse-json; source, (default-json-options;)
+        rejected bool = false
+        try
+            encode-response-document; invalid.value, 'xml'
+        catch
+            rejected = true
+        assert-equal-bool; rejected, true

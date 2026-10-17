@@ -2,26 +2,61 @@ namespace http-server-demo
 
 from /core/collections import list
 
+/// A catalog item and its price and availability.
 class item-response
+    /// Stable catalog identifier.
     id int
+    /// Display name of the catalog item.
     name string
+    /// Unit price in cents.
     price-cents int
+    /// Stock availability; false also means stock details were not requested.
     in-stock bool
 
+/// Search inputs and matching catalog items.
 class search-response
+    /// The search text supplied by the caller.
     term string
+    /// The requested maximum result count.
     limit int
+    /// Whether the search matched any catalog items.
     matches bool
+    /// Matching items, each with its own price and availability.
     items list of item-response
 
+/// Inputs for a stateless order price calculation.
 class order-input
+    /// Catalog identifier of the item to price.
     item-id int
+    /// Number of units to price; defaults to zero and is not constrained to positive values.
     quantity int
 
+/// A calculated quote, not a persisted order.
 class quote-output
+    /// Catalog identifier of the priced item.
     item-id int
+    /// Number of units used in the calculation.
     quantity int
+    /// Total price in cents, calculated as quantity times the item's unit price.
     total-cents int
+
+/// A complete replacement for an existing catalog item; its identifier stays in the path.
+class item-input
+    /// Replacement display name; omitted values use the empty-string model default.
+    name string
+    /// Replacement unit price in cents; omitted values use zero.
+    price-cents int
+    /// Replacement stock availability; omitted values use false.
+    in-stock bool
+
+/// Partial item changes; omitted or null fields leave their stored values unchanged.
+class item-patch
+    /// New display name, or null to retain the current name.
+    name string|none = none
+    /// New unit price in cents, or null to retain the current price; zero is an update.
+    price-cents int|none = none
+    /// New availability, or null to retain it; false is an update.
+    in-stock bool|none = none
 
 function create-item-response item-response; id int, name string, price-cents int, in-stock bool
     value = instance item-response;

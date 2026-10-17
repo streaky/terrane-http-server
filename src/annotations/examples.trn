@@ -1,0 +1,18 @@
+namespace streaky/http-server/annotations
+
+from /core/annotations import annotation, annotation-target
+from /core/collections import list
+
+@[annotation; targets = (list; (instance annotation-target::parameter;)), repeatable = true]
+class request-example
+    name string = 'default'
+    summary string = ''
+    description string = ''
+    value string
+
+@[annotation; targets = (list; (instance annotation-target::callable;)), repeatable = true]
+class response-example
+    name string = 'default'
+    summary string = ''
+    description string = ''
+    value string

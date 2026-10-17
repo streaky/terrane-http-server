@@ -8,6 +8,7 @@ from /core/process import arguments
 async function main throws throwable;
     app = create-application;
     app = mount-annotated; move app
+    app = app.websocket; '/ws/echo', echo-session
     address = '127.0.0.1:3187'
     supplied = arguments;
     if supplied.length > 0

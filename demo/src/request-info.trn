@@ -1,0 +1,47 @@
+namespace http-server-demo
+
+from /core/collections import list
+from /streaky/http-server import request-context
+
+/// A request-local snapshot; proxy-derived facts retain their explicit trust provenance.
+class request-summary
+    /// Actual HTTP method, including HEAD when invoked through a GET fallback.
+    method string
+    /// Original path and query before route-prefix stripping.
+    target string
+    /// Original URL path, without the query.
+    path string
+    /// Matched route pattern, including its mounted prefix.
+    route-pattern string
+    /// Wire HTTP version, separate from the HTTP/HTTPS scheme.
+    http-version string
+    /// Effective scheme; null when a trusted proxy did not supply a usable scheme.
+    scheme string|none = none
+    /// Requested authority, not an authentication identity.
+    authority string|none = none
+    /// Direct TCP peer IP address, if available.
+    peer-ip string|none = none
+    /// Client IP resolved through the configured trusted-proxy policy.
+    client-ip string|none = none
+    /// Whether the direct peer was eligible to supply forwarded identity.
+    via-trusted-proxy bool = false
+    /// All valid text values of the repeated X-Tag header.
+    tags list of string = list
+    /// Raw demo cookie value, without URL decoding.
+    cookie string|none = none
+
+function summarize-request request-summary; request request-context
+    result = instance request-summary;
+    result.method = request.method;
+    result.target = request.target;
+    result.path = request.path;
+    result.route-pattern = request.route-pattern;
+    result.http-version = request.http-version;
+    result.scheme = request.scheme;
+    result.authority = request.authority;
+    result.peer-ip = request.peer-ip;
+    result.client-ip = request.client-ip;
+    result.via-trusted-proxy = request.via-trusted-proxy;
+    result.tags = request.header-values; 'x-tag'
+    result.cookie = request.cookie-value; 'demo'
+    return result

@@ -17,17 +17,16 @@ documentation:
   title: "Application configuration"
   title-style: text
   summary: >-
-    Parse YAML composition data into typed mounts, resolve controller identifiers in
-    Terrane code, and apply the resulting address and static directories.
+    Parse YAML application-composition data into typed mounts and apply the resulting
+    address and static directories; controller identifiers remain application-defined.
   tags:
-    - "http-server"
     - "configuration"
     - "yaml"
   blocks:
     - type: markdown
       markdown: |-
         `parse-config-yaml` parses application-composition YAML into a `config-result`;
-        it does not load files or construct controller instances. If the application reads
+        it does not load files or construct annotated API classes. If the application reads
         a configuration file, read bounded UTF-8 text explicitly through the application's
         filesystem capability and pass that text to the parser. This keeps file access
         visible to the caller.
@@ -39,12 +38,12 @@ documentation:
           markdown: |-
             The root is a mapping. Its optional `address` defaults to
             `127.0.0.1:3000`, and optional `mounts` defaults to an empty list. Each mount
-            specifies an absolute path and exactly one of `controller` (a string
-            identifier) or `static-directory` (a directory string). The following data
-            snippet describes composition; it is not a complete application.
+            specifies an absolute path and exactly one of `controller` (an application-defined
+            string identifier) or `static-directory` (a directory string). Controller IDs
+            remain data for application composition; they do not name an HTTP handler type.
         - type: example
           id: yaml-composition
-          title: "Controller and static mounts"
+          title: "Controller identifier and static mounts"
           language: yaml
           mode: illustrative
           target: null
@@ -72,18 +71,16 @@ documentation:
       blocks:
         - type: markdown
           markdown: |-
-            A controller ID is an application-defined stable name, not a class name or a
-            reflective constructor instruction. The application enumerates configured
-            controller mounts, looks up each ID in its own source-level mapping, and supplies
-            the matching concrete `controller` to `application.mount`. Use
-            `server-config.controller-path` when you need the configured path for an ID;
-            it returns `none` when no matching controller mount exists. Decide explicitly
-            how your application's composition code handles an unknown ID.
+            A controller ID is application-defined composition metadata, not a class name
+            or a reflective constructor instruction. This parser/API surface documents no
+            resolution from those IDs to annotated API classes. Applications may use
+            `server-config.controller-path` to look up the configured path for an ID; it
+            returns `none` when no matching controller mount exists.
 
             `application.configure` updates the application's listen address and adds
-            static-directory mounts. It does not instantiate or mount controllers. Apply
-            controller mounts separately after resolving their IDs. For mount and result
-            fields, see [[http-server.api.server-config]],
+            static-directory mounts. It does not instantiate or mount annotated API classes.
+            Compose those classes separately through the package consumer integration.
+            For configuration mount/result fields, see [[http-server.api.server-config]],
             [[http-server.api.controller-mount]], [[http-server.api.static-mount]],
             [[http-server.api.config-result]], and
             [[http-server.api.parse-config-yaml]].

@@ -14,8 +14,8 @@ documentation:
   title: Build your first HTTP server
   title-style: text
   summary: >-
-    Build a small Terrane application with two text routes and a static directory,
-    then extend it with client identity, WebSockets, and configuration.
+    Build a small Terrane application with class-bound GET and HEAD endpoints,
+    request-scoped contexts, explicit shared state, and a static directory.
   tags: [http-server, tutorial, getting-started]
   blocks:
     - type: markdown
@@ -68,16 +68,16 @@ documentation:
               source: |-
                 namespace hello-http
 
-                from /streaky/http-server import controller, routes
+                from /streaky/http-server import api
+                from /streaky/http-server/annotations import route-group, endpoint
 
-                class site implements controller
-                    consuming function routes routes; registered-routes routes
-                        registered-routes = registered-routes.get; '/', this.home
-                        return registered-routes.get; '/about', this.about
-
+                @[route-group; prefix = '/']
+                class site-api uses api
+                    @[endpoint; method = 'GET|HEAD', path = '/']
                     async function home string;
                         return 'Hello from http-server!'
 
+                    @[endpoint; method = 'GET', path = '/about']
                     async function about string;
                         return 'A Terrane application with text and static routes.'
             - path: src/main.trn
@@ -90,7 +90,7 @@ documentation:
 
                 async function main none throws throwable;
                     app = create-application;
-                    app = app.mount; '/', (instance site;)
+                    app = app.mount-annotated; '/site', (instance site-api;)
                     app = app.static-directory; '/static', 'public'
                     await app.serve;
                     return none
@@ -106,24 +106,18 @@ documentation:
             serving normally continues until the process is stopped. The local
             `http-server` dependency must be available at the declared path.
       sections: []
-    - id: understand-the-controller
-      title: Understand the controller
+    - id: understand-the-api
+      title: Understand the API class
       blocks:
         - type: markdown
           markdown: |-
-            `site` implements [[http-server.api.controller]]. The framework
-            calls its consuming `routes` method with a registration value. Each
-            [[http-server.api.routes]] builder consumes the old value and
-            returns its replacement, so assign or return the result rather
-            than discarding it. `registered-routes` is deliberately distinct
-            from the `routes` type name.
-
-            The handlers are reusable asynchronous functions returning text.
-            Their paths are relative to the controller's mount prefix. Mounting
-            at `/` merges the controller's root and about routes into the
-            application. Mounting the same controller at `/info` instead would
-            place its routes under that prefix. Static content is mounted
-            separately and does not require a controller callback.
+            `site-api` declares `uses api`; its HTTP methods carry `endpoint`
+            metadata inside a `route-group`. The consumer generates route
+            adapters from the selected declarations, so there is no `controller`
+            implementation or manual routes builder. `GET|HEAD` on `home`
+            exposes both methods at `/`; HEAD suppresses the body. The `about`
+            method is GET-only. Mounting the API class at `/site` places these
+            endpoints under that prefix. Static content is mounted separately.
       sections: []
     - id: run-and-request
       title: Run the server and make requests
@@ -185,7 +179,7 @@ documentation:
         - type: markdown
           markdown: |-
             `/about` exercises the second text handler. A missing route is
-            handled by the underlying router, not by either controller method.
+            handled by the router because no annotated endpoint matches it.
             Static paths are resolved against `public` from the process's
             working directory, which is why these commands start in the project
             root. If port 3000 is already in use, insert a `with-address` call
@@ -203,27 +197,61 @@ documentation:
           diagnostic: null
           markdown: null
       sections: []
-    - id: add-client-identity
-      title: Add a client-aware route
+    - id: add-request-context
+      title: Read request context safely
       blocks:
         - type: markdown
           markdown: |-
-            A handler registered with `get-with-client` receives
-            [[http-server.api.client-info]]. Add the registration below to the
-            controller before returning its routes, add `client-info` to the
-            `/streaky/http-server` import, and add the handler to `site`.
+            Each selected API class declares `uses api`. The trait supplies optional
+            `request` and `response` fields that are `none` outside a dispatched
+            request. Generated code copies the mounted class into a fresh invocation
+            for every HTTP request, attaches that request's contexts, then calls the
+            endpoint method. The mounted source is not mutated, so concurrent requests
+            do not overwrite one another's context. Helper methods on the invocation
+            see the same request and response contexts.
+
+            Narrow optional context fields before use. This illustrative GET endpoint
+            returns the request method, and demonstrates that context belongs to the
+            current invocation rather than a handler parameter.
         - type: example
-          id: client-registration
-          title: Register an identity-aware handler
+          id: request-context-handler
+          title: Read a request field
           language: terrane
           mode: illustrative
           target: null
           timeout-ms: null
           source: |-
-            registered-routes = registered-routes.get-with-client; '/identity', this.identity
+            from /streaky/http-server import api
+
+            class request-api uses api
+                @[endpoint; method = 'GET', path = '/method']
+                async function request-method string
+                    current-request = this.request
+                    if current-request != none
+                        return current-request.method;
+                    return 'No request is being dispatched.'
           response: null
           diagnostic: null
           markdown: null
+        - type: markdown
+          markdown: |-
+            Ordinary class fields have value semantics. A list or map stored on the
+            mounted class is not implicitly shared mutable state across invocation
+            copies. If requests must observe persistent application data, store it
+            behind an explicit shared reference and synchronize mutations using the
+            store's chosen concurrency policy. Keep per-request values in the context;
+            do not stash them in shared application state.
+      sections: []
+    - id: add-client-identity
+      title: Use request identity
+      blocks:
+        - type: markdown
+          markdown: |-
+            Request identity and request metadata are read from `this.request`, an
+            optional context attached to this request's invocation. Use its
+            `client-ip()` getter to inspect the trusted resolved address. The getter
+            may return `none`; consult [[http-server.guide.proxy-security]] before
+            relying on forwarded identity.
         - type: example
           id: client-handler
           title: Handle resolved or unresolved identity
@@ -232,11 +260,20 @@ documentation:
           target: null
           timeout-ms: null
           source: |-
-            async function identity string; client client-info
-                address = client.client-ip;
-                if address != none
-                    return 'Client identity resolved.'
-                return 'Client identity unresolved.'
+            from /streaky/http-server import api
+
+            class identity-api uses api
+                @[endpoint; method = 'GET', path = '/identity']
+                async function identity string
+                    current-request = this.request
+                    if current-request != none
+                        trusted = current-request.via-trusted-proxy;
+                        address = current-request.client-ip;
+                        if address != none
+                            return 'Resolved client address available.'
+                        if trusted
+                            return 'Trusted proxy supplied no usable client identity.'
+                    return 'Client identity unresolved.'
           response: null
           diagnostic: null
           markdown: null
@@ -244,60 +281,19 @@ documentation:
           markdown: |-
             With this tutorial's empty direct allowlist, forwarded headers are
             ignored and the resolved client is the TCP peer. The peer and
-            client accessors return projected address values, not strings.
-            Client identity remains available even when there is no client
-            allowlist. Do not trust a header merely because it is present;
-            configure proxy trust as described in
-            [[http-server.guide.proxy-security]] before deploying behind a
-            proxy.
+            client accessors return optional projected address values, not strings.
+            Do not trust a header merely because it is present; configure proxy trust
+            as described in [[http-server.guide.proxy-security]] before deploying.
       sections: []
     - id: add-a-websocket
       title: Add a one-message WebSocket echo
       blocks:
         - type: markdown
           markdown: |-
-            Add `websocket-session` to the `/streaky/http-server` import, register the
-            endpoint before returning the routes, and add the handler below.
-            An ordinary HTTP `curl` request is not a WebSocket session: connect
-            with a WebSocket client, send a text message, and observe its echo
-            followed by a close frame.
-        - type: example
-          id: websocket-registration
-          title: Register the WebSocket endpoint
-          language: terrane
-          mode: illustrative
-          target: null
-          timeout-ms: null
-          source: |-
-            registered-routes = registered-routes.websocket; '/echo', this.echo
-          response: null
-          diagnostic: null
-          markdown: null
-        - type: example
-          id: websocket-handler
-          title: Echo one text message and close
-          language: terrane
-          mode: illustrative
-          target: null
-          timeout-ms: null
-          source: |-
-            async function echo none throws dependency-error; session websocket-session
-                event = await session.receive;
-                text = event.text
-                if text != none
-                    await session.send-text; text
-                await session.close;
-                return none
-          response: null
-          diagnostic: null
-          markdown: null
-        - type: markdown
-          markdown: |-
-            Import `dependency-error` from `/core/errors` in the controller
-            source. The handler declares the transport failure contract required
-            by registration. It handles one event, not an unbounded chat loop;
-            non-text events do not acquire a fabricated text payload. See
-            [[http-server.guide.websockets]] for event kinds and failure behavior.
+            WebSocket registration is separate from annotated HTTP endpoints.
+            Connect with a WebSocket client, send a text message, and observe
+            the echo and close. This tutorial keeps the WebSocket callback
+            example separate from HTTP route authoring.
       sections: []
     - id: choose-next-steps
       title: Configure and deploy deliberately
@@ -307,9 +303,9 @@ documentation:
             The application is now small enough to understand end to end. Move
             addresses and mounts into YAML using
             [[http-server.guide.configuration]] when you need deployment-specific
-            composition. YAML identifies controllers, but your Terrane source
-            still maps those identifiers to concrete instances. It does not
-            configure either network allowlist.
+            composition. YAML identifies API classes and their prefixes; its
+            source mapping supplies the selected Terrane class instances. It does
+            not configure either network allowlist.
 
             Before exposing the listener, review
             [[http-server.guide.proxy-security]]. The current forwarded-identity
@@ -318,11 +314,11 @@ documentation:
             if you need both connection enforcement and originating-client
             restrictions.
 
-            Consult [[http-server.api.application]] and
-            [[http-server.api.routes]] for every available builder and handler
-            contract. Rich request extraction, structured HTTP responses,
-            additional HTTP methods, binary WebSocket payloads, and graceful
-            shutdown are not current public APIs.
+            Consult [[http-server.api.application]] for application builders and
+            [[http-server.guide.annotations]] for typed endpoints, request
+            extraction, structured responses, and supported GET and HEAD methods.
+            Binary WebSocket payloads and graceful shutdown remain outside the
+            current public APIs.
       sections: []
   see-also:
     - http-server.guide.application-routing
