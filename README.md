@@ -49,6 +49,8 @@ template files at runtime.
 
 Create an application with `create-application`, compose selected annotated API classes through the native consumer integration, add static content with `application.static-directory`, optionally replace the listen address with `application.with-address`, and start it with `application.serve`.
 
+To discover an OS-assigned port before serving, bind a core listener with `listen-tcp; '127.0.0.1:0'`, read its `local-address`, and transfer it with `await app.serve-listener; move listener`. This consumes the existing listener without rebinding; `application.address` is ignored on this path. Both serving methods apply the same network access policies.
+
 Annotated endpoints are instance methods of selected classes that use the public
 `api` trait. The framework copies each mounted source into a request-local invocation
 and attaches optional request and response contexts to that copy; it never mutates

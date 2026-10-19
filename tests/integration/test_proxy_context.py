@@ -12,7 +12,6 @@ import socket
 import struct
 import subprocess
 import tempfile
-import time
 import unittest
 
 
@@ -46,7 +45,7 @@ class ProxyContextIntegrationTests(unittest.TestCase):
 from /streaky/http-server/annotations import endpoint, route-group
 from /streaky/http-server import api as http-api, create-application, websocket-session
 from /generated/http-server import mount-annotated
-from /core/process import arguments
+from /core/networking import listen-tcp
 from /core/errors import throwable, dependency-error
 
 @[route-group; prefix = '/proxy']
@@ -89,9 +88,10 @@ async function main throws throwable;
     app = app.websocket; '/events', echo-session
     app = app.allow-direct; '127.0.0.1'
     app = app.allow-client; '198.51.100.0/24'
-    supplied = arguments;
-    app = app.with-address; supplied[0].text
-    await app.serve;
+    listener = await listen-tcp; '127.0.0.1:0'
+    app = app.with-address; 'not-a-listen-address'
+    print; listener.local-address
+    await app.serve-listener; move listener
 main
 """
         (cls.directory / "src/main.trn").write_text(source)
@@ -100,27 +100,21 @@ main
         if built.returncode != 0:
             raise RuntimeError(built.stderr)
         cls.binary = built.stdout.strip().splitlines()[-1]
-        with socket.socket() as reservation:
-            reservation.bind(("127.0.0.1", 0))
-            cls.port = reservation.getsockname()[1]
-        cls.server = subprocess.Popen([cls.binary, f"127.0.0.1:{cls.port}"],
+        cls.server = subprocess.Popen([cls.binary],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         cls.addClassCleanup(cls.stop_server)
-        deadline = time.monotonic() + 20
-        while time.monotonic() < deadline:
-            if cls.server.poll() is not None:
-                raise RuntimeError(cls.server.stderr.read().decode())
-            try:
-                status, body = cls.request(headers={
-                    "Forwarded": "for=198.51.100.24;proto=https"})
-                if status == 200:
-                    if body != f"true|198.51.100.24|https|https://127.0.0.1:{cls.port}/proxy/context":
-                        raise AssertionError(f"unexpected trusted context: {body!r}")
-                    return
-            except (OSError, http.client.HTTPException):
-                pass
-            time.sleep(0.05)
-        raise RuntimeError("Proxy-context server did not become ready")
+        readable, _, _ = select.select([cls.server.stdout], [], [], 20)
+        if not readable:
+            raise RuntimeError("Proxy-context server did not report its bound address")
+        address = cls.server.stdout.readline().strip().decode()
+        host, port = address.rsplit(":", 1)
+        if host != "127.0.0.1" or not 1024 <= int(port) <= 65535:
+            raise AssertionError(f"unexpected bound address: {address!r}")
+        cls.port = int(port)
+        status, body = cls.request(headers={
+            "Forwarded": "for=198.51.100.24;proto=https"})
+        if status != 200 or body != f"true|198.51.100.24|https|https://127.0.0.1:{cls.port}/proxy/context":
+            raise AssertionError(f"unexpected trusted context: {status} {body!r}")
 
     @classmethod
     def stop_server(cls):

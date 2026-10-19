@@ -5,7 +5,7 @@ from /deps/axum-core/extract import Request as native-request
 from /deps/axum-core/response import Response as native-response
 from /deps/axum/middleware import Next as middleware-next, from_fn as from-fn
 from /deps/tower-http/services import ServeDir as serve-dir
-from /core/networking import listen-tcp
+from /core/networking import listen-tcp, tcp-listener
 from /core/networking/native import native-socket-address as socket-addr
 from /deps/axum/extract/connect-info import IntoMakeServiceWithConnectInfo as into-make-service-with-connect-info
 from /deps/http import StatusCode as status-code
@@ -75,6 +75,10 @@ public class application
 
     consuming async function serve none throws throwable;
         bound = await listen-tcp; this.address
+        await this.serve-listener; move bound
+        return none
+
+    consuming async function serve-listener none throws throwable; bound tcp-listener
         listener = bound.into-native;
         router = this.router
         direct-policy network-policy = compile-network-policy; this.policy.direct-connections
