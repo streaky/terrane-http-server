@@ -1,0 +1,23 @@
+namespace streaky/http-server
+
+# The final shared owner releases the worker, including after a WebSocket upgrade.
+private class connection-lifetime
+    private sender channel-sender of int
+
+    private function construct; sender (channel-sender of int)
+        this.sender = sender
+
+    consuming function destruct;
+        sender = move this.sender
+        _ = await sender.send; 1
+        sender.close;
+
+private class connection-token
+    private lifetime shared ref connection-lifetime
+
+    private function construct; sender (channel-sender of int)
+        lifetime = instance connection-lifetime; sender
+        this.lifetime = shared ref lifetime
+
+private function create-connection-token connection-token; sender (channel-sender of int)
+    return instance connection-token; sender

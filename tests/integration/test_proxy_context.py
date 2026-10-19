@@ -47,6 +47,7 @@ from /streaky/http-server import api as http-api, create-application, websocket-
 from /generated/http-server import mount-annotated
 from /core/networking import listen-tcp
 from /core/errors import throwable, dependency-error
+from /core/process import arguments
 
 @[route-group; prefix = '/proxy']
 class proxy-api uses http-api
@@ -84,7 +85,11 @@ async function echo-session none throws dependency-error; session websocket-sess
     return none
 
 async function main throws throwable;
-    app = mount-annotated; (create-application;)
+    app = create-application;
+    argv = arguments;
+    if argv.length > 0
+        app = app.with-connection-limit; 2
+    app = mount-annotated; app
     app = app.websocket; '/events', echo-session
     app = app.allow-direct; '127.0.0.1'
     app = app.allow-client; '198.51.100.0/24'
@@ -100,33 +105,41 @@ main
         if built.returncode != 0:
             raise RuntimeError(built.stderr)
         cls.binary = built.stdout.strip().splitlines()[-1]
-        cls.server = subprocess.Popen([cls.binary],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        cls.addClassCleanup(cls.stop_server)
-        readable, _, _ = select.select([cls.server.stdout], [], [], 20)
-        if not readable:
-            raise RuntimeError("Proxy-context server did not report its bound address")
-        address = cls.server.stdout.readline().strip().decode()
-        host, port = address.rsplit(":", 1)
-        if host != "127.0.0.1" or not 1024 <= int(port) <= 65535:
-            raise AssertionError(f"unexpected bound address: {address!r}")
-        cls.port = int(port)
+        cls.server, cls.port = cls.start_server()
+        cls.addClassCleanup(cls.stop_process, cls.server)
         status, body = cls.request(headers={
             "Forwarded": "for=198.51.100.24;proto=https"})
         if status != 200 or body != f"true|198.51.100.24|https|https://127.0.0.1:{cls.port}/proxy/context":
             raise AssertionError(f"unexpected trusted context: {status} {body!r}")
 
     @classmethod
-    def stop_server(cls):
-        if cls.server.poll() is None:
-            cls.server.terminate()
+    def start_server(cls, *arguments):
+        server = subprocess.Popen([cls.binary, *arguments],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            readable, _, _ = select.select([server.stdout], [], [], 20)
+            if not readable:
+                raise RuntimeError("Proxy-context server did not report its bound address")
+            address = server.stdout.readline().strip().decode()
+            host, port = address.rsplit(":", 1)
+            if host != "127.0.0.1" or not 1024 <= int(port) <= 65535:
+                raise AssertionError(f"unexpected bound address: {address!r}")
+            return server, int(port)
+        except BaseException:
+            cls.stop_process(server)
+            raise
+
+    @staticmethod
+    def stop_process(server):
+        if server.poll() is None:
+            server.terminate()
             try:
-                cls.server.wait(timeout=5)
+                server.wait(timeout=5)
             except subprocess.TimeoutExpired:
-                cls.server.kill()
-                cls.server.wait()
-        cls.server.stderr.close()
-        cls.server.stdout.close()
+                server.kill()
+                server.wait()
+        server.stderr.close()
+        server.stdout.close()
 
     @classmethod
     def request(cls, headers=None, source_address=None):
@@ -153,15 +166,16 @@ main
         self.assertEqual(status, 403)
         self.assertNotIn("198.51.100.24", body)
 
-    def websocket_handshake(self, source="127.0.0.1"):
+    def websocket_handshake(self, source="127.0.0.1", port=None):
+        port = self.port if port is None else port
         connection = socket.socket()
         self.addCleanup(connection.close)
         connection.settimeout(5)
         connection.bind((source, 0))
-        connection.connect(("127.0.0.1", self.port))
+        connection.connect(("127.0.0.1", port))
         key = base64.b64encode(b"terrane-ws-test!").decode()
         connection.sendall((
-            f"GET /events HTTP/1.1\r\nHost: 127.0.0.1:{self.port}\r\n"
+            f"GET /events HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
             "Upgrade: websocket\r\nConnection: Upgrade\r\n"
             f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n"
             "Forwarded: for=198.51.100.24;proto=https\r\n\r\n").encode())
@@ -221,6 +235,56 @@ main
     def test_websocket_upgrade_obeys_access_policy(self):
         _, _, response = self.websocket_handshake("127.0.0.2")
         self.assertTrue(response.startswith(b"HTTP/1.1 403 "), response)
+
+    def test_limit_covers_keepalive_upgrade_and_failed_connection(self):
+        server, port = self.start_server("limited")
+        self.addCleanup(self.stop_process, server)
+        denied, _, response = self.websocket_handshake("127.0.0.2", port)
+        self.assertTrue(response.startswith(b"HTTP/1.1 403 "), response)
+        denied.close()
+        headers = {"Forwarded": "for=198.51.100.24;proto=https"}
+
+        def request(close=False):
+            connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+            self.addCleanup(connection.close)
+            connection.request("GET", "/proxy/context",
+                headers={**headers, **({"Connection": "close"} if close else {})})
+            return connection
+
+        def response(connection):
+            result = connection.getresponse()
+            self.assertEqual(result.status, 200)
+            self.assertEqual(result.read().decode(),
+                f"true|198.51.100.24|https|https://127.0.0.1:{port}/proxy/context")
+
+        first = request()
+        response(first)
+        upgraded, _, handshake = self.websocket_handshake(port=port)
+        self.assertTrue(handshake.startswith(b"HTTP/1.1 101 "), handshake)
+        self.send_frame(upgraded, 1, b"held")
+        self.assertEqual(self.read_frame(upgraded), (1, b"echo:held"))
+
+        third = request()
+        self.assertFalse(select.select([third.sock], [], [], 0.2)[0],
+            "a third TCP connection ran while keep-alive and WebSocket occupied both slots")
+        first.close()
+        response(third)
+
+        fourth = request(close=True)
+        self.assertFalse(select.select([fourth.sock], [], [], 0.2)[0],
+            "the upgrade released its connection slot before the WebSocket ended")
+        self.send_frame(upgraded, 8, struct.pack("!H", 1000))
+        self.assertEqual(self.read_frame(upgraded)[0], 8)
+        upgraded.shutdown(socket.SHUT_WR)
+        response(fourth)
+        upgraded.close()
+
+        # With the third keep-alive still occupying one slot, a protocol error must
+        # release the other slot and leave its worker able to accept another client.
+        with socket.create_connection(("127.0.0.1", port), timeout=5) as malformed:
+            malformed.sendall(b"not http\r\n\r\n")
+            self.assertTrue(malformed.recv(4096).startswith(b"HTTP/1.1 400 "))
+        response(request(close=True))
 
 
 if __name__ == "__main__":

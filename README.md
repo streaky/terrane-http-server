@@ -51,6 +51,10 @@ Create an application with `create-application`, compose selected annotated API 
 
 To discover an OS-assigned port before serving, bind a core listener with `listen-tcp; '127.0.0.1:0'`, read its `local-address`, and transfer it with `await app.serve-listener; move listener`. This consumes the existing listener without rebinding; `application.address` is ignored on this path. Both serving methods apply the same network access policies.
 
+Use `app = app.with-connection-limit; 64` to bound concurrently accepted TCP connections. The default is `0` (unlimited), and both serving methods honor the setting. Idle keep-alive connections and upgraded WebSocket sessions retain their slots until their final owner finishes. HTTP/2 streams share their transport's slot. When full, the server stops accepting until a worker becomes available; extra clients are subject to the operating system's listen backlog rather than an application-level HTTP 503 response.
+
+The limit is implemented in Terrane: a fixed worker group owns the shared core listener, and shared connection lifetimes keep upgraded sessions attached to their workers. Serving requires the `threads` capability for this scheduling path, including when a profile leaves the limit disabled. The limit does not change response payloads, enable streaming, or promise that an allocator returns freed memory to the OS. Request buffers can be freed while RSS remains at a concurrency-induced high-water mark; use allocation profiles alongside RSS when investigating retention.
+
 Annotated endpoints are instance methods of selected classes that use the public
 `api` trait. The framework copies each mounted source into a request-local invocation
 and attaches optional request and response contexts to that copy; it never mutates
@@ -63,7 +67,7 @@ The `routes` value is internal routing transport, not an application authoring A
 The public model exposes neither Axum's `Router` nor its move-and-return registration
 pattern.
 
-Listener creation uses core `listen-tcp`, then consumes the listener through `into-native` before passing it to Axum. The package neither declares nor imports Tokio directly; Tokio remains underneath core and Axum, with one compiler-bound runtime owner. Core's automatic backlog policy now applies to this server, rather than Axum/Tokio's direct-bind default. Peer metadata uses core's `native-socket-address`, preserving direct/client allowlist and forwarded-header behavior. Axum still owns HTTP serving and WebSockets; no HTTP-specific adapter is added to the compiler or platform support.
+Listener creation uses core `listen-tcp`. The unlimited path consumes the listener through `into-native` and uses Axum's serving boundary. The limited path accepts core streams in Terrane and drives projected Hyper connection futures, preserving HTTP/1, HTTP/2, peer policies and WebSocket lifetimes. Explicit Hyper, Hyper-util and Tokio declarations provide those projected APIs; they share the compiler-bound runtime owner rather than creating another runtime. Core's automatic backlog policy applies to both paths. No handwritten listener adapter or HTTP-specific compiler/platform-support hook is used.
 
 Two integration limits remain tracked: `networking/native-address-ip` removes the
 narrow peer-IP Rust expression once core exposes a reusable native-address accessor

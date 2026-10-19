@@ -33,6 +33,16 @@ documentation:
 
         `with-address(address: string) -> application` replaces the listen address without validating it at this point.
 
+        `with-connection-limit(maximum: uint32) -> application` bounds accepted TCP
+        connections; `0` is the unlimited default. Keep-alive connections and upgraded
+        WebSocket sessions retain their slots until their final owners finish.
+        Multiplexed HTTP/2 requests share one transport slot. At capacity, the server
+        waits before accepting another connection; operating-system backlog behavior
+        applies rather than an HTTP 503 guarantee. Both serving methods honor this
+        setting. Terrane workers implement admission, and a shared completion lifetime
+        prevents an upgrade from releasing a slot early. Serving requires the `threads`
+        capability; a limit is not an allocator-trimming or response-streaming policy.
+
         `configure(config: server-config) -> application` replaces the address and mounts every configured static directory in list order. It does not resolve or mount configured controller identifiers; resolve those with `server-config.controller-path` and explicitly compose the matching selected API class.
 
         `allow-direct(network: string) -> application` and `allow-client(network: string) -> application` append entries to independent address/network allowlists. Empty lists are permissive; malformed networks surface when serving begins. Detailed trust and forwarding behavior is in [[http-server.guide.proxy-security]].
@@ -62,6 +72,7 @@ documentation:
             consuming function websocket application; path string, handler async function from websocket-session to none throws dependency-error
             consuming function static-directory application; prefix string, directory string
             consuming function with-address application; address string
+            consuming function with-connection-limit application; maximum uint32
             consuming function configure application; config server-config
             consuming function allow-direct application; network string
             consuming function allow-client application; network string

@@ -6,6 +6,7 @@ from /deps/axum-core/response import Response as native-response
 from /deps/axum/routing import get as native-websocket-get
 from /deps/axum import Router as native-router
 from /core/errors import dependency-error
+from /core/collections import list
 
 public class websocket-event
     kind string = 'closed'
@@ -17,9 +18,11 @@ public class websocket-event
 
 public class websocket-session
     private socket native-websocket|none = none
+    private connection connection-token|none = none
 
-    private function construct; socket native-websocket
+    private function construct; socket native-websocket, connection connection-token|none
         this.socket = move socket
+        this.connection = connection
 
     mutable async function send-text none throws dependency-error; text string
         socket = move this.socket
@@ -50,19 +53,36 @@ public class websocket-session
             return instance websocket-event; kind, none
         return instance websocket-event; 'closed', none
 
-async function run-websocket; socket native-websocket, handler async function from websocket-session to none throws dependency-error
-    session = instance websocket-session; move socket
+async function run-websocket; socket native-websocket, handler async function from websocket-session to none throws dependency-error, connection connection-token|none
+    session = instance websocket-session; move socket, connection
     try
         await handler; move session
     catch dependency-error
         return
 
-function upgrade-websocket native-response; request websocket-upgrade, handler async function from websocket-session to none throws dependency-error
+function upgrade-websocket native-response; request websocket-upgrade, handler async function from websocket-session to none throws dependency-error, connection connection-token|none
     callback = async function; socket native-websocket
-        await run-websocket; move socket, handler
+        await run-websocket; move socket, handler, connection
     return request.on_upgrade; move callback
 
-function register-websocket native-router; router native-router, path string, handler async function from websocket-session to none throws dependency-error
+function register-websocket native-router; router native-router, path string, handler async function from websocket-session to none throws dependency-error, connection connection-token|none
     callback = async function native-response; request websocket-upgrade
-        return upgrade-websocket; move request, handler
+        return upgrade-websocket; move request, handler, connection
     return router.route; path, (native-websocket-get; move callback)
+
+# Bind upgrade callbacks per transport so their captured token owns that connection's slot.
+private class websocket-route
+    path string
+    handler async function from websocket-session to none throws dependency-error
+
+    function construct; path string, handler async function from websocket-session to none throws dependency-error
+        this.path = path
+        this.handler = handler
+
+private function install-websockets native-router; router native-router, registrations ref (list of websocket-route), connection connection-token|none
+    index int = 0
+    while index < registrations.length
+        registration = registrations[index]
+        router = register-websocket; router, registration.path, registration.handler, connection
+        index = index + 1
+    return router

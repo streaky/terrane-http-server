@@ -1,0 +1,64 @@
+namespace streaky/http-server
+
+from /core/collections import list
+from /core/concurrency import channel, channel-fail-send
+from /core/networking import tcp-listener, tcp-stream, network-error
+from /core/networking/native import native-tcp-stream
+from /core/errors import throwable, dependency-error
+from /deps/axum import Router as native-router, Extension as extension
+from /deps/axum/extract import ConnectInfo as connect-info
+from /deps/tokio/net import SocketAddr as socket-address
+from /deps/hyper-util/rt import TokioIo as tokio-io, TokioExecutor as tokio-executor
+from /deps/hyper-util/service import TowerToHyperService as hyper-service
+from /deps/hyper-util/server/conn/auto import Builder as connection-builder
+
+private async function serve-connection none throws throwable; stream tcp-stream, peer string, router native-router, websockets ref (list of websocket-route), sender (channel-sender of int), direct-policy network-policy, client-policy network-policy
+    token = create-connection-token; sender
+    router = install-websockets; router, websockets, token
+    router = apply-access-policy; router, direct-policy, client-policy
+    address = socket-address::from_str; peer
+    context = instance (connect-info of socket-address); address
+    layer = instance (extension of (connect-info of socket-address)); context
+    router = router.layer; layer
+    native = stream.into-native;
+    io tokio-io of native-tcp-stream = (tokio-io of native-tcp-stream)::new; move native
+    service hyper-service of native-router = (hyper-service of native-router)::new; router
+    builder connection-builder of tokio-executor = (connection-builder of tokio-executor)::new; (tokio-executor::new;)
+    try
+        await builder.serve_connection_with_upgrades; io, service
+    catch dependency-error
+        # A malformed request or disconnected peer ends this connection, not its worker.
+        return none
+    return none
+
+private async function connection-worker none throws throwable; listener shared ref tcp-listener, router native-router, websockets list of websocket-route, direct-policy network-policy, client-policy network-policy
+    while true
+        accepted = await listener.accept;
+        if accepted.failed
+            throw instance network-error; accepted.message
+        completion = channel; int, 1, channel-fail-send
+        sender = completion.sender
+        receiver = completion.receiver
+        try
+            await serve-connection; (move accepted.value), accepted.peer, router, (ref websockets), sender, direct-policy, client-policy
+            # A closed channel is not proof that its final-owner signal arrived.
+            completed = await receiver.receive;
+            if completed.value == none
+                throw instance network-error; 'connection lifetime ended without completion signal'
+        finally
+            receiver.close;
+    return none
+
+private async function serve-limited none throws throwable; bound tcp-listener, router native-router, websockets list of websocket-route, maximum uint32, direct-policy network-policy, client-policy network-policy
+    listener = shared ref bound
+    workers = task-group; none
+    index uint32 = 0
+    while index < maximum
+        workers.spawn; (connection-worker; listener, router, websockets, direct-policy, client-policy)
+        index = index + 1
+    outcomes = await workers.drain;
+    for outcome in outcomes
+        error = outcome.error
+        if error != none
+            throw error
+    return none
