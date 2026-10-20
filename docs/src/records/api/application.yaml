@@ -48,10 +48,12 @@ documentation:
         and storage cost. A native channel sender's final drop releases the worker, including
         after a WebSocket upgrade, without an async destructor or per-connection runtime.
         Routes and policies are composed once; service-level extensions carry the peer and lease.
-        Accept failures back off for one second and retry; per-connection setup/transport
+        Failed accepts emit structured errors to stderr with target `http-server.accept`,
+        then back off for one second and retry. Persistent failures continue retrying;
+        there is no consecutive-failure shutdown threshold. Per-connection setup/transport
         failures are isolated. A limit is not an allocator-trimming or response-streaming policy.
-        Explicit capability profiles need `clocks` for retry backoff; slot release no longer
-        requires the `threads` capability.
+        Explicit capability profiles need `clocks` for retry backoff and `logging` for
+        diagnostics; slot release no longer requires the `threads` capability.
 
         Availability warning: neither path configures a header-read or idle timeout.
         `maximum` silent or idle keep-alive clients can exhaust all limited slots indefinitely,

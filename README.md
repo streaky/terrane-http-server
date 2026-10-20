@@ -57,6 +57,8 @@ The limit is implemented in Terrane: it eagerly starts `maximum` workers, each w
 
 Explicit capability profiles need `clocks` for accept-retry backoff. Serving no longer requires `threads` for slot-release finalization.
 
+Failed accepts emit a structured error to stderr with target `http-server.accept` before the one-second backoff. Explicit capability profiles therefore also need `logging`. Persistent failures continue retrying with diagnostics; there is no consecutive-failure shutdown threshold.
+
 **Availability warning:** no header-read or idle timeout is configured by either serving path. `maximum` silent or idle keep-alive clients can occupy every limited slot indefinitely and prevent other requests from being served. Use a trusted deployment or a reverse proxy that bounds upstream connection lifetimes and idle/header waits; the connection limit alone is not slow-client protection. Idle clients release their slots only when they disconnect. No timeout setting is introduced by this API.
 
 WebSocket handlers accept an owned session and may throw `throwable`, including concrete native transport errors. The framework isolates failures to that session: an abrupt disconnect ends the callback and releases its connection slot without terminating the HTTP server.

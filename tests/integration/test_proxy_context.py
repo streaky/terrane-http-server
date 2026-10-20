@@ -3,8 +3,10 @@
 Run: python packages/http-server/tests/integration/test_proxy_context.py
 """
 import base64
+import errno
 import hashlib
 import http.client
+import json
 import os
 import select
 import shutil
@@ -35,7 +37,7 @@ class ProxyContextIntegrationTests(unittest.TestCase):
             'package = "http-proxy-context-test"',
             'artifact = "executable"',
             '[profile]',
-            'capabilities = ["build", "networking", "filesystem", "process", "clocks"]',
+            'capabilities = ["build", "networking", "filesystem", "process", "clocks", "logging"]',
             '[namespaces]',
             '"http-proxy-context-test" = "src"',
             '[terrane-dependencies.streaky.http-server]',
@@ -378,6 +380,12 @@ main
                 self.assertLess(time.monotonic(), deadline,
                     "server descriptors did not approach RLIMIT_NOFILE")
                 time.sleep(0.01)
+            self.assertTrue(select.select([server.stderr], [], [], 5)[0],
+                "failed accept produced no observable diagnostic")
+            diagnostic = json.loads(server.stderr.readline())
+            self.assertEqual(diagnostic["severity"], "error")
+            self.assertEqual(diagnostic["target"], "http-server.accept")
+            self.assertIn(os.strerror(errno.EMFILE), diagnostic["message"])
         finally:
             for client in clients:
                 client.close()

@@ -74,8 +74,7 @@ function register-websocket native-router; router native-router, path string, ha
         return upgrade-websocket; move request, handler, connection
     return router.route; path, (native-websocket-get; move callback)
 
-
-# Routes are composed once. A limited connection injects its token per request.
+# Routes are composed once. A limited connection injects its lease per request.
 private class websocket-route
     path string
     handler async function from websocket-session to none throws throwable
