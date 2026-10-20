@@ -38,6 +38,10 @@ documentation:
         The framework catches a callback's throwable after the upgrade, including concrete
         native errors from abrupt TCP disconnects. A failed handler ends that session rather
         than terminating the server or retaining a connection-limit slot.
+        Migration: handlers calling these methods that declared `throws dependency-error`
+        must widen to `throws throwable`. Errors are not normalized to `dependency-error`;
+        catching a particular native type requires its descriptor import, while a broad
+        `catch throwable` needs no native import.
         The API is text-oriented: there is no binary send or payload accessor for non-text events.
     - type: example
       id: signatures

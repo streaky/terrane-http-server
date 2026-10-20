@@ -24,10 +24,14 @@ documentation:
         generated adapters. WebSocket upgrades have the separate public
         `websocket(path, handler) -> application` registration method: the asynchronous
         callback receives an owned `websocket-session` and returns `none`, with
-        `dependency-error` as its throwable contract. No internal routing import is
+        `throwable` as its error contract. Handlers that call session methods and previously
+        declared `throws dependency-error` must widen to `throws throwable`. Native errors
+        are not normalized; selective catches require their native descriptors. No internal routing import is
         required. See [[http-server.guide.websockets]] for a complete example.
         Native-router registration helpers are implementation details, not public
         authoring APIs; use this method rather than constructing native routes.
+        WebSocket registrations are installed after mounted/static routes, independent of
+        builder call order. Conflicts fail during serving setup before either accept loop starts.
 
         `static-directory(prefix: string, directory: string) -> application` mounts the directory service under the prefix. Serving static content requires filesystem capability.
 
@@ -39,9 +43,24 @@ documentation:
         Multiplexed HTTP/2 requests share one transport slot. At capacity, the server
         waits before accepting another connection; operating-system backlog behavior
         applies rather than an HTTP 503 guarantee. Both serving methods honor this
-        setting. Terrane workers implement admission, and a shared completion lifetime
-        prevents an upgrade from releasing a slot early. Serving requires the `threads`
-        capability; a limit is not an allocator-trimming or response-streaming policy.
+        setting. The limit eagerly creates `maximum` Terrane workers, each retaining a router
+        handle and waiting on the shared listener; large limits have an upfront scheduling
+        and storage cost. A native channel sender's final drop releases the worker, including
+        after a WebSocket upgrade, without an async destructor or per-connection runtime.
+        Routes and policies are composed once; service-level extensions carry the peer and lease.
+        Accept failures back off for one second and retry; per-connection setup/transport
+        failures are isolated. A limit is not an allocator-trimming or response-streaming policy.
+        Explicit capability profiles need `clocks` for retry backoff; slot release no longer
+        requires the `threads` capability.
+
+        Availability warning: neither path configures a header-read or idle timeout.
+        `maximum` silent or idle keep-alive clients can exhaust all limited slots indefinitely,
+        preventing other requests. Use a trusted deployment or proxy-enforced upstream
+        header/idle/lifetime limits. The connection cap alone is not slow-client protection.
+        No timeout configuration is exposed here.
+
+        Limited mode supports HTTP/1.1 WebSocket upgrades and cleartext HTTP/2 prior knowledge
+        (h2c), but does not enable RFC 8441 extended CONNECT for WebSockets over HTTP/2.
 
         `configure(config: server-config) -> application` replaces the address and mounts every configured static directory in list order. It does not resolve or mount configured controller identifiers; resolve those with `server-config.controller-path` and explicitly compose the matching selected API class.
 

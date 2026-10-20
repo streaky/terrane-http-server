@@ -91,12 +91,13 @@ public class application
         direct-policy network-policy = compile-network-policy; this.policy.direct-connections
         client-policy network-policy = compile-network-policy; this.policy.client-addresses
         websockets = move this.websockets
+        # Compose and validate all routes before either accept path starts.
+        router = install-websockets; router, (ref websockets)
+        router = apply-access-policy; router, direct-policy, client-policy
         if this.maximum-connections > 0
-            await serve-limited; move bound, router, websockets, this.maximum-connections, direct-policy, client-policy
+            await serve-limited; move bound, router, this.maximum-connections
             return none
         listener = bound.into-native;
-        router = install-websockets; router, (ref websockets), none
-        router = apply-access-policy; router, direct-policy, client-policy
         service into-make-service-with-connect-info of (native-router, socket-addr) = (router.into_make_service_with_connect_info of socket-addr);
         await native-serve; listener, service
         return none

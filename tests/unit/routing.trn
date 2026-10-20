@@ -24,7 +24,7 @@ class api implements controller
     async function health wire-response; _request incoming-request
         return encoded-response; 200, 'text/plain', 'ok'
 
-async function ignore-session none; _session websocket-session
+async function ignore-session none throws throwable; _session websocket-session
     return none
 
 function test-empty-application-has-no-routes;

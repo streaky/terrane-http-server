@@ -2,17 +2,20 @@
 
 Run: python packages/http-server/tests/integration/test_proxy_context.py
 """
-import http.client
 import base64
 import hashlib
+import http.client
 import os
-from pathlib import Path
 import select
+import shutil
 import socket
 import struct
 import subprocess
+import sys
 import tempfile
+import time
 import unittest
+from pathlib import Path
 
 
 PACKAGE = Path(__file__).resolve().parents[2]
@@ -31,6 +34,8 @@ class ProxyContextIntegrationTests(unittest.TestCase):
         (cls.directory / "package.toml").write_text("\n".join([
             'package = "http-proxy-context-test"',
             'artifact = "executable"',
+            '[profile]',
+            'capabilities = ["build", "networking", "filesystem", "process", "clocks"]',
             '[namespaces]',
             '"http-proxy-context-test" = "src"',
             '[terrane-dependencies.streaky.http-server]',
@@ -88,9 +93,18 @@ async function main throws throwable;
     app = create-application;
     argv = arguments;
     if argv.length > 0
-        app = app.with-connection-limit; 2
+        limit = 2
+        if argv[0].text == 'pressure'
+            limit = 64
+        if argv[0].text == 'conflict-unlimited'
+            limit = 0
+        app = app.with-connection-limit; limit
     app = mount-annotated; app
-    app = app.websocket; '/events', echo-session
+    websocket-path string = '/events'
+    if argv.length > 0
+        if argv[0].text == 'conflict' or argv[0].text == 'conflict-unlimited'
+            websocket-path = '/proxy/context'
+    app = app.websocket; websocket-path, echo-session
     app = app.allow-direct; '127.0.0.1'
     app = app.allow-client; '198.51.100.0/24'
     listener = await listen-tcp; '127.0.0.1:0'
@@ -113,9 +127,9 @@ main
             raise AssertionError(f"unexpected trusted context: {status} {body!r}")
 
     @classmethod
-    def start_server(cls, *arguments):
+    def start_server(cls, *arguments, preexec_fn=None):
         server = subprocess.Popen([cls.binary, *arguments],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=preexec_fn)
         try:
             readable, _, _ = select.select([server.stdout], [], [], 20)
             if not readable:
@@ -294,6 +308,101 @@ main
         self.assertEqual(self.read_frame(abrupt), (1, b"echo:abrupt"))
         abrupt.close()
         response(request(close=True))
+
+    def test_silent_clients_hold_slots_until_disconnect(self):
+        server, port = self.start_server("limited")
+        self.addCleanup(self.stop_process, server)
+        first = socket.create_connection(("127.0.0.1", port), timeout=5)
+        self.addCleanup(first.close)
+        second = socket.create_connection(("127.0.0.1", port), timeout=5)
+        self.addCleanup(second.close)
+        waiting = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        self.addCleanup(waiting.close)
+        waiting.request("GET", "/proxy/context", headers={
+            "Forwarded": "for=198.51.100.24;proto=https", "Connection": "close"})
+        self.assertFalse(select.select([waiting.sock], [], [], 0.2)[0],
+            "silent clients did not retain both transport slots")
+        first.close()
+        response = waiting.getresponse()
+        self.assertEqual(response.status, 200)
+        self.assertEqual(response.read().decode(),
+            f"true|198.51.100.24|https|https://127.0.0.1:{port}/proxy/context")
+
+    def test_limited_server_supports_h2c_prior_knowledge(self):
+        curl = shutil.which("curl")
+        if curl is None or "HTTP2" not in subprocess.check_output(
+                [curl, "--version"], text=True):
+            self.skipTest("HTTP/2-enabled curl is required for the h2c wire check")
+        server, port = self.start_server("limited")
+        self.addCleanup(self.stop_process, server)
+        result = subprocess.run([
+            curl, "--http2-prior-knowledge", "--silent", "--show-error",
+            "--max-time", "5", "--noproxy", "*",
+            "--header", "Forwarded: for=198.51.100.24;proto=https",
+            "--write-out", "\n%{http_version} %{http_code}",
+            f"http://127.0.0.1:{port}/proxy/context",
+        ], capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        body, protocol = result.stdout.rsplit("\n", 1)
+        self.assertEqual(protocol, "2 200")
+        self.assertEqual(body, f"true|198.51.100.24|https|https://127.0.0.1:{port}/proxy/context")
+
+    @unittest.skipUnless(sys.platform.startswith("linux"),
+        "RLIMIT_NOFILE accept-pressure coverage requires Linux")
+    def test_limited_server_recovers_after_fd_pressure(self):
+        import resource
+
+        def limit_file_descriptors():
+            resource.setrlimit(resource.RLIMIT_NOFILE, (32, 32))
+
+        server, port = self.start_server("pressure",
+            preexec_fn=limit_file_descriptors)
+        self.addCleanup(self.stop_process, server)
+
+        clients = []
+        try:
+            for _ in range(64):
+                try:
+                    clients.append(socket.create_connection(
+                        ("127.0.0.1", port), timeout=2))
+                except OSError:
+                    break
+            self.assertGreaterEqual(len(clients), 16,
+                "fd pressure was not reached by the limited server")
+            deadline = time.monotonic() + 5
+            while True:
+                self.assertIsNone(server.poll(), "server exited under fd pressure")
+                open_descriptors = list(Path(f"/proc/{server.pid}/fd").iterdir())
+                if len(open_descriptors) >= 30:
+                    break
+                self.assertLess(time.monotonic(), deadline,
+                    "server descriptors did not approach RLIMIT_NOFILE")
+                time.sleep(0.01)
+        finally:
+            for client in clients:
+                client.close()
+
+        connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        self.addCleanup(connection.close)
+        connection.request("GET", "/proxy/context", headers={"Connection": "close",
+            "Forwarded": "for=198.51.100.24;proto=https"})
+        response = connection.getresponse()
+        self.assertEqual(response.status, 200)
+        self.assertEqual(response.read().decode(),
+            f"true|198.51.100.24|https|https://127.0.0.1:{port}/proxy/context")
+        self.assertIsNone(server.poll(), "server exited under fd pressure")
+
+    def test_websocket_route_conflict_fails_before_accepting_clients(self):
+        for mode in ("conflict", "conflict-unlimited"):
+            with self.subTest(mode=mode):
+                server, _ = self.start_server(mode)
+                self.addCleanup(self.stop_process, server)
+                try:
+                    status = server.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    self.fail("route conflict was not rejected during startup")
+                self.assertNotEqual(status, 0,
+                    "conflicting WebSocket route unexpectedly started serving")
 
 
 if __name__ == "__main__":

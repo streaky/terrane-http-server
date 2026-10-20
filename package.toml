@@ -29,7 +29,7 @@ effects = ["build", "networking"]
 [rust-dependencies.tokio]
 version = "=1.53.3"
 default-features = false
-features = ["net"]
+features = ["net", "sync"]
 effects = ["build", "networking"]
 
 [rust-modules]
@@ -45,7 +45,7 @@ effects = ["build"]
 
 [rust-dependencies.tower-http]
 version = "=0.6.6"
-features = ["fs"]
+features = ["fs", "add-extension"]
 effects = ["build", "filesystem"]
 
 [rust-dependencies.tower-service]

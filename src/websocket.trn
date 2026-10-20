@@ -5,8 +5,10 @@ from /deps/axum/extract import WebSocketUpgrade as websocket-upgrade
 from /deps/axum-core/response import Response as native-response
 from /deps/axum/routing import get as native-websocket-get
 from /deps/axum import Router as native-router
+from /deps/axum-core/extract import Request as native-request
 from /core/errors import throwable
 from /core/collections import list
+from /deps/tokio/sync/broadcast import Sender as connection-lease
 
 public class websocket-event
     kind string = 'closed'
@@ -18,9 +20,9 @@ public class websocket-event
 
 public class websocket-session
     private socket native-websocket|none = none
-    private connection connection-token|none = none
+    private connection (connection-lease of uint8)|none = none
 
-    private function construct; socket native-websocket, connection connection-token|none
+    private function construct; socket native-websocket, connection (connection-lease of uint8)|none
         this.socket = move socket
         this.connection = connection
 
@@ -53,7 +55,7 @@ public class websocket-session
             return instance websocket-event; kind, none
         return instance websocket-event; 'closed', none
 
-async function run-websocket; socket native-websocket, handler async function from websocket-session to none throws throwable, connection connection-token|none
+async function run-websocket; socket native-websocket, handler async function from websocket-session to none throws throwable, connection (connection-lease of uint8)|none
     session = instance websocket-session; move socket, connection
     try
         await handler; move session
@@ -61,17 +63,19 @@ async function run-websocket; socket native-websocket, handler async function fr
         # Native transport errors and callback failures end this session only.
         return
 
-function upgrade-websocket native-response; request websocket-upgrade, handler async function from websocket-session to none throws throwable, connection connection-token|none
+function upgrade-websocket native-response; request websocket-upgrade, handler async function from websocket-session to none throws throwable, connection (connection-lease of uint8)|none
     callback = async function; socket native-websocket
         await run-websocket; move socket, handler, connection
     return request.on_upgrade; move callback
 
-function register-websocket native-router; router native-router, path string, handler async function from websocket-session to none throws throwable, connection connection-token|none
-    callback = async function native-response; request websocket-upgrade
+function register-websocket native-router; router native-router, path string, handler async function from websocket-session to none throws throwable
+    callback = async function native-response; request websocket-upgrade, incoming native-request
+        connection (connection-lease of uint8)|none = (((incoming.extensions;).get of (connection-lease of uint8));).cloned;
         return upgrade-websocket; move request, handler, connection
     return router.route; path, (native-websocket-get; move callback)
 
-# Bind upgrade callbacks per transport so their captured token owns that connection's slot.
+
+# Routes are composed once. A limited connection injects its token per request.
 private class websocket-route
     path string
     handler async function from websocket-session to none throws throwable
@@ -80,10 +84,10 @@ private class websocket-route
         this.path = path
         this.handler = handler
 
-private function install-websockets native-router; router native-router, registrations ref (list of websocket-route), connection connection-token|none
+private function install-websockets native-router; router native-router, registrations ref (list of websocket-route)
     index int = 0
     while index < registrations.length
         registration = registrations[index]
-        router = register-websocket; router, registration.path, registration.handler, connection
+        router = register-websocket; router, registration.path, registration.handler
         index = index + 1
     return router

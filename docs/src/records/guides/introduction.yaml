@@ -55,7 +55,7 @@ documentation:
         path = "../http-server"
 
         [profile]
-        capabilities = ["build", "networking", "filesystem", "threads"]
+        capabilities = ["build", "networking", "filesystem", "clocks"]
       response: null
       diagnostic: null
       markdown: null
@@ -63,8 +63,8 @@ documentation:
       markdown: |-
         In a consuming package, declare the library dependency by the path appropriate to
         your project. Allow its dependency effects in the active profile: serving requires
-        networking, static-file service requires filesystem capability, and the
-        executor may use threads. The manifest also declares build effects.
+        networking and clocks for accept-retry backoff; static-file service requires
+        filesystem capability. The manifest also declares build effects.
         Keep capability policy explicit in the consuming package; importing the library does not
         grant capabilities implicitly.
   sections:

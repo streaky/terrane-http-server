@@ -76,6 +76,13 @@ documentation:
 
             `send-text` sends a text frame, and `close` sends an explicit close frame. Transport failures can be concrete native throwables, not only `dependency-error`. The callback contract accepts `throwable`; the framework catches a handler failure after upgrade so an abrupt disconnect ends that session and releases its slot without terminating the HTTP server.
 
+            Migration: a handler calling session operations that previously declared
+            `throws dependency-error` must widen to `throws throwable`. Selective native
+            catches require descriptor imports; errors are not normalized to `dependency-error`.
+            WebSocket routes are installed after ordinary/static routes regardless of builder
+            call order; conflicting paths fail during serving setup, before clients are accepted.
+            Limited mode supports HTTP/1.1 upgrades, not RFC 8441 extended CONNECT over h2c.
+
             The current typed payload surface is text-first. Binary event payloads and explicit ping/pong payload APIs are not exposed.
       sections: []
   see-also:

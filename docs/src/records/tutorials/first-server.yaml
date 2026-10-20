@@ -56,7 +56,7 @@ documentation:
                 rust-toolchain = "pinned"
 
                 [profile]
-                capabilities = ["build", "networking", "filesystem", "threads"]
+                capabilities = ["build", "networking", "filesystem", "clocks"]
 
                 [namespaces]
                 hello-http = "src"
