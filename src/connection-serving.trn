@@ -1,0 +1,72 @@
+namespace streaky/http-server
+
+from /core/networking import tcp-listener, tcp-stream
+from /core/networking/native import native-tcp-stream
+from /core/errors import throwable
+from /core/time import clock, duration
+from /core/logging import console-sink, named-logger, error as log-error, empty-log-fields
+from /deps/axum import Router as native-router
+from /deps/axum/extract import ConnectInfo as connect-info
+from /deps/tokio/net import SocketAddr as socket-address
+from /deps/tokio/sync/broadcast import Sender as connection-lease
+from /deps/hyper-util/rt import TokioIo as tokio-io, TokioExecutor as tokio-executor
+from /deps/hyper-util/service import TowerToHyperService as hyper-service
+from /deps/hyper-util/server/conn/auto import Builder as connection-builder
+from /deps/tower-http/add-extension import AddExtension as add-extension
+
+private async function drive-connection none throws throwable; stream tcp-stream, peer string, router native-router, lease (connection-lease of uint8)
+    address = socket-address::from_str; peer
+    context = instance (connect-info of socket-address); address
+    # Wrap the service, not every route. Each request inherits the peer and
+    # the lease; an upgraded session retains its lease beyond HTTP completion.
+    peer-service = (add-extension of (native-router, (connect-info of socket-address)))::new; router, context
+    connection-service = (add-extension of ((add-extension of (native-router, (connect-info of socket-address))), (connection-lease of uint8)))::new; peer-service, move lease
+    native = stream.into-native;
+    io tokio-io of native-tcp-stream = (tokio-io of native-tcp-stream)::new; move native
+    service hyper-service of (add-extension of ((add-extension of (native-router, (connect-info of socket-address))), (connection-lease of uint8))) = (hyper-service of (add-extension of ((add-extension of (native-router, (connect-info of socket-address))), (connection-lease of uint8))))::new; connection-service
+    builder connection-builder of tokio-executor = (connection-builder of tokio-executor)::new; (tokio-executor::new;)
+    await builder.serve_connection_with_upgrades; io, service
+    return none
+
+private async function serve-connection none throws throwable; stream tcp-stream, peer string, router native-router, lease (connection-lease of uint8)
+    try
+        await drive-connection; move stream, peer, router, move lease
+    catch throwable
+        # Setup, malformed requests and disconnects end only this connection.
+        return none
+    return none
+
+private async function connection-worker none throws throwable; listener shared ref tcp-listener, router native-router
+    while true
+        accepted = await listener.accept;
+        if accepted.failed
+            # core stream-result has no error kind; retry all failed accepts.
+            sink = console-sink; false
+            writer = named-logger; sink.value, 'http-server.accept'
+            log-error; writer, accepted.message, (empty-log-fields;)
+            await clock::sleep; (duration::seconds; 1)
+        else
+            sender = (connection-lease of uint8)::new; 1
+            receiver = sender.subscribe;
+            await serve-connection; (move accepted.value), accepted.peer, router, move sender
+            # No values are sent, so recv can fail only when all sender leases
+            # (including an upgraded session's) have dropped.
+            try
+                await receiver.recv;
+            catch throwable
+                none
+    return none
+
+private async function serve-limited none throws throwable; bound tcp-listener, router native-router, maximum uint32
+    listener = shared ref bound
+    workers = task-group; none
+    index uint32 = 0
+    while index < maximum
+        workers.spawn; (connection-worker; listener, router)
+        index = index + 1
+    outcomes = await workers.drain;
+    for outcome in outcomes
+        error = outcome.error
+        if error != none
+            throw error
+    return none

@@ -1,11 +1,11 @@
 namespace http-server-demo
 
 from /streaky/http-server import websocket-session
-from /core/errors import dependency-error
+from /core/errors import throwable
 
 /// Echo each text message on the same connection until the client disconnects.
 /// This session callback is registered through application.websocket, not OpenAPI.
-async function echo-session none throws dependency-error; session websocket-session
+async function echo-session none throws throwable; session websocket-session
     while true
         event = await session.receive;
         # Keep receiving after Close so the native stream flushes its close reply.

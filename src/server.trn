@@ -5,12 +5,13 @@ from /deps/axum-core/extract import Request as native-request
 from /deps/axum-core/response import Response as native-response
 from /deps/axum/middleware import Next as middleware-next, from_fn as from-fn
 from /deps/tower-http/services import ServeDir as serve-dir
-from /core/networking import listen-tcp
+from /core/networking import listen-tcp, tcp-listener
 from /core/networking/native import native-socket-address as socket-addr
 from /deps/axum/extract/connect-info import IntoMakeServiceWithConnectInfo as into-make-service-with-connect-info
 from /deps/http import StatusCode as status-code
-from /core/errors import throwable, dependency-error
+from /core/errors import throwable
 from /streaky/http-server/internal import routes
+from /core/collections import list
 
 # Generated class composition protocol. Endpoints are declared on api-using route groups.
 public interface controller
@@ -20,11 +21,15 @@ public class application
     private router native-router = native-router::new;
     address string = '127.0.0.1:3000'
     private policy access-policy = instance access-policy;
+    private websockets list of websocket-route
+    private maximum-connections uint32 = 0
 
-    private function construct; router native-router, address string, policy access-policy
+    private function construct; router native-router, address string, policy access-policy, websockets list of websocket-route, maximum uint32
         this.router = move router
         this.address = address
         this.policy = move policy
+        this.websockets = move websockets
+        this.maximum-connections = maximum
 
     consuming function mount application; prefix string, handler-controller controller
         registered-routes routes = instance routes; (native-router::new;)
@@ -35,24 +40,27 @@ public class application
             router = router.merge; move nested
         else
             router = router.nest; prefix, move nested
-        return instance application; move router, this.address, (move this.policy)
+        return instance application; move router, this.address, (move this.policy), (move this.websockets), this.maximum-connections
 
-    consuming function websocket application; path string, handler async function from websocket-session to none throws dependency-error
-        router = register-websocket; (move this.router), path, handler
-        return instance application; move router, this.address, (move this.policy)
+    consuming function websocket application; path string, handler async function from websocket-session to none throws throwable
+        this.websockets.append; (instance websocket-route; path, handler)
+        return this
 
     consuming function static-directory application; prefix string, directory string
         service = serve-dir::new; directory
         router = move this.router
         router = router.nest_service; prefix, service
-        return instance application; move router, this.address, (move this.policy)
+        return instance application; move router, this.address, (move this.policy), (move this.websockets), this.maximum-connections
 
     consuming function with-address application; address string
         router = move this.router
-        return instance application; move router, address, (move this.policy)
+        return instance application; move router, address, (move this.policy), (move this.websockets), this.maximum-connections
+
+    consuming function with-connection-limit application; maximum uint32
+        return instance application; (move this.router), this.address, (move this.policy), (move this.websockets), maximum
 
     consuming function configure application; config server-config
-        app application = instance application; (move this.router), config.address, (move this.policy)
+        app application = instance application; (move this.router), config.address, (move this.policy), (move this.websockets), this.maximum-connections
         index int = 0
         while index < config.static-directories.length
             mount = config.static-directories[index]
@@ -63,41 +71,55 @@ public class application
     consuming function allow-direct application; network string
         policy = move this.policy
         policy = policy.allow-direct; network
-        return instance application; (move this.router), this.address, move policy
+        return instance application; (move this.router), this.address, move policy, (move this.websockets), this.maximum-connections
 
     consuming function allow-client application; network string
         policy = move this.policy
         policy = policy.allow-client; network
-        return instance application; (move this.router), this.address, move policy
+        return instance application; (move this.router), this.address, move policy, (move this.websockets), this.maximum-connections
 
     function has-routes bool;
-        return this.router.has_routes;
+        return (this.router.has_routes;) or this.websockets.length > 0
 
     consuming async function serve none throws throwable;
         bound = await listen-tcp; this.address
-        listener = bound.into-native;
+        await this.serve-listener; move bound
+        return none
+
+    consuming async function serve-listener none throws throwable; bound tcp-listener
         router = this.router
         direct-policy network-policy = compile-network-policy; this.policy.direct-connections
         client-policy network-policy = compile-network-policy; this.policy.client-addresses
-        middleware = async function native-response; request native-request, next middleware-next
-            direct = direct-address; ref request
-            direct-allowed bool = false
-            if direct != none
-                direct-allowed = direct-policy.permits; direct
-            trust-forwarded bool = direct-allowed and not (direct-policy.is-permissive;)
-            client = resolve-client-address; ref request, direct, trust-forwarded
-            client-allowed bool = client-policy.is-permissive;
-            if not client-allowed
-                if client != none
-                    client-allowed = client-policy.permits; client
-            install-proxy-metadata; ref request, client, trust-forwarded
-            if direct-allowed and client-allowed
-                return await next.run; request
-            return (status-code::FORBIDDEN).into_response;
-        router = router.layer; (from-fn; middleware)
+        websockets = move this.websockets
+        # Compose and validate all routes before either accept path starts.
+        router = install-websockets; router, (ref websockets)
+        router = apply-access-policy; router, direct-policy, client-policy
+        if this.maximum-connections > 0
+            await serve-limited; move bound, router, this.maximum-connections
+            return none
+        listener = bound.into-native;
         service into-make-service-with-connect-info of (native-router, socket-addr) = (router.into_make_service_with_connect_info of socket-addr);
         await native-serve; listener, service
         return none
 
 public function create-application application;
-    return instance application; (native-router::new;), '127.0.0.1:3000', (instance access-policy;)
+    websockets list of websocket-route = list;
+    return instance application; (native-router::new;), '127.0.0.1:3000', (instance access-policy;), move websockets, 0
+
+private function apply-access-policy native-router; router native-router, direct-policy network-policy, client-policy network-policy
+    middleware = async function native-response; request native-request, next middleware-next
+        direct = direct-address; ref request
+        direct-allowed bool = false
+        if direct != none
+            direct-allowed = direct-policy.permits; direct
+        trust-forwarded bool = direct-allowed and not (direct-policy.is-permissive;)
+        client = resolve-client-address; ref request, direct, trust-forwarded
+        client-allowed bool = client-policy.is-permissive;
+        if not client-allowed
+            if client != none
+                client-allowed = client-policy.permits; client
+        install-proxy-metadata; ref request, client, trust-forwarded
+        if direct-allowed and client-allowed
+            return await next.run; request
+        return (status-code::FORBIDDEN).into_response;
+    return router.layer; (from-fn; middleware)

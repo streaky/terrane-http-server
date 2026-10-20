@@ -22,22 +22,27 @@ documentation:
         after a successful upgrade, then passed to the registered callback. Its socket field
         is private and mutable; application code cannot construct or directly access the
         native socket. All three public operations are mutable and asynchronous, and can
-        report `dependency-error` from transport operations.
+        report concrete native transport throwables.
 
-        `send-text(text: string) -> async none throws dependency-error` sends a native text
+        `send-text(text: string) -> async none throws throwable` sends a native text
         frame when the session still has a socket; it returns none. `close() -> async none
-        throws dependency-error` sends a native `Close` frame when connected. Neither method
+        throws throwable` sends a native `Close` frame when connected. Neither method
         explicitly clears the socket after sending.
 
-        `receive() -> async websocket-event throws dependency-error` awaits one native receive
+        `receive() -> async websocket-event throws throwable` awaits one native receive
         when connected. Native `Text` becomes event kind lower-case `text` with its payload;
-        `Close`, `Binary`, `Ping`, and `Pong` become events with those exact native names and
-        no text payload. If the stream returns no frame (or the optional socket is absent),
-        it returns kind `closed`, text `none`. See [[http-server.api.websocket-event]].
+        `Close`, `Binary`, `Ping`, and `Pong` retain those exact native names with no text
+        payload. An exhausted stream or absent socket returns kind `closed`, text `none`.
+        See [[http-server.api.websocket-event]].
 
-        The framework catches a callback's `dependency-error` after the upgrade, so a failed
-        handler ends that session rather than propagating through the server loop. The API is
-        text-oriented: there is no binary send or payload accessor for non-text events.
+        The framework catches a callback's throwable after the upgrade, including concrete
+        native errors from abrupt TCP disconnects. A failed handler ends that session rather
+        than terminating the server or retaining a connection-limit slot.
+        Migration: handlers calling these methods that declared `throws dependency-error`
+        must widen to `throws throwable`. Errors are not normalized to `dependency-error`;
+        catching a particular native type requires its descriptor import, while a broad
+        `catch throwable` needs no native import.
+        The API is text-oriented: there is no binary send or payload accessor for non-text events.
     - type: example
       id: signatures
       title: Public declaration synopsis
@@ -47,9 +52,9 @@ documentation:
       timeout-ms: null
       source: |-
         public class websocket-session
-            mutable async function send-text none throws dependency-error; text string
-            mutable async function close none throws dependency-error;
-            mutable async function receive websocket-event throws dependency-error;
+            mutable async function send-text none throws throwable; text string
+            mutable async function close none throws throwable;
+            mutable async function receive websocket-event throws throwable;
       response: null
       diagnostic: null
       markdown: Method bodies and private implementation members are omitted from this declaration synopsis.

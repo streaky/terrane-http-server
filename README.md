@@ -49,6 +49,24 @@ template files at runtime.
 
 Create an application with `create-application`, compose selected annotated API classes through the native consumer integration, add static content with `application.static-directory`, optionally replace the listen address with `application.with-address`, and start it with `application.serve`.
 
+To discover an OS-assigned port before serving, bind a core listener with `listen-tcp; '127.0.0.1:0'`, read its `local-address`, and transfer it with `await app.serve-listener; move listener`. This consumes the existing listener without rebinding; `application.address` is ignored on this path. Both serving methods apply the same network access policies.
+
+Use `app = app.with-connection-limit; 64` to bound concurrently accepted TCP connections. The default is `0` (unlimited), and both serving methods honor the setting. Idle keep-alive connections and upgraded WebSocket sessions retain their slots until their final owner finishes. HTTP/2 streams share their transport's slot. When full, the server stops accepting until a worker becomes available; extra clients are subject to the operating system's listen backlog rather than an application-level HTTP 503 response.
+
+The limit is implemented in Terrane: it eagerly starts `maximum` workers, each with a router handle and a pending accept on the shared core listener. Choose a limit appropriate to the deployment rather than treating it as a cost-free ceiling. A native channel sender is the connection lease: its last drop wakes the worker, including after an upgrade, without an async destructor or a per-connection runtime. Routes and access policies are composed once before serving; constant-size service wrappers attach peer identity and the lease to requests. Accept failures retry after a one-second backoff; per-connection setup and transport failures do not cancel the server. The limit does not change payloads, enable streaming, or trim allocator-retained RSS; use allocation profiles alongside RSS when investigating retention.
+
+Explicit capability profiles need `clocks` for accept-retry backoff. Serving no longer requires `threads` for slot-release finalization.
+
+Failed accepts emit a structured error to stderr with target `http-server.accept` before the one-second backoff. Explicit capability profiles therefore also need `logging`. Persistent failures continue retrying with diagnostics; there is no consecutive-failure shutdown threshold.
+
+**Availability warning:** no header-read or idle timeout is configured by either serving path. `maximum` silent or idle keep-alive clients can occupy every limited slot indefinitely and prevent other requests from being served. Use a trusted deployment or a reverse proxy that bounds upstream connection lifetimes and idle/header waits; the connection limit alone is not slow-client protection. Idle clients release their slots only when they disconnect. No timeout setting is introduced by this API.
+
+WebSocket handlers accept an owned session and may throw `throwable`, including concrete native transport errors. The framework isolates failures to that session: an abrupt disconnect ends the callback and releases its connection slot without terminating the HTTP server.
+
+**WebSocket migration:** handlers that call session operations and previously declared `throws dependency-error` must widen to `throws throwable`. Native failures are not normalized to `dependency-error`; selectively catching one requires importing its native descriptor. A broad `catch throwable` remains available.
+
+WebSocket registrations are installed after mounted/static routes, independent of builder call order. Route conflicts fail during serving setup, before the accept loop starts, in both modes.
+
 Annotated endpoints are instance methods of selected classes that use the public
 `api` trait. The framework copies each mounted source into a request-local invocation
 and attaches optional request and response contexts to that copy; it never mutates
@@ -61,7 +79,7 @@ The `routes` value is internal routing transport, not an application authoring A
 The public model exposes neither Axum's `Router` nor its move-and-return registration
 pattern.
 
-Listener creation uses core `listen-tcp`, then consumes the listener through `into-native` before passing it to Axum. The package neither declares nor imports Tokio directly; Tokio remains underneath core and Axum, with one compiler-bound runtime owner. Core's automatic backlog policy now applies to this server, rather than Axum/Tokio's direct-bind default. Peer metadata uses core's `native-socket-address`, preserving direct/client allowlist and forwarded-header behavior. Axum still owns HTTP serving and WebSockets; no HTTP-specific adapter is added to the compiler or platform support.
+Listener creation uses core `listen-tcp`. The unlimited path consumes the listener through `into-native` and uses Axum's serving boundary. The limited path accepts core streams in Terrane and drives projected Hyper connection futures: HTTP/1.1 WebSocket upgrades and cleartext HTTP/2 prior knowledge (h2c) are supported, with the same peer policies and upgrade lifetimes. Limited mode does not enable RFC 8441 extended CONNECT for WebSockets over HTTP/2. A reverse proxy can terminate TLS/browser HTTP/2 and use HTTP/1.1 upgrades upstream. Explicit Hyper, Hyper-util and Tokio declarations provide the projected APIs; they share the compiler-bound runtime owner rather than creating another runtime. Core's automatic backlog policy applies to both paths. No handwritten listener adapter or HTTP-specific compiler/platform-support hook is used.
 
 Two integration limits remain tracked: `networking/native-address-ip` removes the
 narrow peer-IP Rust expression once core exposes a reusable native-address accessor

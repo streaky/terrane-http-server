@@ -24,14 +24,45 @@ documentation:
         generated adapters. WebSocket upgrades have the separate public
         `websocket(path, handler) -> application` registration method: the asynchronous
         callback receives an owned `websocket-session` and returns `none`, with
-        `dependency-error` as its throwable contract. No internal routing import is
+        `throwable` as its error contract. Handlers that call session methods and previously
+        declared `throws dependency-error` must widen to `throws throwable`. Native errors
+        are not normalized; selective catches require their native descriptors. No internal routing import is
         required. See [[http-server.guide.websockets]] for a complete example.
         Native-router registration helpers are implementation details, not public
         authoring APIs; use this method rather than constructing native routes.
+        WebSocket registrations are installed after mounted/static routes, independent of
+        builder call order. Conflicts fail during serving setup before either accept loop starts.
 
         `static-directory(prefix: string, directory: string) -> application` mounts the directory service under the prefix. Serving static content requires filesystem capability.
 
         `with-address(address: string) -> application` replaces the listen address without validating it at this point.
+
+        `with-connection-limit(maximum: uint32) -> application` bounds accepted TCP
+        connections; `0` is the unlimited default. Keep-alive connections and upgraded
+        WebSocket sessions retain their slots until their final owners finish.
+        Multiplexed HTTP/2 requests share one transport slot. At capacity, the server
+        waits before accepting another connection; operating-system backlog behavior
+        applies rather than an HTTP 503 guarantee. Both serving methods honor this
+        setting. The limit eagerly creates `maximum` Terrane workers, each retaining a router
+        handle and waiting on the shared listener; large limits have an upfront scheduling
+        and storage cost. A native channel sender's final drop releases the worker, including
+        after a WebSocket upgrade, without an async destructor or per-connection runtime.
+        Routes and policies are composed once; service-level extensions carry the peer and lease.
+        Failed accepts emit structured errors to stderr with target `http-server.accept`,
+        then back off for one second and retry. Persistent failures continue retrying;
+        there is no consecutive-failure shutdown threshold. Per-connection setup/transport
+        failures are isolated. A limit is not an allocator-trimming or response-streaming policy.
+        Explicit capability profiles need `clocks` for retry backoff and `logging` for
+        diagnostics; slot release no longer requires the `threads` capability.
+
+        Availability warning: neither path configures a header-read or idle timeout.
+        `maximum` silent or idle keep-alive clients can exhaust all limited slots indefinitely,
+        preventing other requests. Use a trusted deployment or proxy-enforced upstream
+        header/idle/lifetime limits. The connection cap alone is not slow-client protection.
+        No timeout configuration is exposed here.
+
+        Limited mode supports HTTP/1.1 WebSocket upgrades and cleartext HTTP/2 prior knowledge
+        (h2c), but does not enable RFC 8441 extended CONNECT for WebSockets over HTTP/2.
 
         `configure(config: server-config) -> application` replaces the address and mounts every configured static directory in list order. It does not resolve or mount configured controller identifiers; resolve those with `server-config.controller-path` and explicitly compose the matching selected API class.
 
@@ -40,6 +71,15 @@ documentation:
         `has-routes() -> bool` is a non-consuming query indicating whether the internal router has registered routes.
 
         `serve() -> async none throws throwable` consumes the application. It binds the configured address, compiles both network policies, installs request checks, then serves until the server terminates. Binding and policy compilation errors propagate as `throwable`; denied requests receive HTTP 403. A direct peer must pass its policy, and the resolved client address must pass its independent policy. Forwarded identity is trusted only from a permitted direct peer when the direct policy is non-permissive; otherwise the TCP peer is the client address. No shutdown handle is returned.
+
+        `serve-listener(bound: /core/networking::tcp-listener) -> async none throws throwable`
+        consumes both the application and an already-bound core listener. It uses that
+        listener without rebinding or consulting `application.address`, and applies the
+        same network policies, middleware, and HTTP serving behavior as `serve`.
+        Bind `127.0.0.1:0` with core `listen-tcp`, read the listener's `local-address`
+        to discover the OS-assigned port, then transfer it with
+        `await app.serve-listener; move listener`. The printed address and served socket
+        are the same; no reserve-and-release port-selection race is needed.
     - type: example
       id: signatures
       title: Public declaration synopsis
@@ -50,14 +90,16 @@ documentation:
       source: |-
         public class application
             address string = '127.0.0.1:3000'
-            consuming function websocket application; path string, handler async function from websocket-session to none throws dependency-error
+            consuming function websocket application; path string, handler async function from websocket-session to none throws throwable
             consuming function static-directory application; prefix string, directory string
             consuming function with-address application; address string
+            consuming function with-connection-limit application; maximum uint32
             consuming function configure application; config server-config
             consuming function allow-direct application; network string
             consuming function allow-client application; network string
             function has-routes bool;
             consuming async function serve none throws throwable;
+            consuming async function serve-listener none throws throwable; bound tcp-listener
       response: null
       diagnostic: null
       markdown: Method bodies and private implementation members are omitted from this declaration synopsis.
