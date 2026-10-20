@@ -9,7 +9,7 @@ from /core/networking import listen-tcp, tcp-listener
 from /core/networking/native import native-socket-address as socket-addr
 from /deps/axum/extract/connect-info import IntoMakeServiceWithConnectInfo as into-make-service-with-connect-info
 from /deps/http import StatusCode as status-code
-from /core/errors import throwable, dependency-error
+from /core/errors import throwable
 from /streaky/http-server/internal import routes
 from /core/collections import list
 
@@ -42,7 +42,7 @@ public class application
             router = router.nest; prefix, move nested
         return instance application; move router, this.address, (move this.policy), (move this.websockets), this.maximum-connections
 
-    consuming function websocket application; path string, handler async function from websocket-session to none throws dependency-error
+    consuming function websocket application; path string, handler async function from websocket-session to none throws throwable
         this.websockets.append; (instance websocket-route; path, handler)
         return this
 

@@ -55,6 +55,8 @@ Use `app = app.with-connection-limit; 64` to bound concurrently accepted TCP con
 
 The limit is implemented in Terrane: a fixed worker group owns the shared core listener, and shared connection lifetimes keep upgraded sessions attached to their workers. Serving requires the `threads` capability for this scheduling path, including when a profile leaves the limit disabled. The limit does not change response payloads, enable streaming, or promise that an allocator returns freed memory to the OS. Request buffers can be freed while RSS remains at a concurrency-induced high-water mark; use allocation profiles alongside RSS when investigating retention.
 
+WebSocket handlers accept an owned session and may throw `throwable`, including concrete native transport errors. The framework isolates failures to that session: an abrupt disconnect ends the callback and releases its connection slot without terminating the HTTP server.
+
 Annotated endpoints are instance methods of selected classes that use the public
 `api` trait. The framework copies each mounted source into a request-local invocation
 and attaches optional request and response contexts to that copy; it never mutates

@@ -69,7 +69,7 @@ documentation:
       source: |-
         public class application
             address string = '127.0.0.1:3000'
-            consuming function websocket application; path string, handler async function from websocket-session to none throws dependency-error
+            consuming function websocket application; path string, handler async function from websocket-session to none throws throwable
             consuming function static-directory application; prefix string, directory string
             consuming function with-address application; address string
             consuming function with-connection-limit application; maximum uint32

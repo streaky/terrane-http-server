@@ -2,7 +2,6 @@ namespace tests/http-server/routing
 
 from /streaky/http-server import application, controller, websocket-session, create-application, parse-config-yaml
 from /streaky/http-server/internal import routes, http-method, incoming-request, wire-response, encoded-response
-from /core/errors import dependency-error
 from /core/testing import assert-equal-bool, assert-equal-string
 
 class site implements controller
@@ -25,7 +24,7 @@ class api implements controller
     async function health wire-response; _request incoming-request
         return encoded-response; 200, 'text/plain', 'ok'
 
-async function ignore-session none throws dependency-error; _session websocket-session
+async function ignore-session none; _session websocket-session
     return none
 
 function test-empty-application-has-no-routes;

@@ -46,7 +46,7 @@ from /streaky/http-server/annotations import endpoint, route-group
 from /streaky/http-server import api as http-api, create-application, websocket-session
 from /generated/http-server import mount-annotated
 from /core/networking import listen-tcp
-from /core/errors import throwable, dependency-error
+from /core/errors import throwable
 from /core/process import arguments
 
 @[route-group; prefix = '/proxy']
@@ -73,7 +73,7 @@ class proxy-api uses http-api
             return trusted + '|' + client + '|' + scheme + '|' + url
         return 'missing'
 
-async function echo-session none throws dependency-error; session websocket-session
+async function echo-session none throws throwable; session websocket-session
     message = await session.receive;
     if message.kind == 'text'
         text = message.text
@@ -284,6 +284,15 @@ main
         with socket.create_connection(("127.0.0.1", port), timeout=5) as malformed:
             malformed.sendall(b"not http\r\n\r\n")
             self.assertTrue(malformed.recv(4096).startswith(b"HTTP/1.1 400 "))
+        response(request(close=True))
+
+        # An abrupt WebSocket EOF is a native transport throwable, not necessarily
+        # dependency-error. It must release its slot without killing the server.
+        abrupt, _, response_bytes = self.websocket_handshake(port=port)
+        self.assertTrue(response_bytes.startswith(b"HTTP/1.1 101 "), response_bytes)
+        self.send_frame(abrupt, 1, b"abrupt")
+        self.assertEqual(self.read_frame(abrupt), (1, b"echo:abrupt"))
+        abrupt.close()
         response(request(close=True))
 
 
