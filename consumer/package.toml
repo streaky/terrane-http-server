@@ -7,6 +7,9 @@ http-server-consumer = "src"
 [terrane-dependencies.terrane.annotation-consumer-protocol]
 path = "../../../tools/annotation-consumers/protocol"
 
+[terrane-dependencies.terrane.consumer-cache]
+path = "../../../tools/annotation-consumers/cache"
+
 [terrane-dependencies.streaky.template]
 path = "../../template"
 
@@ -14,7 +17,7 @@ path = "../../template"
 path = ".."
 
 [consumers.template]
-command = "../../template/.trn/consumers/template"
+tool = "streaky/template::template"
 args = [
     "--namespace", "generated/template/http-server-consumer",
     "--root", "templates",

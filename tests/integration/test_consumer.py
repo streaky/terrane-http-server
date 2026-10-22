@@ -1,6 +1,6 @@
 """Consumer diagnostics through real Terrane package preparation.
 
-Run after build-consumer.sh: python packages/http-server/tests/integration/test_consumer.py
+Run: python packages/http-server/tests/integration/test_consumer.py
 """
 from pathlib import Path
 import http.client
@@ -20,7 +20,8 @@ import yaml
 PACKAGE = Path(__file__).resolve().parents[2]
 ROOT = PACKAGE.parents[1]
 COMPILER = Path(os.environ.get("TERRANE", ROOT / "target/release/terrane"))
-CONSUMER = PACKAGE / ".trn/consumers/http-server"
+# Includes first-use HTTP and nested template host-tool builds.
+COMPILER_TIMEOUT = 600
 
 
 class ConsumerDiagnosticsTests(unittest.TestCase):
@@ -47,8 +48,8 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
             'http-annotation-test = "src"',
             '[terrane-dependencies.streaky.http-server]',
             f'path = "{os.path.relpath(PACKAGE, self.directory)}"',
-            '[consumers.http-server]',
-            f'command = "{os.path.relpath(CONSUMER, self.directory)}"',
+            '[consumers.http]',
+            'tool = "streaky/http-server::http"',
             'declarations = [' + ', '.join(f'"/http-annotation-test::{name}"' for name in selections) + ']',
         ])
         (self.directory / "package.toml").write_text(manifest)
@@ -60,7 +61,7 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
         )
         source_path = self.directory / "src/main.trn"
         source_path.write_text(written)
-        result = subprocess.run([str(COMPILER), "check", str(self.directory)], capture_output=True, text=True, timeout=300)
+        result = subprocess.run([str(COMPILER), "check", str(self.directory)], capture_output=True, text=True, timeout=COMPILER_TIMEOUT)
         self.assertNotEqual(result.returncode, 0, result.stdout)
         self.assertIn(code, result.stderr)
         if code == "S2061":
@@ -216,8 +217,8 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
             'http-annotation-test = "src"',
             '[terrane-dependencies.streaky.http-server]',
             f'path = "{os.path.relpath(PACKAGE, self.directory)}"',
-            '[consumers.http-server]',
-            f'command = "{os.path.relpath(CONSUMER, self.directory)}"',
+            '[consumers.http]',
+            'tool = "streaky/http-server::http"',
             'declarations = ["/http-annotation-test::api", "/http-annotation-test::api::value"]',
         ]))
         title = 'Café "catalog" \\ API'
@@ -258,7 +259,7 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
                 )
                 (self.directory / "src/main.trn").write_text(source)
                 built = subprocess.run([str(COMPILER), "build", str(self.directory)],
-                    capture_output=True, text=True, timeout=300)
+                    capture_output=True, text=True, timeout=COMPILER_TIMEOUT)
                 self.assertEqual(built.returncode, 0, built.stderr)
                 with socket.socket() as reservation:
                     reservation.bind(("127.0.0.1", 0))
@@ -314,8 +315,8 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
             'http-annotation-test = "src"',
             '[terrane-dependencies.streaky.http-server]',
             f'path = "{os.path.relpath(PACKAGE, self.directory)}"',
-            '[consumers.http-server]',
-            f'command = "{os.path.relpath(CONSUMER, self.directory)}"',
+            '[consumers.http]',
+            'tool = "streaky/http-server::http"',
             'declarations = [' + ', '.join(json.dumps("/http-annotation-test::" + name)
                 for name in declarations) + ']',
         ]))
@@ -592,7 +593,7 @@ async function main throws throwable;
 
 main
 """)
-        build = subprocess.run([str(COMPILER), "build", str(self.directory)], capture_output=True, text=True, timeout=300)
+        build = subprocess.run([str(COMPILER), "build", str(self.directory)], capture_output=True, text=True, timeout=COMPILER_TIMEOUT)
         self.assertEqual(build.returncode, 0, build.stderr)
         with socket.socket() as reservation:
             reservation.bind(("127.0.0.1", 0))

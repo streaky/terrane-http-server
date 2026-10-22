@@ -8,7 +8,7 @@ The [documentation publication](docs/src/manual.yaml) contains the [general docu
 
 The [annotation guide](docs/src/records/guides/annotations.yaml) describes the package's explicit native Terrane consumer. `endpoint`, `path`, `query`, and `body` metadata generate class-based route adapters, typed scalar and JSON model-body extraction, negotiated JSON/YAML/XML or HTML/text responses, and OpenAPI 3.1 JSON. `route-group` supplies a class mount prefix, schema inclusion, enabled response formats, and their default. Omitting formats preserves JSON-only behavior that ignores `Accept`; an explicit nonempty format list opts into negotiation. Repeatable `static-directory` metadata mounts cwd-relative assets. Signatures determine types and query defaults; malformed inputs return 422, and explicit negotiation returns 406 when no enabled response format is acceptable. Ordinary safe async handlers may throw `throwable`; handler and render failures return HTTP 500.
 
-The [catalog demo](demo/README.md) exercises these capabilities with typed catalog models, AOT template-backed HTML pages, static Stoplight Elements docs, and a prefixed `/api` with OpenAPI at `/api/openapi.json`. Build both native consumers first with `sh packages/http-server/build-consumer.sh`, then build or run the demo through Terrane.
+The [catalog demo](demo/README.md) exercises these capabilities with typed catalog models, AOT template-backed HTML pages, static Stoplight Elements docs, and a prefixed `/api` with OpenAPI at `/api/openapi.json`. Build or run the demo directly through Terrane; its declared consumers are built automatically.
 
 WebSocket upgrades remain publicly authorable with `app = app.websocket; '/events', handler`.
 The asynchronous callback receives a `websocket-session`; ordinary HTTP endpoints stay
@@ -18,15 +18,22 @@ complete example, upgrade access-policy behavior, and `Close` versus `closed` ev
 ## Build prerequisites
 
 The compiler must support canonical `owner/package` Terrane dependency identities
-(including dotted manifest keys), core `listen-tcp`, and consuming native TCP
-handoff. Older compilers with dependency-alias tables cannot load these manifests.
-Keep the sibling `streaky/template` checkout's consumer manifests and protocol
-imports aligned with `/terrane/annotation-consumer-protocol`; the HTTP consumer
-build depends on that migration as well. Build the selected compiler first, then
-run `build-consumer.sh`, which builds the template consumer before the HTTP consumer
-using the same `TERRANE` executable. Ship the compiler support and template migration
-before this package; a successful build using uncommitted sibling changes is not
-evidence that the package can be merged independently.
+(including dotted manifest keys), `[consumer-tools]` exports, consumer selection via
+`tool = "owner/package::name"`, core `listen-tcp`, and consuming native TCP handoff.
+Consumer freshness caching uses the `preparation` request context, including the
+compiler-provided state directory and executable identity. Older compilers without
+these manifest features cannot load the package.
+
+The exported tools currently expect the compiler checkout layout: keep this package
+at `packages/http-server` beside `packages/template`, with the helper packages at
+`tools/annotation-consumers/protocol` and `tools/annotation-consumers/cache`.
+Both consumers use relative path dependencies on these helpers. Copying the HTTP
+package alone or installing it as a standalone Git/source archive does not supply
+the helper sources needed to build its exported tool. Keep sibling consumer
+manifests and protocol imports aligned with `/terrane/annotation-consumer-protocol`.
+Build the application normally; Terrane builds the selected template tool before
+the HTTP consumer and then prepares the caller. There is no separate consumer
+bootstrap step.
 
 Projection state is disposable compiler-generated cache under `.trn/projection-cache.json`,
 not a package-root lockfile to commit or refresh. Keep `terrane-dependencies.lock` committed:
@@ -41,9 +48,9 @@ encoder/decoder blocks. Metadata validation and schema construction remain in Te
 as do the hand-assembled per-operation adapter bodies, model import headers,
 floating-point codecs, and per-field kind checks. The
 [annotation guide](docs/src/records/guides/annotations.yaml) explains these rendering
-and quoting boundaries. `build-consumer.sh` builds the template consumer first and
-embeds the templates in the HTTP consumer; its installed executable does not need
-template files at runtime.
+and quoting boundaries. The package-owned HTTP consumer tool declares the template
+tool dependency; Terrane builds nested tools automatically. Compiled renderers are
+embedded in the HTTP consumer, which needs no template files at runtime.
 
 ## Application model
 

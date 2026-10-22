@@ -10,7 +10,6 @@ if [ ! -x "$compiler" ]; then
     exit 1
 fi
 
-sh "$root/packages/http-server/build-consumer.sh"
 artifact=$("$compiler" build "$demo/package.toml")
 case "$artifact" in
     /*) ;;

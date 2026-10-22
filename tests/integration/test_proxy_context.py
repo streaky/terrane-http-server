@@ -23,7 +23,8 @@ from pathlib import Path
 PACKAGE = Path(__file__).resolve().parents[2]
 ROOT = PACKAGE.parents[1]
 COMPILER = Path(os.environ.get("TERRANE", ROOT / "target/release/terrane"))
-CONSUMER = PACKAGE / ".trn/consumers/http-server"
+# Includes first-use HTTP and nested template host-tool builds.
+COMPILER_TIMEOUT = 600
 
 
 class ProxyContextIntegrationTests(unittest.TestCase):
@@ -42,8 +43,8 @@ class ProxyContextIntegrationTests(unittest.TestCase):
             '"http-proxy-context-test" = "src"',
             '[terrane-dependencies.streaky.http-server]',
             f'path = "{os.path.relpath(PACKAGE, cls.directory)}"',
-            '[consumers.http-server]',
-            f'command = "{os.path.relpath(CONSUMER, cls.directory)}"',
+            '[consumers.http]',
+            'tool = "streaky/http-server::http"',
             'declarations = ["/http-proxy-context-test::proxy-api", '
             '"/http-proxy-context-test::proxy-api::inspect"]',
             '',
@@ -117,7 +118,7 @@ main
 """
         (cls.directory / "src/main.trn").write_text(source)
         built = subprocess.run([str(COMPILER), "build", str(cls.directory)],
-            capture_output=True, text=True, timeout=300)
+            capture_output=True, text=True, timeout=COMPILER_TIMEOUT)
         if built.returncode != 0:
             raise RuntimeError(built.stderr)
         cls.binary = built.stdout.strip().splitlines()[-1]

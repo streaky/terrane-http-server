@@ -5,6 +5,9 @@ rust-toolchain = "pinned"
 [namespaces]
 "streaky/http-server" = "src"
 
+[consumer-tools]
+http = "consumer/package.toml"
+
 [rust-dependencies.axum]
 version = "=0.8.9"
 features = ["ws"]
