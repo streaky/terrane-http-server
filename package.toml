@@ -1,11 +1,12 @@
 package = "streaky/http-server"
 artifact = "library"
 rust-toolchain = "pinned"
-[consumer-tools]
-http = "consumer/package.toml"
 
 [namespaces]
 "streaky/http-server" = "src"
+
+[consumer-tools]
+http = "consumer/package.toml"
 
 [rust-dependencies.axum]
 version = "=0.8.9"

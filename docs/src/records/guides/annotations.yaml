@@ -19,11 +19,11 @@ documentation:
     - type: markdown
       markdown: |-
         HTTP annotations are ordinary typed declaration metadata. They do not register routes
-        merely by appearing in source. Build the package's native consumer and configure it
-        explicitly in the application manifest. The compiler passes selected canonical
-        declaration metadata to that executable and checks its generated Terrane source through
-        the ordinary package pipeline. No HTTP-specific compiler behavior or runtime source
-        reflection is involved.
+        merely by appearing in source. Declare the package's HTTP consumer tool explicitly
+        in the application manifest; Terrane builds it automatically. The compiler passes
+        selected canonical declaration metadata to that executable and checks its generated
+        Terrane source through the ordinary package pipeline. No HTTP-specific compiler
+        behavior or runtime source reflection is involved.
 
         Annotated endpoints are instance methods of a selected `route-group` class that
         declares `uses api`; free functions and static methods are not endpoint handlers.

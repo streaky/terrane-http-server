@@ -20,6 +20,8 @@ import yaml
 PACKAGE = Path(__file__).resolve().parents[2]
 ROOT = PACKAGE.parents[1]
 COMPILER = Path(os.environ.get("TERRANE", ROOT / "target/release/terrane"))
+# Includes first-use HTTP and nested template host-tool builds.
+COMPILER_TIMEOUT = 600
 
 
 class ConsumerDiagnosticsTests(unittest.TestCase):
@@ -59,7 +61,7 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
         )
         source_path = self.directory / "src/main.trn"
         source_path.write_text(written)
-        result = subprocess.run([str(COMPILER), "check", str(self.directory)], capture_output=True, text=True, timeout=300)
+        result = subprocess.run([str(COMPILER), "check", str(self.directory)], capture_output=True, text=True, timeout=COMPILER_TIMEOUT)
         self.assertNotEqual(result.returncode, 0, result.stdout)
         self.assertIn(code, result.stderr)
         if code == "S2061":
@@ -257,7 +259,7 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
                 )
                 (self.directory / "src/main.trn").write_text(source)
                 built = subprocess.run([str(COMPILER), "build", str(self.directory)],
-                    capture_output=True, text=True, timeout=300)
+                    capture_output=True, text=True, timeout=COMPILER_TIMEOUT)
                 self.assertEqual(built.returncode, 0, built.stderr)
                 with socket.socket() as reservation:
                     reservation.bind(("127.0.0.1", 0))
@@ -591,7 +593,7 @@ async function main throws throwable;
 
 main
 """)
-        build = subprocess.run([str(COMPILER), "build", str(self.directory)], capture_output=True, text=True, timeout=300)
+        build = subprocess.run([str(COMPILER), "build", str(self.directory)], capture_output=True, text=True, timeout=COMPILER_TIMEOUT)
         self.assertEqual(build.returncode, 0, build.stderr)
         with socket.socket() as reservation:
             reservation.bind(("127.0.0.1", 0))

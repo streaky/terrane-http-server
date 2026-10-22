@@ -18,12 +18,22 @@ complete example, upgrade access-policy behavior, and `Close` versus `closed` ev
 ## Build prerequisites
 
 The compiler must support canonical `owner/package` Terrane dependency identities
-(including dotted manifest keys), core `listen-tcp`, and consuming native TCP
-handoff. Older compilers with dependency-alias tables cannot load these manifests.
-Keep the sibling `streaky/template` checkout's consumer manifests and protocol
-imports aligned with `/terrane/annotation-consumer-protocol`. Package composition
-automatically builds the selected template tool before the HTTP consumer. The package
-and its dependencies must be available to the compiler as declared dependencies.
+(including dotted manifest keys), `[consumer-tools]` exports, consumer selection via
+`tool = "owner/package::name"`, core `listen-tcp`, and consuming native TCP handoff.
+Consumer freshness caching uses the `preparation` request context, including the
+compiler-provided state directory and executable identity. Older compilers without
+these manifest features cannot load the package.
+
+The exported tools currently expect the compiler checkout layout: keep this package
+at `packages/http-server` beside `packages/template`, with the helper packages at
+`tools/annotation-consumers/protocol` and `tools/annotation-consumers/cache`.
+Both consumers use relative path dependencies on these helpers. Copying the HTTP
+package alone or installing it as a standalone Git/source archive does not supply
+the helper sources needed to build its exported tool. Keep sibling consumer
+manifests and protocol imports aligned with `/terrane/annotation-consumer-protocol`.
+Build the application normally; Terrane builds the selected template tool before
+the HTTP consumer and then prepares the caller. There is no separate consumer
+bootstrap step.
 
 Projection state is disposable compiler-generated cache under `.trn/projection-cache.json`,
 not a package-root lockfile to commit or refresh. Keep `terrane-dependencies.lock` committed:

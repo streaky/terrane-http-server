@@ -23,13 +23,13 @@ from pathlib import Path
 PACKAGE = Path(__file__).resolve().parents[2]
 ROOT = PACKAGE.parents[1]
 COMPILER = Path(os.environ.get("TERRANE", ROOT / "target/release/terrane"))
+# Includes first-use HTTP and nested template host-tool builds.
+COMPILER_TIMEOUT = 600
 
 
 class ProxyContextIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        subprocess.run([str(COMPILER), "build", str(PACKAGE / "consumer/package.toml")],
-            check=True, capture_output=True, text=True, timeout=600)
         cls.workspace = tempfile.TemporaryDirectory(prefix="http-proxy-context-")
         cls.addClassCleanup(cls.workspace.cleanup)
         cls.directory = Path(cls.workspace.name)
@@ -118,7 +118,7 @@ main
 """
         (cls.directory / "src/main.trn").write_text(source)
         built = subprocess.run([str(COMPILER), "build", str(cls.directory)],
-            capture_output=True, text=True, timeout=300)
+            capture_output=True, text=True, timeout=COMPILER_TIMEOUT)
         if built.returncode != 0:
             raise RuntimeError(built.stderr)
         cls.binary = built.stdout.strip().splitlines()[-1]

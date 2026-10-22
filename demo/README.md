@@ -182,7 +182,7 @@ no additional WebSocket client library; browser controls are exercised separatel
 
 ## Docker deployment
 
-From the repository root, build the Terrane consumers and demo executable, stage the binary inside the ignored Docker context, then build and start the Compose service:
+From the repository root, build the demo executable (Terrane builds its consumer tools automatically), stage the binary inside the ignored Docker context, then build and start the Compose service:
 
 ```console
 sh packages/http-server/demo/scripts/build-image.sh
@@ -191,7 +191,7 @@ sh packages/http-server/demo/scripts/build-image.sh
 *Side note: `demo/scripts/build-image.sh` exists because Terrane does not yet have an
 OS package. Once OS packages are available, this build workflow will change.*
 
-The script uses the `TERRANE` environment variable when set, otherwise `target/release/terrane`, matching the consumer helper and integration-test default. Build that release compiler first, or export an absolute `TERRANE` path to use the same alternative compiler for every step. It copies the artifact path printed by `terrane build` into `demo/.docker/app`; Docker receives only that prebuilt executable and the demo's `public/` assets. Templates are compiled into the executable, so the image needs neither source templates nor a template runtime root. The image does not contain or run the Terrane compiler. Compose publishes the service on host port `3187` by default; override it with `HTTP_SERVER_PORT`, for example:
+The script uses the `TERRANE` environment variable when set, otherwise `target/release/terrane`, matching the integration-test default. Build that release compiler first, or export an absolute `TERRANE` path to use the same alternative compiler for every step. It copies the artifact path printed by `terrane build` into `demo/.docker/app`; Docker receives only that prebuilt executable and the demo's `public/` assets. Templates are compiled into the executable, so the image needs neither source templates nor a template runtime root. The image does not contain or run the Terrane compiler. Compose publishes the service on host port `3187` by default; override it with `HTTP_SERVER_PORT`, for example:
 
 ```console
 HTTP_SERVER_PORT=8080 sh packages/http-server/demo/scripts/build-image.sh
