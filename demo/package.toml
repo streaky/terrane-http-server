@@ -11,12 +11,12 @@ path = ".."
 path = "../../template"
 
 [consumers.template]
-command = "../../template/.trn/consumers/template"
+tool = "streaky/template::template"
 args = ["--namespace", "generated/template/http-server-demo", "--root", "templates", "--template", "home.html", "--template", "about.html", "--template", "websocket.html"]
 declarations = ["/http-server-demo::main"]
 
-[consumers.http-server]
-command = "../.trn/consumers/http-server"
+[consumers.http]
+tool = "streaky/http-server::http"
 declarations = [
   "/http-server-demo::item-response",
   "/http-server-demo::item-response::id",

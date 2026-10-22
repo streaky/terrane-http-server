@@ -1,6 +1,6 @@
 """Consumer diagnostics through real Terrane package preparation.
 
-Run after build-consumer.sh: python packages/http-server/tests/integration/test_consumer.py
+Run: python packages/http-server/tests/integration/test_consumer.py
 """
 from pathlib import Path
 import http.client
@@ -20,7 +20,6 @@ import yaml
 PACKAGE = Path(__file__).resolve().parents[2]
 ROOT = PACKAGE.parents[1]
 COMPILER = Path(os.environ.get("TERRANE", ROOT / "target/release/terrane"))
-CONSUMER = PACKAGE / ".trn/consumers/http-server"
 
 
 class ConsumerDiagnosticsTests(unittest.TestCase):
@@ -47,8 +46,8 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
             'http-annotation-test = "src"',
             '[terrane-dependencies.streaky.http-server]',
             f'path = "{os.path.relpath(PACKAGE, self.directory)}"',
-            '[consumers.http-server]',
-            f'command = "{os.path.relpath(CONSUMER, self.directory)}"',
+            '[consumers.http]',
+            'tool = "streaky/http-server::http"',
             'declarations = [' + ', '.join(f'"/http-annotation-test::{name}"' for name in selections) + ']',
         ])
         (self.directory / "package.toml").write_text(manifest)
@@ -216,8 +215,8 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
             'http-annotation-test = "src"',
             '[terrane-dependencies.streaky.http-server]',
             f'path = "{os.path.relpath(PACKAGE, self.directory)}"',
-            '[consumers.http-server]',
-            f'command = "{os.path.relpath(CONSUMER, self.directory)}"',
+            '[consumers.http]',
+            'tool = "streaky/http-server::http"',
             'declarations = ["/http-annotation-test::api", "/http-annotation-test::api::value"]',
         ]))
         title = 'Café "catalog" \\ API'
@@ -314,8 +313,8 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
             'http-annotation-test = "src"',
             '[terrane-dependencies.streaky.http-server]',
             f'path = "{os.path.relpath(PACKAGE, self.directory)}"',
-            '[consumers.http-server]',
-            f'command = "{os.path.relpath(CONSUMER, self.directory)}"',
+            '[consumers.http]',
+            'tool = "streaky/http-server::http"',
             'declarations = [' + ', '.join(json.dumps("/http-annotation-test::" + name)
                 for name in declarations) + ']',
         ]))

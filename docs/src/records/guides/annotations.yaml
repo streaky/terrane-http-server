@@ -127,12 +127,10 @@ documentation:
       blocks:
         - type: markdown
           markdown: |-
-            Run `sh packages/http-server/build-consumer.sh` from the repository root; it builds
-            and stages the native HTTP and template consumers. The HTTP executable is at
-            `.trn/consumers/http-server`; configure its command relative to the application
-            package directory. Select every handler and each of its parameter declarations;
-            parameter identities append `::parameter-name` to the callable identity. The
-            command is trusted executable code, not a sandbox.
+            Declare the HTTP consumer tool in the application manifest; Terrane builds it
+            automatically from the package-owned tool export. Select every handler and each
+            of its parameter declarations; parameter identities append `::parameter-name` to
+            the callable identity. Consumer tools are trusted executable code, not a sandbox.
         - type: example
           id: consumer-manifest
           title: Manifest for an application beside the HTTP package
@@ -141,11 +139,11 @@ documentation:
           target: null
           timeout-ms: null
           source: |-
-            [terrane-dependencies]
-            http-server = { path = "../http-server" }
+            [terrane-dependencies.streaky.http-server]
+            path = "../http-server"
 
-            [consumers.http-server]
-            command = "../http-server/.trn/consumers/http-server"
+            [consumers.http]
+            tool = "streaky/http-server::http"
             declarations = [
               "/catalog::read-item",
               "/catalog::read-item::item-id",
@@ -199,7 +197,7 @@ documentation:
             API information belongs to the single generated OpenAPI document, not separately
             to each route group. At most one selected declaration may carry this annotation;
             multiple owners produce a consumer diagnostic rather than depending on selection
-            order. Remember to include the owning declaration in `[consumers.http-server]`'s
+            order. Remember to include the owning declaration in `[consumers.http]`'s
             `declarations` list. The catalog demo annotates its already-selected API class.
     - id: metadata
       title: Metadata and validation
@@ -420,10 +418,10 @@ documentation:
             covers skeletons and selected branches, not all multiline generated source.
 
             `consumer/package.toml` explicitly selects these `.trn.tpl` entries for AOT
-            compilation. `build-consumer.sh` builds the template consumer before building the
-            HTTP consumer. The installed HTTP consumer contains compiled renderers and needs
-            no template directory or runtime template parsing; annotated applications likewise
-            need no code-generation template files.
+            compilation. The HTTP consumer declares the template tool as a dependency;
+            Terrane builds nested tools automatically. The installed HTTP consumer contains
+            compiled renderers and needs no template directory or runtime template parsing;
+            annotated applications likewise need no code-generation template files.
 
             Each generation request creates one compiled engine and shares it by reference
             across its fragments. The rendering boundary supplies an independent named
