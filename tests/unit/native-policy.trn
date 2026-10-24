@@ -2,7 +2,7 @@ namespace streaky/http-server
 
 from /deps/ipnet import IpAddr as ip-addr, Ipv4Addr as ipv4-addr, Ipv6Addr as ipv6-addr
 from /core/collections import list
-from /core/errors import dependency-error
+from /core/errors import throwable
 from /core/testing import assert-equal-bool
 
 function ipv4 ip-addr; a int, b int, c int, d int
@@ -13,7 +13,7 @@ function ipv6 ip-addr; a int, b int, c int, d int, e int, f int, g int, h int
     address ipv6-addr = ipv6-addr::new; a, b, c, d, e, f, g, h
     return ip-addr::V6; address
 
-function test-projected-core-ip-values-drive-network-policy;
+function test-projected-core-ip-values-drive-network-policy throws throwable;
     try
         networks list of string = list; '192.0.2.0/24', '2001:db8::/32', '203.0.113.9', '2001:db9::7'
         policy network-policy = compile-network-policy; move networks
@@ -24,12 +24,21 @@ function test-projected-core-ip-values-drive-network-policy;
         assert-equal-bool; (policy.permits; (ipv6; 8193, 3512, 0, 0, 0, 0, 0, 68)), true
         assert-equal-bool; (policy.permits; (ipv6; 8193, 3513, 0, 0, 0, 0, 0, 7)), true
         assert-equal-bool; (policy.permits; (ipv6; 8193, 3513, 0, 0, 0, 0, 0, 1)), false
-    catch dependency-error
+    catch throwable
         assert-equal-bool; false, true
 
-function test-empty-network-policy-permits-direct-clients;
+function test-empty-network-policy-permits-direct-clients throws throwable;
     networks list of string = list;
     policy = compile-network-policy; move networks
     assert-equal-bool; (policy.permits; (ipv4; 127, 0, 0, 1)), true
     assert-equal-bool; (policy.permits; (ipv6; 0, 0, 0, 0, 0, 0, 0, 1)), true
+
+function test-invalid-network-policy-fails-during-compilation throws throwable;
+    rejected = false
+    try
+        networks list of string = list; 'not-an-address'
+        compile-network-policy; move networks
+    catch throwable
+        rejected = true
+    assert-equal-bool; rejected, true
 

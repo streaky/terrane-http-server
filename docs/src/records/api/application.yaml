@@ -71,6 +71,10 @@ documentation:
         `has-routes() -> bool` is a non-consuming query indicating whether the internal router has registered routes.
 
         `serve() -> async none throws throwable` consumes the application. It binds the configured address, compiles both network policies, installs request checks, then serves until the server terminates. Binding and policy compilation errors propagate as `throwable`; denied requests receive HTTP 403. A direct peer must pass its policy, and the resolved client address must pass its independent policy. Forwarded identity is trusted only from a permitted direct peer when the direct policy is non-permissive; otherwise the TCP peer is the client address. No shutdown handle is returned.
+        Policy parsing retains its native error identity within the `throwable`
+        contract; it is not narrowed or normalized to `dependency-error`. A broad
+        catch needs no native import, while selective handling requires the parser's
+        native error descriptor.
 
         `serve-listener(bound: /core/networking::tcp-listener) -> async none throws throwable`
         consumes both the application and an already-bound core listener. It uses that
