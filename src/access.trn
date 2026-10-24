@@ -6,7 +6,7 @@ from /core/networking/native import native-socket-address as socket-addr
 from /deps/axum/extract import ConnectInfo as connect-info
 from /deps/axum-core/extract import Request as native-request
 from /core/collections import list
-from /core/errors import dependency-error
+from /core/errors import throwable
 
 class proxy-request-metadata
     private client ip-addr|none
@@ -97,7 +97,7 @@ class network-policy
             index = index + 1
         return false
 
-function compile-network-policy network-policy throws dependency-error; networks list of string
+function compile-network-policy network-policy throws throwable; networks list of string
     parsed list of ip-net = list;
     index int = 0
     while index < networks.length
