@@ -18,10 +18,10 @@ function context-with-forwarding request-context; forwarded string, legacy strin
     request-body = native-body::empty;
     built = builder.body; move request-body
     native = trust-test-request; move built, trusted
-    return capture-request-context; ref native, '/metadata'
+    return capture-request-context; native, '/metadata'
 
 private function trust-test-request native-request; request native-request, trusted bool
-    install-proxy-metadata; ref request, none, trusted
+    install-proxy-metadata; request, none, trusted
     return move request
 
 function test-forwarded-scheme-respects-trust-and-standard-precedence;
@@ -49,7 +49,7 @@ function test-undecodable-rightmost-legacy-scheme-fails-closed;
         request.headers_mut().append("x-forwarded-proto", ::http::HeaderValue::from_bytes(b"\xff").unwrap());
         request
     native = trust-test-request; move built, true
-    context = capture-request-context; ref native, '/metadata'
+    context = capture-request-context; native, '/metadata'
     assert-equal-bool; (context.scheme;) == none, true
 
 function test-trusted-forwarding-without-scheme-is-unknown;
@@ -67,7 +67,7 @@ function test-unrelated-bool-and-ip-extensions-do-not-collide;
     spoof ip-addr = ip-addr::from_str; '192.0.2.99'
     (built.extensions_mut;).insert; spoof
     native = trust-test-request; move built, false
-    context = capture-request-context; ref native, '/'
+    context = capture-request-context; native, '/'
     assert-equal-bool; (context.via-trusted-proxy;) == false, true
     assert-equal-bool; (context.client-ip;) == none, true
 
@@ -78,7 +78,7 @@ function test-request-snapshot-retains-invalid-bytes-without-fabricating-text;
         request.headers_mut().append("x-tag", ::http::HeaderValue::from_bytes(b"\xff").unwrap());
         request.headers_mut().append("x-tag", ::http::HeaderValue::from_static("last"));
         request
-    context = capture-request-context; ref native, '/metadata'
+    context = capture-request-context; native, '/metadata'
     values = context.header-values; 'X-Tag'
     assert-equal-int; values.length, 2
     assert-equal-string; values[0], 'first'
@@ -98,11 +98,11 @@ function test-header-snapshot-owns-values-and-detaches-accessor-results;
         request.headers_mut().append("x-tag", ::http::HeaderValue::from_bytes("café".as_bytes()).unwrap());
         request.headers_mut().append("x-tag", ::http::HeaderValue::from_static("last"));
         request
-    original = capture-request-context; ref native, '/'
+    original = capture-request-context; native, '/'
     key = native-header-name::from_str; 'x-tag'
     value = native-header-value::from_str; 'changed'
     (native.headers_mut;).insert; key, value
-    successor = capture-request-context; ref native, '/'
+    successor = capture-request-context; native, '/'
     first = original.header-value; 'X-TAG'
     assert-equal-bool; first != none, true
     if first != none

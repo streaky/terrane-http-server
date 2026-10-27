@@ -15,19 +15,19 @@ function identity-test-request native-request; forwarded string|none, legacy str
 function test-untrusted-forwarded-identity-is-ignored;
     request = identity-test-request; 'for=192.0.2.44', none
     peer = ip-addr::from_str; '127.0.0.1'
-    client = resolve-client-address; ref request, peer, false
+    client = resolve-client-address; request, peer, false
     assert-forwarded-address; client, '127.0.0.1/32'
 
 function test-trusted-proxy-resolves-client-without-client-allowlist;
     request = identity-test-request; 'for=192.0.2.44', none
     peer = ip-addr::from_str; '127.0.0.1'
-    client = resolve-client-address; ref request, peer, true
+    client = resolve-client-address; request, peer, true
     assert-forwarded-address; client, '192.0.2.44/32'
-    install-proxy-metadata; ref request, client, true
-    assert-forwarded-address; (client-address; ref request), '192.0.2.44/32'
+    install-proxy-metadata; request, client, true
+    assert-forwarded-address; (client-address; request), '192.0.2.44/32'
 
 function test-trusted-proxy-missing-identity-does-not-become-peer;
     request = identity-test-request; none, none
     peer = ip-addr::from_str; '127.0.0.1'
-    client = resolve-client-address; ref request, peer, true
+    client = resolve-client-address; request, peer, true
     assert-equal-bool; client == none, true

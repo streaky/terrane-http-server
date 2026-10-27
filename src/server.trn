@@ -92,7 +92,7 @@ public class application
         client-policy network-policy = compile-network-policy; this.policy.client-addresses
         websockets = move this.websockets
         # Compose and validate all routes before either accept path starts.
-        router = install-websockets; router, (ref websockets)
+        router = install-websockets; router, websockets
         router = apply-access-policy; router, direct-policy, client-policy
         if this.maximum-connections > 0
             await serve-limited; move bound, router, this.maximum-connections
@@ -108,17 +108,17 @@ public function create-application application;
 
 private function apply-access-policy native-router; router native-router, direct-policy network-policy, client-policy network-policy
     middleware = async function native-response; request native-request, next middleware-next
-        direct = direct-address; ref request
+        direct = direct-address; request
         direct-allowed bool = false
         if direct != none
             direct-allowed = direct-policy.permits; direct
         trust-forwarded bool = direct-allowed and not (direct-policy.is-permissive;)
-        client = resolve-client-address; ref request, direct, trust-forwarded
+        client = resolve-client-address; request, direct, trust-forwarded
         client-allowed bool = client-policy.is-permissive;
         if not client-allowed
             if client != none
                 client-allowed = client-policy.permits; client
-        install-proxy-metadata; ref request, client, trust-forwarded
+        install-proxy-metadata; request, client, trust-forwarded
         if direct-allowed and client-allowed
             return await next.run; request
         return (status-code::FORBIDDEN).into_response;

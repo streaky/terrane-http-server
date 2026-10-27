@@ -34,7 +34,7 @@ function controller-source string throws consumer-error; engine ref template-eng
     values.set; 'source-type', (text-value; source-type)
     values.set; 'operations', (template-list-value; (template-operations; operations, owner))
     values.set; 'documented', (bool-value; documented)
-    return render-code; ref engine, 'http/controller-source.trn.tpl', values
+    return render-code; engine, 'http/controller-source.trn.tpl', values
 
 class operation
     path string
@@ -567,8 +567,8 @@ function generate string throws consumer-error; request document-value
             operations.append; current
     generated-values map of string, template-value = map;
     generated-values.set; 'imports', (text-value; imports)
-    generated-values.set; 'model-codecs', (text-value; (model-codecs; ref engine, declarations))
-    generated = render-code; ref engine, 'http/preamble.trn.tpl', generated-values
+    generated-values.set; 'model-codecs', (text-value; (model-codecs; engine, declarations))
+    generated = render-code; engine, 'http/preamble.trn.tpl', generated-values
     paths-entries = instance document-map-entries;
     path-names list of string = list
     for current in operations
@@ -604,15 +604,15 @@ function generate string throws consumer-error; request document-value
     encoded-openapi = encode-document; openapi-value, request
     openapi-values map of string, template-value = map;
     openapi-values.set; 'source', (text-value; (source-quote; encoded-openapi))
-    generated = generated + (render-code; ref engine, 'http/openapi-json.trn.tpl', openapi-values)
+    generated = generated + (render-code; engine, 'http/openapi-json.trn.tpl', openapi-values)
     validation-values map of string, template-value = map;
-    generated = generated + (render-code; ref engine, 'http/validation-response.trn.tpl', validation-values)
+    generated = generated + (render-code; engine, 'http/validation-response.trn.tpl', validation-values)
     for index in (range; 0, groups.length)
         group = groups[index]
         owner = text; (get; group, 'identity')
         metadata = annotation; group, 'route-group', '/streaky/http-server/annotations'
         documented = truth; (scalar; (get; metadata, 'document'))
-        generated = generated + (controller-source; ref engine, 'annotated-group' + index, owner, 'route-source' + index, operations, documented)
+        generated = generated + (controller-source; engine, 'annotated-group' + index, owner, 'route-source' + index, operations, documented)
     generated = generated + '\npublic function mount-annotated application; app application\n'
     for index in (range; 0, groups.length)
         group = groups[index]

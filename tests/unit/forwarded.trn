@@ -6,30 +6,31 @@ from /core/testing import assert-equal-bool
 function assert-forwarded-address; actual ip-addr|none, network string
     if actual != none
         expected = ip-net::from_str; network
-        assert-equal-bool; (expected.contains; ref actual), true
+        borrowed-actual = ref actual
+        assert-equal-bool; (expected.contains; borrowed-actual), true
     else
         assert-equal-bool; false, true
 
 function test-standard-forwarded-precedes-legacy;
     headers = identity-test-request; 'for=192.0.2.44;proto=https', '198.51.100.9'
-    assert-forwarded-address; (parse-forwarded-headers; ref headers), '192.0.2.44/32'
+    assert-forwarded-address; (parse-forwarded-headers; headers), '192.0.2.44/32'
 
 function test-standard-forwarded-selects-rightmost-ipv6;
     headers = identity-test-request; 'for=192.0.2.8, for="[2001:db8::44]:8080"', none
-    assert-forwarded-address; (parse-forwarded-headers; ref headers), '2001:db8::44/128'
+    assert-forwarded-address; (parse-forwarded-headers; headers), '2001:db8::44/128'
 
 function test-legacy-selects-rightmost;
     headers = identity-test-request; none, '192.0.2.8, 198.51.100.9'
-    assert-forwarded-address; (parse-forwarded-headers; ref headers), '198.51.100.9/32'
+    assert-forwarded-address; (parse-forwarded-headers; headers), '198.51.100.9/32'
 
 function test-malformed-standard-does-not-fall-back;
     headers = identity-test-request; 'for=not-an-address', '192.0.2.44'
-    assert-equal-bool; (parse-forwarded-headers; ref headers) == none, true
+    assert-equal-bool; (parse-forwarded-headers; headers) == none, true
 
 function test-missing-for-does-not-fall-back;
     headers = identity-test-request; 'proto=https', '192.0.2.44'
-    assert-equal-bool; (parse-forwarded-headers; ref headers) == none, true
+    assert-equal-bool; (parse-forwarded-headers; headers) == none, true
 
 function test-missing-headers-stay-unresolved;
     headers = identity-test-request; none, none
-    assert-equal-bool; (parse-forwarded-headers; ref headers) == none, true
+    assert-equal-bool; (parse-forwarded-headers; headers) == none, true

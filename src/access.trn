@@ -43,7 +43,7 @@ function native-peer-ip ip-addr; address ref socket-addr
 
 function peer-address ip-addr; peer ref (connect-info of socket-addr)
     payload socket-addr = peer.n0
-    return native-peer-ip; ref payload
+    return native-peer-ip; payload
 
 function direct-address ip-addr|none; request ref native-request
     return (((request.extensions;).get of (connect-info of socket-addr));).map; peer-address
@@ -89,10 +89,11 @@ class network-policy
     function permits bool; address ip-addr
         if this.is-permissive;
             return true
+        borrowed-address = ref address
         index int = 0
         while index < this.networks.length
             network = this.networks[index]
-            if network.contains; ref address
+            if network.contains; borrowed-address
                 return true
             index = index + 1
         return false

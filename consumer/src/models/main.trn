@@ -173,7 +173,7 @@ function model-codecs string throws consumer-error; engine ref template-engine, 
         cls = at; declarations, index
         if (text; (get; cls, 'kind')) == 'class' and not (route-group-class; cls)
             identity = text; (get; cls, 'identity')
-            generated = generated + (codec-for; ref engine, identity, declarations)
+            generated = generated + (codec-for; engine, identity, declarations)
     return generated
 
 # Decimal document text needs the standard finite binary-float parser, not numeric coercion.
@@ -217,14 +217,14 @@ function codec-for string throws consumer-error; engine ref template-engine, kin
     name = model-alias; identity
     values map of string, template-value = map;
     values.set; 'name', (text-value; name)
-    values.set; 'fields', (text-value; (encode-field-fragments; ref engine, fields, declarations))
-    source = render-code; ref engine, 'models/encode-model.trn.tpl', values
+    values.set; 'fields', (text-value; (encode-field-fragments; engine, fields, declarations))
+    source = render-code; engine, 'models/encode-model.trn.tpl', values
     values.set; 'unknown-field-condition', (text-value; (unknown-field-condition; fields))
-    source = source + (render-code; ref engine, 'models/decode-model.trn.tpl', values)
+    source = source + (render-code; engine, 'models/decode-model.trn.tpl', values)
     for ix in (range; 0, (fields.length;))
         field = at; fields, ix
         if (text; (get; field, 'visibility')) == 'public' and not (truth; (get; field, 'static'))
-            source = source + (decode-field; ref engine, field, ix, declarations)
+            source = source + (decode-field; engine, field, ix, declarations)
     return source + '    return value\n\n'
 
 function encode-field-fragments string throws consumer-error; engine ref template-engine, fields document-value, declarations document-value
@@ -232,7 +232,7 @@ function encode-field-fragments string throws consumer-error; engine ref templat
     for ix in (range; 0, (fields.length;))
         field = at; fields, ix
         if (text; (get; field, 'visibility')) == 'public' and not (truth; (get; field, 'static'))
-            source = source + (encode-field; ref engine, field, ix, declarations)
+            source = source + (encode-field; engine, field, ix, declarations)
     return source
 
 function unknown-field-condition string throws consumer-error; fields document-value
@@ -263,8 +263,8 @@ function decode-field string throws consumer-error; engine ref template-engine, 
     values.set; 'member', (text-value; member)
     values.set; 'required', (bool-value; not optional and not (truth; (get; field, 'defaulted')))
     values.set; 'optional', (bool-value; optional)
-    values.set; 'assignment', (text-value; (decode-assignment; ref engine, base, member, index, declarations, field, indent))
-    return render-code; ref engine, 'models/decode-field.trn.tpl', values
+    values.set; 'assignment', (text-value; (decode-assignment; engine, base, member, index, declarations, field, indent))
+    return render-code; engine, 'models/decode-field.trn.tpl', values
 
 function decode-assignment string throws consumer-error; engine ref template-engine, kind string, member string, index int, declarations document-value, field document-value, indent string
     if (kind.contains.start; 'list of ')
@@ -285,7 +285,7 @@ function decode-assignment string throws consumer-error; engine ref template-eng
         values.set; 'item-check', (text-value; item-check)
         values.set; 'item-expression', (text-value; (decode-expression; item, ('item' + index + '.value'), declarations, field))
         values.set; 'member', (text-value; member)
-        return render-code; ref engine, 'models/decode-list-assignment.trn.tpl', values
+        return render-code; engine, 'models/decode-list-assignment.trn.tpl', values
     expected = document-kind; kind
     check = ''
     if expected == 'float'
@@ -319,10 +319,10 @@ function encode-field string throws consumer-error; engine ref template-engine, 
         prefix = '    ' + local + ' = value.' + member + '\n    if ' + local + ' != none\n'
         suffix = '    else\n        entries.append; ' + (source-quote; wire) + ', (make-document-none;)\n'
         if (base.contains.start; 'list of ')
-            return prefix + (encode-list-field; ref engine, base, local, wire, index, declarations, field, '        ') + suffix
+            return prefix + (encode-list-field; engine, base, local, wire, index, declarations, field, '        ') + suffix
         return prefix + '        entries.append; ' + (source-quote; wire) + ', ' + (encode-expression; base, local, declarations, field) + '\n' + suffix
     if (base.contains.start; 'list of ')
-        return (encode-list-field; ref engine, base, ('value.' + member), wire, index, declarations, field, '    ')
+        return (encode-list-field; engine, base, ('value.' + member), wire, index, declarations, field, '    ')
     return '    entries.append; ' + (source-quote; wire) + ', ' + (encode-expression; base, ('value.' + member), declarations, field) + '\n'
 
 function encode-list-field string throws consumer-error; engine ref template-engine, kind string, expression string, wire string, index int, declarations document-value, field document-value, indent string
@@ -334,7 +334,7 @@ function encode-list-field string throws consumer-error; engine ref template-eng
     values.set; 'expression', (text-value; expression)
     values.set; 'item-expression', (text-value; (encode-expression; item, item-expression, declarations, field))
     values.set; 'wire', (text-value; (source-quote; wire))
-    return render-code; ref engine, 'models/encode-list-field.trn.tpl', values
+    return render-code; engine, 'models/encode-list-field.trn.tpl', values
 
 function encode-expression string throws consumer-error; kind string, expression string, declarations document-value, field document-value
     if kind == 'string'
