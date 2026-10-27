@@ -26,7 +26,7 @@ public class routes
 
     consuming function endpoint routes; method http-method, path string, handler async function from incoming-request to wire-response throws throwable, vary-accept bool = false
         callback = async function native-response; request native-request
-            is-head bool = request-is-head; ref request
+            is-head bool = request-is-head; request
             try
                 typed-request = instance incoming-request; move request, path
                 response = typed-request.response-state;

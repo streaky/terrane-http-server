@@ -24,7 +24,7 @@ public class incoming-request
     private response response-context
 
     function construct; request native-request, route-pattern string
-        this.metadata = capture-request-context; ref request, route-pattern
+        this.metadata = capture-request-context; request, route-pattern
         this.response = instance response-context;
         uri = (request.uri;).clone;
         actual-path = uri.path;
@@ -49,8 +49,8 @@ public class incoming-request
         if parsed.failed
             throw coercion-error
         this.query = parsed.value.query
-        if request-has-accept-header; ref request
-            this.accept = request-accept-header; ref request
+        if request-has-accept-header; request
+            this.accept = request-accept-header; request
         this.body = request.into_body;
 
     function context request-context;
@@ -118,7 +118,7 @@ public function into-native-response native-response throws throwable; response 
         values = response.headers.get.checked; 'vary'
         if values != none
             for value in values
-                if header-varies-accept; ref value
+                if header-varies-accept; value
                     covered = true
         if not covered
             additions list of string = list
@@ -133,7 +133,7 @@ public function into-native-response native-response throws throwable; response 
         length int = length-values[0].radix; 10
         if length < 0
             throw coercion-error
-        if not is-head and response.supplied and length != (body-byte-length; ref response.body)
+        if not is-head and response.supplied and length != (body-byte-length; response.body)
             throw coercion-error
     code status-code = status-code::from_u16; response.status
     builder response-builder = response-builder::new;

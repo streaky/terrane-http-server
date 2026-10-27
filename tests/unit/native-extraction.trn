@@ -6,8 +6,8 @@ from /core/testing import assert-equal-bool
 
 function test-missing-native-request-interiors-stay-optional;
     request = native-request::new; (native-body::empty;)
-    direct = direct-address; ref request
-    forwarded = forwarded-address; ref request
+    direct = direct-address; request
+    forwarded = forwarded-address; request
     assert-equal-bool; direct == none, true
     assert-equal-bool; forwarded == none, true
 

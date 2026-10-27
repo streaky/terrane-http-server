@@ -87,13 +87,13 @@ public class request-context
         return this.trusted
 
     function header-bytes list of bytes; name string
-        return read-header-bytes; this.headers, ref name
+        return read-header-bytes; this.headers, name
 
     function header-values list of string; name string
-        return read-header-values; this.headers, ref name
+        return read-header-values; this.headers, name
 
     function header-value string|none; name string
-        return read-header-value; this.headers, ref name
+        return read-header-value; this.headers, name
 
     function cookie-value string|none; name string
         for header in (this.header-values; 'cookie')
