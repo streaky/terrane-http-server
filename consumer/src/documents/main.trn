@@ -1,6 +1,8 @@
 namespace http-server-consumer/documents
 
-from /core/documents import document-value, document-map-entries, make-document-none, make-document-map, make-document-list, make-document-string
+from /core/documents import
+    document-value, document-map-entries, make-document-none,
+    make-document-map, make-document-list, make-document-string
 from /core/documents/json import canonical-json
 from /terrane/annotation-consumer-protocol import consumer-error, get, text
 from /core/collections import list

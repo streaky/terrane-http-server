@@ -11,7 +11,7 @@ function test-missing-native-request-interiors-stay-optional;
     assert-equal-bool; direct == none, true
     assert-equal-bool; forwarded == none, true
 
-function mark-native-header-sensitive bool; header ref header-value
+function mark-native-header-sensitive bool; header mutable ref header-value
     header.set_sensitive; true
     return true
 

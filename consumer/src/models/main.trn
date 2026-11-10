@@ -5,8 +5,11 @@ from /streaky/template import template-engine, template-value, text-value, bool-
 
 from /terrane/annotation-consumer-protocol import get, at, text, truth, annotation, consumer-error
 from /core/collections import list, range, map
-from /core/documents import document-value, document-map-entries, make-document-none, make-document-string, make-document-bool, make-document-map
-from /http-server-consumer/documents import object-value, list-value, type-schema, source-quote, documented-schema
+from /core/documents import
+    document-value, document-map-entries, make-document-none,
+    make-document-string, make-document-bool, make-document-map
+from /http-server-consumer/documents import
+    object-value, list-value, type-schema, source-quote, documented-schema
 from /core/errors import replace-error
 from /http-server-consumer/formats import named-xml-schema
 

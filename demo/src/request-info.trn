@@ -32,16 +32,18 @@ class request-summary
 
 function summarize-request request-summary; request request-context
     result = instance request-summary;
-    result.method = request.method;
-    result.target = request.target;
-    result.path = request.path;
-    result.route-pattern = request.route-pattern;
-    result.http-version = request.http-version;
-    result.scheme = request.scheme;
-    result.authority = request.authority;
-    result.peer-ip = request.peer-ip;
-    result.client-ip = request.client-ip;
-    result.via-trusted-proxy = request.via-trusted-proxy;
-    result.tags = request.header-values; 'x-tag'
-    result.cookie = request.cookie-value; 'demo'
+    result = {
+        method = request.method;
+        target = request.target;
+        path = request.path;
+        route-pattern = request.route-pattern;
+        http-version = request.http-version;
+        scheme = request.scheme;
+        authority = request.authority;
+        peer-ip = request.peer-ip;
+        client-ip = request.client-ip;
+        via-trusted-proxy = request.via-trusted-proxy;
+        tags = request.header-values; 'x-tag'
+        cookie = request.cookie-value; 'demo'
+    }
     return result

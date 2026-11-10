@@ -1,6 +1,8 @@
 namespace http-server-demo
 
-from /streaky/http-server/annotations import endpoint, path, query, body, route-group, request-example, response-example, api-documentation
+from /streaky/http-server/annotations import
+    endpoint, path, query, body, route-group, request-example,
+    response-example, api-documentation
 from /streaky/http-server import api
 from /core/collections import list
 

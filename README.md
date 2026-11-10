@@ -132,7 +132,11 @@ The direct `ConnectInfo<SocketAddr>` lookup and `into_make_service_with_connect_
 
 WebSocket endpoints are handled by the framework's internal route registration. Their asynchronous handlers receive a Terrane `websocket-session`, not an Axum extractor or Rust stream.
 
-`websocket-session.receive` returns a `websocket-event`. Text events carry `event.text`; close, binary, ping, and pong events retain their protocol kind. `send-text` sends a text frame and `close` performs an explicit close. Transport failures use the ordinary `dependency-error` contract. The framework catches a handler's dependency failure after upgrade so one failed session does not terminate the HTTP server.
+`websocket-session.receive` returns a `websocket-event`. Text events carry
+`event.text`; close, binary, ping, and pong events retain their protocol kind.
+`send-text` sends a text frame and `close` performs an explicit close.
+
+`websocket-session.receive`, `send-text`, and `close` may throw `throwable`, including concrete native transport errors. The framework catches handler failures after upgrade so one failed session does not terminate the HTTP server. This does not normalize native failures to `dependency-error`; selectively catching one requires importing its native descriptor, while `catch throwable` remains available.
 
 The current typed payload surface is text-first. Binary event payloads and explicit ping/pong payload APIs remain future additions; non-text events are identified without exposing Axum's message enum.
 

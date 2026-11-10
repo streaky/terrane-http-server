@@ -126,7 +126,8 @@ public function parse-config-yaml config-result; source string
                 static-directories.append; (instance static-mount; path-field.value.scalar, static-field.value.scalar)
             index = index + 1
 
-    config = instance server-config; address
-    config.controllers = controllers
-    config.static-directories = static-directories
+    config = instance server-config; address {
+        controllers = controllers
+        static-directories = static-directories
+    }
     return instance config-result; false, '', config
