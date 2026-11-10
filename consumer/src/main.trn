@@ -1,16 +1,28 @@
 namespace http-server-consumer
 
-from /terrane/annotation-consumer-protocol import get, at, text, truth, scalar, annotation, read-request, emit-source, emit-error, error-origin, consumer-error
+from /terrane/annotation-consumer-protocol import
+    get, at, text, truth, scalar, annotation, read-request,
+    emit-source, emit-error, error-origin, consumer-error
 from /terrane/consumer-cache import source-cache
 from /core/collections import list, range, map
-from /core/documents import document-value, document-map-entries, make-document-none, make-document-string, make-document-bool, make-document-integer
+from /core/documents import
+    document-value, document-map-entries, make-document-none,
+    make-document-string, make-document-bool, make-document-integer
 from /core/errors import replace-error
 from /http-server-consumer/rendering import make-code-engine, render-code
-from /streaky/template import template-engine, template-value, text-value, bool-value, list-value as template-list-value, object-value as template-object-value
-from /http-server-consumer/documents import object-value, list-value, encode-document, type-schema, source-quote, operation-documentation, declaration-documentation
-from /http-server-consumer/models import is-model, model-reference, model-schemas, model-codecs, model-encoder, model-decoder
+from /streaky/template import
+    template-engine, template-value, text-value, bool-value,
+    list-value as template-list-value, object-value as template-object-value
+from /http-server-consumer/documents import
+    object-value, list-value, encode-document, type-schema, source-quote,
+    operation-documentation, declaration-documentation
+from /http-server-consumer/models import
+    is-model, model-reference, model-schemas, model-codecs, model-encoder,
+    model-decoder
 from /http-server-consumer/examples import declaration-examples
-from /http-server-consumer/formats import response-policy, read-response-policy, selected-response-policy, format-list-source, xml-response-schema, format-media-type
+from /http-server-consumer/formats import
+    response-policy, read-response-policy, selected-response-policy,
+    format-list-source, xml-response-schema, format-media-type
 from /http-server-consumer/overview import api-info
 
 function template-operations list of template-value throws consumer-error; operations list of operation, owner string

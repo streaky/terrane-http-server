@@ -16,7 +16,7 @@ class proxy-request-metadata
         this.client = client
         this.trusted = trusted
 
-function install-proxy-metadata; request ref native-request, client ip-addr|none, trusted bool
+function install-proxy-metadata; request mutable ref native-request, client ip-addr|none, trusted bool
     # Declare the mutable native borrow; the inline insertion uses that same request.
     # Rust below (and in request-proxy-metadata) depends on the emitted
     # ProxyRequestMetadata name and its client/trusted field layout.
@@ -46,7 +46,9 @@ function peer-address ip-addr; peer ref (connect-info of socket-addr)
     return native-peer-ip; payload
 
 function direct-address ip-addr|none; request ref native-request
-    return (((request.extensions;).get of (connect-info of socket-addr));).map; peer-address
+    return request.extensions;
+        .get of (connect-info of socket-addr);
+        .map; peer-address
 
 function forwarded-address ip-addr|none; request ref native-request
     return parse-forwarded-headers; request

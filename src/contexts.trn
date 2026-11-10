@@ -129,7 +129,9 @@ private function request-path string; request ref native-request
     return value
 
 private function request-route-pattern string; request ref native-request, fallback string
-    matched string|none = ((((request.extensions;).get of matched-path);).map; matched-path-text)
+    matched string|none = request.extensions;
+        .get of matched-path;
+        .map; matched-path-text
     if matched != none
         return matched
     return fallback
