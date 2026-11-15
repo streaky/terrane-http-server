@@ -834,7 +834,6 @@ dependencies = [
  "futures-core",
  "http",
  "http-body",
- "hyper",
  "idna",
  "reqwest",
  "serde_core",
