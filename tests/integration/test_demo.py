@@ -8,6 +8,8 @@ import http.client
 from html.parser import HTMLParser
 import json
 from pathlib import Path
+import os
+import selectors
 import socket
 import shutil
 import subprocess
@@ -17,11 +19,17 @@ import tempfile
 import time
 import unittest
 from xml.etree import ElementTree
+from urllib.parse import parse_qs, urlencode, urlsplit
 import yaml
 
 
 BINARY = Path(sys.argv.pop(1)).resolve() if len(sys.argv) > 1 else None
 DEMO = Path(__file__).resolve().parents[2] / "demo"
+CLIENT_BINARY = None
+if "--oauth-client" in sys.argv:
+    option = sys.argv.index("--oauth-client")
+    CLIENT_BINARY = Path(sys.argv[option + 1]).resolve()
+    del sys.argv[option:option + 2]
 
 
 class PageParser(HTMLParser):
@@ -48,6 +56,8 @@ class PageParser(HTMLParser):
 
 
 class DemoHttpTestCase(unittest.TestCase):
+    server_arguments = ()
+
     @classmethod
     def setUpClass(cls):
         if BINARY is None:
@@ -55,13 +65,28 @@ class DemoHttpTestCase(unittest.TestCase):
         cls.runtime = tempfile.TemporaryDirectory(prefix="http-demo-runtime-")
         cls.addClassCleanup(cls.runtime.cleanup)
         shutil.copytree(DEMO / "public", Path(cls.runtime.name) / "public")
-        with socket.socket() as listener:
-            listener.bind(("127.0.0.1", 0))
-            cls.port = listener.getsockname()[1]
-        cls.server = subprocess.Popen([str(BINARY), f"127.0.0.1:{cls.port}"], cwd=cls.runtime.name,
-            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        cls.server = subprocess.Popen([str(BINARY), "127.0.0.1:0", *cls.server_arguments],
+            cwd=cls.runtime.name, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         cls.addClassCleanup(cls.stop_server)
         deadline = time.monotonic() + 20
+        startup = bytearray()
+        with selectors.DefaultSelector() as selector:
+            selector.register(cls.server.stdout, selectors.EVENT_READ)
+            while b"\n" not in startup:
+                if not selector.select(max(0, deadline - time.monotonic())):
+                    raise RuntimeError("Demo did not report its bound listener")
+                part = os.read(cls.server.stdout.fileno(), 4096)
+                if not part:
+                    raise RuntimeError(cls.server.stderr.read().decode())
+                startup.extend(part)
+                if len(startup) > 4096:
+                    raise RuntimeError("Unexpected demo startup output")
+        prefix = "Catalog demo: "
+        ready = startup.decode().splitlines()[0]
+        if not ready.startswith(prefix):
+            raise RuntimeError(f"Unexpected demo startup line: {ready}")
+        cls.origin = ready[len(prefix):].rstrip("/")
+        cls.port = urlsplit(cls.origin).port
         while time.monotonic() < deadline:
             if cls.server.poll() is not None:
                 raise RuntimeError(cls.server.stderr.read().decode())
@@ -83,6 +108,7 @@ class DemoHttpTestCase(unittest.TestCase):
             except subprocess.TimeoutExpired:
                 cls.server.kill()
                 cls.server.wait()
+        cls.server.stdout.close()
         cls.server.stderr.close()
 
     @classmethod
@@ -575,6 +601,27 @@ class CatalogMutationTests(DemoHttpTestCase):
         self.assertEqual(self.request("GET", "/api/items/1?detailed=true")[2],
             {"id": 1, "name": "Updated notebook", "price-cents": 1700, "in-stock": True})
 
+
+from oauth_demo_checks import OAuthDisabledChecks, OAuthProviderChecks, OAuthClientChecks
+
+
+class OAuthDisabledTests(OAuthDisabledChecks, DemoHttpTestCase):
+    pass
+
+
+class OAuthProtocolTests(OAuthProviderChecks, DemoHttpTestCase):
+    server_arguments = ("--oauth",)
+
+
+class OAuthClientTests(OAuthClientChecks, DemoHttpTestCase):
+    server_arguments = ("--oauth",)
+
+    @classmethod
+    def setUpClass(cls):
+        if CLIENT_BINARY is None:
+            raise unittest.SkipTest("Pass --oauth-client with the built Terrane consumer to exercise client interoperability")
+        cls.client_binary = CLIENT_BINARY
+        super().setUpClass()
 
 if __name__ == "__main__":
     unittest.main()

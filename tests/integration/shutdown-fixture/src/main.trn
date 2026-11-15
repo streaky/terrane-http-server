@@ -1,0 +1,59 @@
+namespace shutdown-fixture
+
+from /core/errors import throwable
+from /core/networking import listen-tcp
+from /core/process import arguments
+from /deps/axum import Router as native-router
+from /streaky/http-server import controller, create-application, websocket-session
+from /streaky/http-server/internal import routes
+
+class shutdown-error implements throwable
+    message string = ''
+
+    function construct; message string
+        this.message = message
+
+    function render string;
+        return this.message
+
+class test-controller implements controller
+    consuming function routes routes; registered-routes routes
+        router native-router = rust
+            crate::fixture::router()
+        registered-routes.router = router
+        return registered-routes
+
+async function shutdown none throws throwable;
+    failed bool = rust
+        crate::fixture::shutdown().await
+    if failed
+        throw shutdown-error; 'requested shutdown failure'
+    return none
+
+async function echo-session none throws throwable; session websocket-session
+    while true
+        event = await session.receive;
+        if event.kind == 'closed'
+            return none
+        if event.kind == 'text'
+            text = event.text
+            if text != none
+                await session.send-text; text
+    return none
+
+async function main throws throwable;
+    supplied = arguments;
+    maximum uint32 = supplied[0].text.radix; 10
+    app = create-application;
+    app = app.mount; '/', (instance test-controller;)
+    app = app.with-connection-limit; maximum
+    app = app.websocket; '/events', echo-session
+    app = app.allow-direct; '127.0.0.1'
+    listener = await listen-tcp; '127.0.0.1:0'
+    print; listener.local-address
+    try
+        await app.serve-listener-until; move listener, shutdown
+    catch shutdown-error as failure
+        print; 'caught-shutdown-error:' + failure.message
+        return
+    print; 'drained'

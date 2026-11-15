@@ -6,11 +6,11 @@ from /deps/axum-core/response import Response as native-response
 from /deps/axum/middleware import Next as middleware-next, from_fn as from-fn
 from /deps/tower-http/services import ServeDir as serve-dir
 from /core/networking import listen-tcp, tcp-listener
-from /core/networking/native import native-socket-address as socket-addr
+from /core/networking/native import native-socket-address as socket-addr, native-tcp-listener
 from /deps/axum/extract/connect-info import IntoMakeServiceWithConnectInfo as into-make-service-with-connect-info
 from /deps/http import StatusCode as status-code
-from /core/errors import throwable
-from /streaky/http-server/internal import routes
+from /core/errors import throwable, coercion-error
+from /streaky/http-server/internal import routes, http-method, incoming-request, wire-response
 from /core/collections import list
 
 # Generated class composition protocol. Endpoints are declared on api-using route groups.
@@ -40,6 +40,36 @@ public class application
             router = router.merge; move nested
         else
             router = router.nest; prefix, move nested
+        return instance application; move router, this.address, (move this.policy), (move this.websockets), this.maximum-connections
+
+    # Low-level routes run before body extraction, allowing authorization and
+    # admission to precede bounded reads without a second request representation.
+    consuming function route application throws throwable; method string, path string, handler async function from incoming-request to wire-response throws throwable
+        selected http-method = http-method::get
+        if method == 'GET'
+            selected = http-method::get
+        else if method == 'POST'
+            selected = http-method::post
+        else if method == 'PUT'
+            selected = http-method::put
+        else if method == 'PATCH'
+            selected = http-method::patch
+        else if method == 'DELETE'
+            selected = http-method::delete
+        else if method == 'HEAD'
+            selected = http-method::head
+        else if method == 'OPTIONS'
+            selected = http-method::options
+        else
+            throw coercion-error
+        registered = instance routes; (move this.router)
+        registered = registered.endpoint; selected, path, handler
+        return instance application; (move registered.router), this.address, (move this.policy), (move this.websockets), this.maximum-connections
+
+    # Install after registering routes. With no observer installed, serving has
+    # no body wrapper or diagnostic capture overhead.
+    consuming function observe-transport application; observer function from string to none, capture-limit uint32 = 65536, capture-all bool = false
+        router = install-transport-observer; (move this.router), observer, capture-limit, capture-all
         return instance application; move router, this.address, (move this.policy), (move this.websockets), this.maximum-connections
 
     consuming function websocket application; path string, handler async function from websocket-session to none throws throwable
@@ -102,6 +132,25 @@ public class application
         await native-serve; listener, service
         return none
 
+    # Wait for shutdown, stop accepting, and drain active responses and upgrades.
+    # The callback may begin application-specific cancellation before returning.
+    consuming async function serve-until none throws throwable; shutdown async function to none throws throwable
+        bound = await listen-tcp; this.address
+        await this.serve-listener-until; move bound, move shutdown
+        return none
+
+    consuming async function serve-listener-until none throws throwable; bound tcp-listener, shutdown async function to none throws throwable
+        router = move this.router
+        direct-policy network-policy = compile-network-policy; this.policy.direct-connections
+        client-policy network-policy = compile-network-policy; this.policy.client-addresses
+        websockets = move this.websockets
+        router = install-websockets; router, websockets
+        router = apply-access-policy; router, direct-policy, client-policy
+        maximum = this.maximum-connections
+        listener (native-tcp-listener)|none = bound.into-native;
+        await serve-gracefully; listener, router, maximum, move shutdown
+        return none
+
 public function create-application application;
     websockets list of websocket-route = list;
     return instance application; (native-router::new;), '127.0.0.1:3000', (instance access-policy;), move websockets, 0
@@ -123,3 +172,16 @@ private function apply-access-policy native-router; router native-router, direct
             return await next.run; request
         return (status-code::FORBIDDEN).into_response;
     return router.layer; (from-fn; middleware)
+
+# Borrow an explicit ownership slot: direct owned non-Clone reads inside inline
+# Rust reject T0134. Take the listener once and pin/drain its native connections.
+# Remove the slot and native module when source can express that complete graph.
+private async function serve-gracefully none throws throwable; listener mutable ref (native-tcp-listener|none), router native-router, maximum uint32, shutdown async function to none throws throwable
+    failure throwable|none = rust
+        crate::shutdown_serving::serve_until(
+            listener.take().expect("graceful listener is owned exactly once"),
+            router, maximum, async move { shutdown().await },
+        ).await.err()
+    if failure != none
+        throw failure
+    return none

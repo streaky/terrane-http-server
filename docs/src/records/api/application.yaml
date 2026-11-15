@@ -42,18 +42,21 @@ documentation:
         WebSocket sessions retain their slots until their final owners finish.
         Multiplexed HTTP/2 requests share one transport slot. At capacity, the server
         waits before accepting another connection; operating-system backlog behavior
-        applies rather than an HTTP 503 guarantee. Both serving methods honor this
-        setting. The limit eagerly creates `maximum` Terrane workers, each retaining a router
-        handle and waiting on the shared listener; large limits have an upfront scheduling
-        and storage cost. A native channel sender's final drop releases the worker, including
-        after a WebSocket upgrade, without an async destructor or per-connection runtime.
+        applies rather than an HTTP 503 guarantee. All serving methods honor this
+        setting. Ordinary `serve` and `serve-listener` eagerly create `maximum`
+        Terrane workers, each retaining a router handle and waiting on the shared
+        listener. The graceful `*-until` methods instead create native connection
+        tasks as sockets are accepted, up to the same limit. In both cases, a native
+        channel sender's final drop releases a slot, including after an upgrade.
         Routes and policies are composed once; service-level extensions carry the peer and lease.
-        Failed accepts emit structured errors to stderr with target `http-server.accept`,
-        then back off for one second and retry. Persistent failures continue retrying;
-        there is no consecutive-failure shutdown threshold. Per-connection setup/transport
-        failures are isolated. A limit is not an allocator-trimming or response-streaming policy.
-        Explicit capability profiles need `clocks` for retry backoff and `logging` for
-        diagnostics; slot release no longer requires the `threads` capability.
+        Failed accepts are reported to stderr with target `http-server.accept`,
+        then back off for one second and retry. Ordinary serving uses structured
+        source logging; graceful serving emits a native contextual diagnostic.
+        Persistent failures continue retrying; there is no consecutive-failure
+        shutdown threshold. Per-connection setup/transport failures are isolated.
+        A limit is not an allocator-trimming or response-streaming policy.
+        Explicit capability profiles need `clocks` and `logging` for the source
+        retry path; slot release does not require the `threads` capability.
 
         Availability warning: neither path configures a header-read or idle timeout.
         `maximum` silent or idle keep-alive clients can exhaust all limited slots indefinitely,
@@ -84,6 +87,24 @@ documentation:
         to discover the OS-assigned port, then transfer it with
         `await app.serve-listener; move listener`. The printed address and served socket
         are the same; no reserve-and-release port-selection race is needed.
+
+        `serve-until(shutdown: async function to none throws throwable)` and
+        `serve-listener-until(bound: tcp-listener, shutdown: async function to none
+        throws throwable)` consume the application and provide graceful shutdown.
+        The callback takes no arguments and is awaited concurrently with serving.
+        Completion, including a thrown error, closes the listening socket and stops
+        accepting new connections. Active HTTP responses and upgraded WebSocket
+        sessions are then drained before returning. A callback error retains its
+        original identity and propagates only after that drain.
+
+        These methods preserve route composition, network policies, peer metadata,
+        WebSocket support, and connection limits. The listener overload uses the
+        supplied socket without rebinding or consulting `application.address`.
+        Setup failures propagate before the shutdown callback starts.
+        There is no implicit grace timeout or forced WebSocket close: applications
+        must arrange their own cancellation/close policy if active work or sessions
+        must finish within a deadline. Cancelling the serving operation itself is
+        not a graceful-shutdown request.
     - type: example
       id: signatures
       title: Public declaration synopsis
@@ -104,6 +125,8 @@ documentation:
             function has-routes bool;
             consuming async function serve none throws throwable;
             consuming async function serve-listener none throws throwable; bound tcp-listener
+            consuming async function serve-until none throws throwable; shutdown async function to none throws throwable
+            consuming async function serve-listener-until none throws throwable; bound tcp-listener, shutdown async function to none throws throwable
       response: null
       diagnostic: null
       markdown: Method bodies and private implementation members are omitted from this declaration synopsis.

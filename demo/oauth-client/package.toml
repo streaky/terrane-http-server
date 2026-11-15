@@ -1,0 +1,11 @@
+package = "http-demo-oauth-client"
+artifact = "executable"
+
+[namespaces]
+http-demo-oauth-client = "src"
+
+[terrane-dependencies.streaky.http-client]
+path = "../../../http-client"
+
+[profile]
+capabilities = ["build", "networking", "tls", "entropy", "process", "filesystem"]

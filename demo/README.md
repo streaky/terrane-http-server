@@ -5,11 +5,47 @@ A real HTTP service built with class-based annotated APIs, ordinary typed Terran
 From the Terrane repository root:
 
 ```console
-cargo build --release -p terrane-cli
-(cd packages/http-server/demo && "${TERRANE:-../../../target/release/terrane}" run .)
+terrane run packages/http-server/demo
 ```
 
 Terrane builds the declared HTTP and template consumer tools automatically. The default address is `127.0.0.1:3187`. Pass a different address as the application's first argument when launching its built executable.
+Port `0` requests an OS-assigned port. The startup line reports the actual bound listener; the service transfers that same listener into the application without reserving and releasing a port.
+
+## Development OAuth provider
+
+The demo includes a deliberately **non-production**, in-memory OAuth provider. It has a fixed `demo-user`, no passwords and no real OpenAI credentials. The informational `/oauth` page is always available; authorization, consent, token, callback and protected-resource routes require `--oauth` and a direct loopback peer.
+
+```console
+terrane run packages/http-server/demo -- 127.0.0.1:3187 --oauth
+```
+
+Open `/oauth` to explore it. The public client ID is `terrane-demo`, its scope is `demo.read`, and registered redirect URIs are HTTP loopback addresses with the exact path `/oauth/callback` (a dynamic port is permitted). External redirects, fragments, userinfo and ambiguous authorization parameters are rejected.
+
+| Route | Behavior |
+| --- | --- |
+| `GET /oauth/authorize` | Validate authorization-code/S256 PKCE parameters and show explicit consent. |
+| `POST /oauth/authorize` | Approve or deny one pending request; redirect with the original state. |
+| `POST /oauth/token` | Exchange a bound one-use code, or refresh and rotate tokens. Accept URL-encoded form or JSON documents. |
+| `GET /oauth/resource` | Require a current Bearer access token; return the demo subject and scope. |
+| `GET /oauth/callback` | Explain the callback outcome; do not exchange credentials automatically. |
+
+Pending authorizations, codes and tokens each expire after five minutes of monotonic time and disappear on restart. Civil-clock adjustments do not extend their lifetime. Code exchange checks the client, exact redirect and verifier before consumption. Refresh invalidates its old refresh **and access** tokens. Token responses use `Cache-Control: no-store` and `Pragma: no-cache`. This is a development fixture, not an OpenID Connect provider or a production authorization service; do not publish it behind a reverse proxy.
+
+`oauth-client/` is a separate real consumer of `streaky/http-client`, not a server-side mock. Its `begin`, `complete`, `refresh` and `resource` actions take an origin on the command line and exchange private handoff JSON on stdin/stdout. Its output can contain verifiers and tokens: do not log or share it.
+
+### Owned OAuth acceptance tests
+
+```console
+python -B packages/http-server/demo/scripts/test-oauth.py
+# Also exercise the existing catalog, request-context and WebSocket demo checks:
+python -B packages/http-server/demo/scripts/test-oauth.py --all
+```
+
+The runner uses the installed `terrane` command (`TERRANE` may override it), builds the demo and consumer, starts owned servers on ephemeral loopback ports and shuts them down after the tests. It requires the existing demo suite's Python dependency, PyYAML. No running service, external provider, account or API key is needed.
+
+The tests drive real consent, PKCE, denial, replay rejection, protected requests and both form/JSON refresh through the Terrane client. Deterministic server-free library fixtures remain in `packages/http-client/tests/unit`; the demo is an additional interoperability target, not a production dependency of that library.
+
+Generic `@[body; formats = (list; 'json', 'form')]` document extraction powers the token route. Form values remain text; repeated names become ordered lists instead of silently overwriting credentials. The demo rejects duplicates as OAuth `invalid_request`. Malformed form transport returns the framework's 422 response; unsupported media types return 415.
 
 ```console
 curl http://127.0.0.1:3187/
@@ -166,13 +202,15 @@ The runtime uses Debian Trixie: the locally prebuilt binary requires glibc 2.38 
 The Python integration suites use PyYAML to parse and verify YAML response bodies.
 
 ```console
-artifact=$("${TERRANE:-target/release/terrane}" build packages/http-server/demo)
-python packages/http-server/tests/integration/test_demo.py "$artifact"
-python packages/http-server/tests/integration/test_consumer.py
-"${TERRANE:-target/release/terrane}" test packages/http-server
+artifact=$("${TERRANE:-terrane}" build packages/http-server/demo)
+python -B packages/http-server/tests/integration/test_demo.py "$artifact"
+python -B packages/http-server/demo/scripts/test-oauth.py --all
+python -B packages/http-server/tests/integration/test_consumer.py
+"${TERRANE:-terrane}" test packages/http-server
 ```
 
 The HTTP suite starts the real built application from an isolated directory containing only copied public assets, with no template sources. It checks typed bodies and outputs, defaults, templated HTML pages, static documentation and assets, and the mounted OpenAPI schema. The consumer suite checks malformed declarations through the real compiler/consumer pipeline, plus throwing handlers returning success or HTTP 500 without taking down the server.
+The OAuth runner also builds `oauth-client/` and passes its executable to the HTTP suite. Direct invocation without `--oauth-client <artifact>` explicitly skips only the client-interoperability class; the owned OAuth runner supplies it and runs that class. Expiration boundaries are checked without wall-clock sleeps by `terrane test packages/http-server/demo --filter oauth`.
 
 The same demo suite also upgrades a raw socket to `/ws/echo`, verifies multiple text
 echoes (including Unicode and an empty message) on one connection, and checks the
@@ -185,13 +223,14 @@ no additional WebSocket client library; browser controls are exercised separatel
 From the repository root, build the demo executable (Terrane builds its consumer tools automatically), stage the binary inside the ignored Docker context, then build and start the Compose service:
 
 ```console
+export TERRANE="$(command -v terrane)"
 sh packages/http-server/demo/scripts/build-image.sh
 ```
 
 *Side note: `demo/scripts/build-image.sh` exists because Terrane does not yet have an
 OS package. Once OS packages are available, this build workflow will change.*
 
-The script uses the `TERRANE` environment variable when set, otherwise `target/release/terrane`, matching the integration-test default. Build that release compiler first, or export an absolute `TERRANE` path to use the same alternative compiler for every step. It copies the artifact path printed by `terrane build` into `demo/.docker/app`; Docker receives only that prebuilt executable and the demo's `public/` assets. Templates are compiled into the executable, so the image needs neither source templates nor a template runtime root. The image does not contain or run the Terrane compiler. Compose publishes the service on host port `3187` by default; override it with `HTTP_SERVER_PORT`, for example:
+The commands above select the installed `terrane` from `PATH` through the script's `TERRANE` environment variable. The script copies the artifact path printed by `terrane build` into `demo/.docker/app`; Docker receives only that prebuilt executable and the demo's `public/` assets. Templates are compiled into the executable, so the image needs neither source templates nor a template runtime root. The image does not contain or run the Terrane compiler. Compose publishes the service on host port `3187` by default; override it with `HTTP_SERVER_PORT`, for example:
 
 ```console
 HTTP_SERVER_PORT=8080 sh packages/http-server/demo/scripts/build-image.sh

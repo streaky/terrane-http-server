@@ -1,6 +1,6 @@
 namespace streaky/http-server/internal
 
-from /deps/axum/body import to_bytes as body-to-bytes, Bytes as native-bytes
+from /deps/axum/body import Bytes as native-bytes
 from /deps/axum-core/extract import Request as native-request
 from /deps/axum-core/body import Body as native-body
 from /deps/axum-core/response import Response as native-response
@@ -8,11 +8,11 @@ from /deps/http import StatusCode as status-code
 from /deps/http/response import Builder as response-builder
 from /deps/http/uri import PathAndQuery as path-and-query
 from /core/collections import list, map
-from /core/documents import document-value
+from /core/documents import document-value, document-map-entries, make-document-map, make-document-list, make-document-string
 from /core/documents/json import parse-json, default-json-options
 from /core/urls import url-query, parse-url
 from /core/errors import throwable, coercion-error
-from /streaky/http-server import request-context, response-context, capture-request-context, response-media-type, encode-response-document
+from /streaky/http-server import request-context, response-context, capture-request-context, response-media-type, encode-response-document, http-error, response-stream, request-body-limit, request-body-timeout
 
 public class incoming-request
     private names list of string = list
@@ -22,6 +22,8 @@ public class incoming-request
     private accept string|none = none
     private metadata request-context
     private response response-context
+    private content-type string|none = none
+    private bytes-read uint64 = 0
 
     function construct; request native-request, route-pattern string
         this.metadata = capture-request-context; request, route-pattern
@@ -51,6 +53,7 @@ public class incoming-request
         this.query = parsed.value.query
         if request-has-accept-header; request
             this.accept = request-accept-header; request
+        this.content-type = this.metadata.header-value; 'content-type'
         this.body = request.into_body;
 
     function context request-context;
@@ -78,16 +81,43 @@ public class incoming-request
             index = index + 1
         return none
 
-    consuming async function json-body document-value throws throwable;
+    mutable async function json-body document-value throws throwable; maximum-bytes uint64 = 2097152, timeout-ms uint64 = 0, maximum-depth uint32 = 256
         body = move this.body
-        if body != none
-            buffered = await body-to-bytes; move body, 2097152
-            source = buffer-into-text; buffered
-            if not source.failed
-                parsed = parse-json; source.value, (default-json-options;)
-                if not parsed.failed
-                    return parsed.value
+        buffered = await bounded-body-to-bytes; body, maximum-bytes, timeout-ms
+        this.bytes-read = buffered.len;
+        source = buffer-into-text; buffered
+        if not source.failed
+            options = default-json-options;
+            options.max-depth = maximum-depth
+            options.max-bytes = maximum-bytes
+            parsed = parse-json; source.value, options
+            if not parsed.failed
+                return parsed.value
         throw coercion-error
+
+    mutable async function document-body document-value throws throwable; formats list of string, maximum-bytes uint64 = 2097152, timeout-ms uint64 = 0, maximum-depth uint32 = 256
+        format = select-request-format; this.content-type, formats
+        body = move this.body
+        buffered = await bounded-body-to-bytes; body, maximum-bytes, timeout-ms
+        this.bytes-read = buffered.len;
+        source = buffer-into-text; buffered
+        if source.failed
+            throw coercion-error
+        if format == 'json'
+            options = default-json-options;
+            options.max-depth = maximum-depth
+            options.max-bytes = maximum-bytes
+            parsed = parse-json; source.value, options
+            if parsed.failed
+                throw coercion-error
+            return parsed.value
+        pairs = decode-form-pairs; source.value
+        if pairs != none
+            return form-document; pairs
+        throw coercion-error
+
+    function body-byte-count uint64;
+        return this.bytes-read
 
 public class wire-response
     status int
@@ -96,6 +126,7 @@ public class wire-response
     headers map of string, (list of string) = map
     structured bool = false
     supplied bool = true
+    stream response-stream|none = none
 
     function construct; status int, content-type string, body string, structured bool = false
         this.status = status
@@ -103,7 +134,7 @@ public class wire-response
         this.body = body
         this.structured = structured
         this.supplied = status != 204
-
+        this.stream = none
 public function encoded-response wire-response; status int, content-type string, body string
     return instance wire-response; status, content-type, body
 
@@ -133,7 +164,7 @@ public function into-native-response native-response throws throwable; response 
         length int = length-values[0].radix; 10
         if length < 0
             throw coercion-error
-        if not is-head and response.supplied and length != (body-byte-length; response.body)
+        if response.stream == none and not is-head and response.supplied and length != (body-byte-length; response.body)
             throw coercion-error
     code status-code = status-code::from_u16; response.status
     builder response-builder = response-builder::new;
@@ -143,6 +174,17 @@ public function into-native-response native-response throws throwable; response 
     for name, header-values in response.headers
         for header-value in header-values
             builder = builder.header; name, header-value
+    producer = response.stream
+    if producer != none
+        if is-head or response.status == 204 or response.status == 205 or response.status == 304
+            producer.cancel;
+            return builder.body; (metadata-only-body;)
+        next = async function (string|none);
+            return await producer.next-chunk;
+        cancel = function none;
+            producer.cancel;
+            return none
+        return builder.body; (body-from-stream; next, cancel)
     if is-head and not response.supplied and length-values == none and response.status != 204 and response.status != 205
         return builder.body; (metadata-only-body;)
     return builder.body; (body-from-text; move response.body)
@@ -160,9 +202,11 @@ private function body-byte-length int; text ref string
     return text.bytes.length
 
 private function header-varies-accept bool; value ref string
-    result bool = rust
-        value.split(',').any(|token| token.trim().eq_ignore_ascii_case("accept") || token.trim() == "*")
-    return result
+    for token in (value.split; ',')
+        trimmed = token.trim;
+        if trimmed == '*' or (trimmed.lower;) == 'accept'
+            return true
+    return false
 
 private function request-has-accept-header bool; request ref native-request
     return (request.headers;).contains_key; 'accept'
@@ -186,6 +230,37 @@ class decoded-text
     value string = ''
     failed bool = true
 
+class body-read-result
+    buffer native-bytes = native-bytes::new;
+    failed bool = false
+    timed-out bool = false
+    missing bool = false
+
+# The optional slot makes ownership explicit without reading an owned non-Clone
+# native body directly from inline Rust.
+private async function bounded-body-to-bytes native-bytes throws throwable; body mutable ref (native-body|none), maximum uint64, timeout-ms uint64
+    result body-read-result = rust
+        match body.take() {
+            None => BodyReadResult { buffer: ::axum::body::Bytes::new(), failed: false, timed_out: false, missing: true },
+            Some(body) => match crate::conversions::bounded_body_to_bytes(
+                body, usize::try_from(maximum).unwrap_or(usize::MAX), timeout_ms
+            ).await {
+                Ok(buffer) => BodyReadResult { buffer, failed: false, timed_out: false, missing: false },
+                Err(status) => BodyReadResult { buffer: ::axum::body::Bytes::new(), failed: true, timed_out: status == 408, missing: false },
+            },
+        }
+    if result.missing
+        throw coercion-error
+    if result.timed-out
+        throw request-body-timeout
+    if result.failed
+        throw request-body-limit
+    return result.buffer
+
+private function body-from-stream native-body; next async function to (string|none) throws throwable, cancel function to none
+    return rust
+        crate::conversions::streaming_body(move || next(), move || cancel())
+
 private function body-from-text native-body; text string
     return rust
         crate::conversions::body_from_text(text)
@@ -207,3 +282,98 @@ private function decode-path-component decoded-text; value string
             Some(value) => DecodedText { value, failed: false },
             None => DecodedText { value: String::new(), failed: true },
         }
+
+private function select-request-format string; content-type string|none, formats list of string
+    if content-type != none
+        parts = content-type.split; ';'
+        media = (parts[0].trim;).lower;
+        selected string = ''
+        if media == 'application/json'
+            selected = 'json'
+        else if media == 'application/x-www-form-urlencoded'
+            selected = 'form'
+            if parts.length > 2
+                throw http-error; 415, 'Unsupported form Content-Type parameters'
+            if parts.length == 2
+                parameter = (parts[1].trim;).lower;
+                if parameter != 'charset=utf-8' and parameter != 'charset="utf-8"'
+                    throw http-error; 415, 'Unsupported form charset'
+        for candidate in formats
+            if candidate == selected
+                return selected
+    throw http-error; 415, 'A supported request Content-Type is required'
+
+private function form-document document-value; pairs ref (list of string)
+    grouped map of string, (list of string) = map;
+    keys list of string = list;
+    position int = 0
+    while position < pairs.length
+        key = pairs[position]
+        previous = grouped.get.checked; key
+        repeated list of string = list;
+        if previous != none
+            repeated = previous
+        else
+            keys.append; key
+        repeated.append; pairs[position + 1]
+        grouped.set; key, repeated
+        position = position + 2
+    entries = instance document-map-entries;
+    for key in keys
+        strings = grouped.get.checked; key
+        if strings != none
+            documents list of document-value = list;
+            for text in strings
+                documents.append; (make-document-string; text)
+            field document-value
+            if documents.length == 1
+                field = documents[0]
+            else
+                sequence = make-document-list; documents
+                if sequence.failed
+                    throw coercion-error
+                field = sequence.value
+            entries.append; key, field
+    result = make-document-map; entries
+    if result.failed
+        throw coercion-error
+    return result.value
+
+# Core URL queries are permissive about malformed escapes/UTF-8 and URL parsing
+# alters raw controls/fragments. Decode only ordered form components here; source
+# code above owns duplicate grouping and documents. Remove when core provides
+# strict form-component decoding with equivalent byte and error semantics.
+private function decode-form-pairs (list of string)|none; source ref string
+    return rust
+        let hex = |value: u8| -> Option<u8> {
+            match value {
+                b'0'..=b'9' => Some(value - b'0'),
+                b'a'..=b'f' => Some(value - b'a' + 10),
+                b'A'..=b'F' => Some(value - b'A' + 10),
+                _ => None,
+            }
+        };
+        let component = |input: &[u8]| -> Option<String> {
+            let mut decoded = Vec::with_capacity(input.len());
+            let mut position = 0;
+            while position < input.len() {
+                match input[position] {
+                    b'+' => { decoded.push(b' '); position += 1; }
+                    b'%' => {
+                        let high = hex(*input.get(position + 1)?)?;
+                        let low = hex(*input.get(position + 2)?)?;
+                        decoded.push(high * 16 + low);
+                        position += 3;
+                    }
+                    byte => { decoded.push(byte); position += 1; }
+                }
+            }
+            String::from_utf8(decoded).ok()
+        };
+        let mut result = Vec::new();
+        for pair in source.as_bytes().split(|byte| *byte == b'&').filter(|pair| !pair.is_empty()) {
+            let split = pair.iter().position(|byte| *byte == b'=').unwrap_or(pair.len());
+            result.push(component(&pair[..split])?);
+            result.push(component(if split < pair.len() { &pair[split + 1..] } else { &[] })?);
+        }
+        Some(terrane_collection_support::List::new(result))

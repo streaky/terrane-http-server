@@ -22,6 +22,7 @@ from /http-server-consumer/models import
 from /http-server-consumer/examples import declaration-examples
 from /http-server-consumer/formats import
     response-policy, read-response-policy, selected-response-policy,
+    read-request-policy, request-format-list-source, form-body-schema,
     format-list-source, xml-response-schema, format-media-type
 from /http-server-consumer/overview import api-info
 
@@ -267,6 +268,7 @@ function make-operation operation throws consumer-error; declaration document-va
     locations list of string = list
     path-names list of string = list
     body-index int = -1
+    request-explicit bool = false
     for parameter-index in (range; 0, (parameters.length;))
         parameter = at; parameters, parameter-index
         name = text; (get; parameter, 'name')
@@ -294,6 +296,11 @@ function make-operation operation throws consumer-error; declaration document-va
         if body-meta.kind != 'none'
             if body-index != -1 or (not (is-document; kind) and not (is-model; kind, declarations)) or default.kind != 'none'
                 fail; record, 'HTTP body requires one document-value or selected Terrane model parameter without a default'
+            input-policy = read-request-policy; body-meta, record
+            if is-model; kind, declarations
+                for input-format in input-policy.formats
+                    if input-format == 'form'
+                        fail; record, 'HTTP form bodies require a document-value parameter'
             body-index = parameter-index
         else
             if (text; (get; parameter, 'type_kind')) != 'scalar' or (kind != 'string' and kind != 'int' and kind != 'bool')
@@ -367,25 +374,40 @@ function make-operation operation throws consumer-error; declaration document-va
     parameter-list = list-value; parameter-values, declaration
     entries.append; 'parameters', parameter-list
     if body-index != -1
-        adapter = adapter + '        try\n            body-value = await request.json-body;\n        catch\n            return validation-response; \'Invalid JSON request body\'\n'
         body-parameter = at; parameters, body-index
         body-kind = text; (get; body-parameter, 'type')
+        body-record = parameter-record; declarations, identity, (text; (get; body-parameter, 'name')), declaration
+        body-meta = annotation; body-record, 'body', '/streaky/http-server/annotations'
+        request-policy = read-request-policy; body-meta, declaration
+        request-explicit = request-policy.explicit
         body-schema = object-value; (instance document-map-entries;), declaration
         if (is-model; body-kind, declarations)
             decoder = model-decoder; body-kind, declarations
+            if request-policy.explicit
+                adapter = adapter + '        try\n            body-value = await request.document-body; ' + (request-format-list-source; request-policy) + '\n        catch http-error as error\n            throw error\n        catch\n            return validation-response; \'Invalid request body\'\n'
+            else
+                adapter = adapter + '        try\n            body-value = await request.json-body;\n        catch\n            return validation-response; \'Invalid JSON request body\'\n'
             adapter = adapter + '        try\n            parameter-value' + body-index + ' = ' + decoder + '; body-value\n        catch\n            return validation-response; \'Invalid request model\'\n'
             body-schema = model-reference; body-kind, declarations
         else
-            adapter = adapter + '        parameter-value' + body-index + ' = body-value\n'
+            if request-policy.explicit
+                adapter = adapter + '        try\n            parameter-value' + body-index + ' = await request.document-body; ' + (request-format-list-source; request-policy) + '\n        catch http-error as error\n            throw error\n        catch\n            return validation-response; \'Invalid request body\'\n'
+            else
+                adapter = adapter + '        try\n            parameter-value' + body-index + ' = await request.json-body;\n        catch\n            return validation-response; \'Invalid JSON request body\'\n'
         media-entries = instance document-map-entries;
-        media-entries.append; 'schema', body-schema
-        body-record = parameter-record; declarations, identity, (text; (get; body-parameter, 'name')), declaration
-        examples = declaration-examples; body-record, 'application/json'
-        if examples.kind != 'none'
-            media-entries.append; 'examples', examples
-        media-value = object-value; media-entries, declaration
-        media-entries = instance document-map-entries;
-        media-entries.append; 'application/json', media-value
+        for format in request-policy.formats
+            media-type = 'application/json'
+            if format == 'form'
+                media-type = 'application/x-www-form-urlencoded'
+            media-fields = instance document-map-entries;
+            input-schema = body-schema
+            if format == 'form'
+                input-schema = form-body-schema; declaration
+            media-fields.append; 'schema', input-schema
+            examples = declaration-examples; body-record, media-type
+            if examples.kind != 'none'
+                media-fields.append; 'examples', examples
+            media-entries.append; media-type, (object-value; media-fields, declaration)
         content-value = object-value; media-entries, declaration
         request-entries = instance document-map-entries;
         request-entries.append; 'required', (make-document-bool; true)
@@ -432,6 +454,8 @@ function make-operation operation throws consumer-error; declaration document-va
             result-description = 'Successful response'
         response-entries.append; '200', (response-with-content; result-description, content-value, declaration)
     response-entries.append; '422', (response-description; 'Request validation failed', declaration)
+    if request-explicit
+        response-entries.append; '415', (response-description; 'Unsupported request media type', declaration)
     if negotiated
         response-entries.append; '406', (response-description; 'No enabled response representation satisfies Accept', declaration)
     response-entries.append; '500', (response-description; 'Handler or response construction failed', declaration)

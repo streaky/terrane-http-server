@@ -40,8 +40,10 @@ documentation:
         returns the first matching raw cookie value without URL decoding.
 
         `path-value`, `query-value`, `accept-value`, and `json-body` belong to the
-        internal incoming-request transport used by generated adapters; they are not
-        public request-context methods. The request context is an immutable metadata
+        incoming-request transport used by generated adapters and low-level
+        `application.route` handlers; they are not request-context methods.
+        `header-byte-count` sums header-name and raw-value bytes, including repetitions.
+        The request context is an immutable metadata
         snapshot and does not own or buffer the body.
         Header capture retains an owned native header map behind a shared handle, rather
         than rebuilding lists of every header name and raw byte value. Copying a request
@@ -54,6 +56,26 @@ documentation:
         undecodable values. Returned lists and byte values do not expose mutable native
         storage. No guard is retained across an `await`. Other metadata remains captured
         eagerly; this is not general lazy request-context construction.
+
+        Low-level `application.route(method, path, handler)` invokes its asynchronous
+        incoming-request handler before body extraction, allowing authentication and
+        admission first. The handler returns a `wire-response`; both transport types
+        are imported from `/streaky/http-server/internal`.
+        `incoming-request.json-body(maximum-bytes = 2097152, timeout-ms = 0,
+        maximum-depth = 256)` retains the request while consuming its body once.
+        `body-byte-count` reports the original bytes read after a successful read.
+        A zero timeout disables the timer. Oversized and timed-out bodies throw
+        `request-body-limit` and `request-body-timeout`; invalid JSON throws a coercion error.
+
+        A wire response can hold a public `response-stream` producer. Its asynchronous
+        `next-chunk` returns one text chunk or none at EOF; throwing aborts the body.
+        Transport demand drives polling without an eager producer queue. `cancel`
+        runs exactly once on EOF, error, disconnect, or body suppression for HEAD
+        and bodyless statuses, including when the producer was never started.
+        `application.observe-transport` installs an optional per-application observer
+        for headers, polled body data, completion, and drop events. Raw bytes use UTF-8
+        or hexadecimal encoding; the observer owns any redaction policy. Observation
+        does not pre-read request bodies or buffer response streams.
 
         The response context modifies response state for the current invocation:
         `set-status(status)`, `set-header(name, value)` (case-insensitive replacement),

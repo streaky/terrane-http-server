@@ -4,6 +4,7 @@ from /streaky/http-server import create-application
 from /generated/http-server import mount-annotated
 from /core/errors import throwable
 from /core/process import arguments
+from /core/networking import listen-tcp
 
 async function main throws throwable;
     app = create-application;
@@ -11,8 +12,9 @@ async function main throws throwable;
     app = app.websocket; '/ws/echo', echo-session
     address = '127.0.0.1:3187'
     supplied = arguments;
-    if supplied.length > 0
-        address = supplied[0].text
-    app = app.with-address; address
-    print; 'Catalog demo: http://' + address + '/'
-    await app.serve;
+    for argument in supplied
+        if argument.text != '--oauth'
+            address = argument.text
+    listener = await listen-tcp; address
+    print; 'Catalog demo: http://' + listener.local-address + '/'
+    await app.serve-listener; move listener

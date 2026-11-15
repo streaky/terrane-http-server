@@ -1,0 +1,21 @@
+namespace streaky/http-server
+
+from /core/errors import throwable
+
+# A demand-driven producer. Returning none completes the body; throwing aborts it.
+# cancel runs once after EOF, failure, disconnect, or suppression of the body.
+public interface response-stream
+    async function next-chunk string|none throws throwable;
+    function cancel;
+
+public class request-body-limit implements throwable
+    message string = 'request exceeds the configured byte limit'
+
+    function render string;
+        return this.message
+
+public class request-body-timeout implements throwable
+    message string = 'request body timed out'
+
+    function render string;
+        return this.message

@@ -1,0 +1,407 @@
+namespace http-server-demo
+
+from /core/collections import list, map
+from /core/urls import parse-url, url-query
+from /core/random import secure-random, secure-bytes, sha256, digest-bytes
+from /core/codecs import encode-base64, bytes-from-octets
+from /core/documents import document-value, document-map-entries, make-document-map, make-document-string, make-document-integer
+from /core/time import clock, deadline, duration, invalid-duration
+from /core/process import arguments
+from /core/errors import throwable
+from /streaky/http-server/annotations import endpoint, route-group, body
+from /streaky/http-server import api, http-error, request-context
+from /streaky/template import text-value
+from /generated/template/http-server-demo import make-template-engine
+
+private function oauth-random string; size int
+    source = instance secure-random;
+    sample = secure-bytes; source, size
+    if sample.failed
+        throw http-error; 500, 'Secure entropy is unavailable'
+    return encode-base64; sample.value, true, false
+
+private function oauth-challenge string; verifier string
+    algorithm = sha256;
+    digest = digest-bytes; algorithm, (verifier.encode; utf8)
+    if digest.failed
+        throw http-error; 500, 'PKCE hashing is unavailable'
+    return encode-base64; digest.value.value, true, false
+
+private function oauth-render string throws throwable; title string, message string, request-id string, authorization-url string = ''
+    engine = make-template-engine;
+    engine.assign; 'title', (text-value; title)
+    engine.assign; 'heading', (text-value; title)
+    engine.assign; 'message', (text-value; message)
+    engine.assign; 'request_id', (text-value; request-id)
+    engine.assign; 'action', (text-value; '/oauth/authorize')
+    engine.assign; 'authorization_url', (text-value; authorization-url)
+    return engine.fetch; 'oauth.html'
+
+# RFC3986 query-component encoding preserves arbitrary client state without allowing
+# it to inject callback parameters. The byte loop is needed because state is UTF-8.
+private function oauth-query-encode string; value string
+    source = value.encode; utf8
+    digits bytes = b'0123456789ABCDEF'
+    result list of uint8 = list;
+    for octet in source
+        if (octet >= 65 and octet <= 90) or (octet >= 97 and octet <= 122) or (octet >= 48 and octet <= 57) or octet == 45 or octet == 46 or octet == 95 or octet == 126
+            result.append; octet
+        else
+            high int = 0
+            low int = octet
+            while low >= 16
+                low = low - 16
+                high = high + 1
+            result.append; 37
+            result.append; digits[high]
+            result.append; digits[low]
+    encoded = bytes-from-octets; result
+    return encoded.decode; utf8
+
+private function oauth-single string|none; parameters ref url-query, key string
+    values = parameters.get-all; key
+    if values.length != 1 or values[0] == ''
+        return none
+    return values[0]
+
+private function oauth-required-query string; parameters ref url-query, key string
+    value = oauth-single; parameters, key
+    if value != none
+        return value
+    throw http-error; 400, 'Invalid authorization parameters'
+
+private function oauth-valid-challenge bool; value string
+    if value.length != 43
+        return false
+    octets = value.encode; utf8
+    for octet in octets
+        if not ((octet >= 65 and octet <= 90) or (octet >= 97 and octet <= 122) or (octet >= 48 and octet <= 57) or octet == 45 or octet == 95)
+            return false
+    return true
+
+private function oauth-valid-verifier bool; value string
+    if value.length < 43 or value.length > 128
+        return false
+    octets = value.encode; utf8
+    for octet in octets
+        if not ((octet >= 65 and octet <= 90) or (octet >= 97 and octet <= 122) or (octet >= 48 and octet <= 57) or octet == 45 or octet == 46 or octet == 95 or octet == 126)
+            return false
+    return true
+
+# Token lifetimes use elapsed time, independent of civil-clock adjustments.
+private function oauth-expiry deadline throws invalid-duration;
+    lifetime = duration::seconds; 300
+    return clock::deadline; lifetime
+
+private class oauth-entry
+    client string = ''
+    redirect string = ''
+    state string = ''
+    challenge string = ''
+    scope string = 'demo.read'
+    access-token string = ''
+    expires-at deadline
+
+    function construct; client string, redirect string, state string, challenge string, expiry deadline
+        this.client = client
+        this.redirect = redirect
+        this.state = state
+        this.challenge = challenge
+        this.expires-at = expiry
+
+private class oauth-pair
+    access-token string = ''
+    refresh-token string = ''
+
+    function construct; access-token string, refresh-token string
+        this.access-token = access-token
+        this.refresh-token = refresh-token
+
+function create-oauth-store shared ref oauth-store;
+    return shared ref (instance oauth-store;)
+
+class oauth-store
+    private active bool = false
+    private pending map of string, oauth-entry
+    private codes map of string, oauth-entry
+    private access map of string, oauth-entry
+    private refresh map of string, oauth-entry
+
+    function construct;
+        for argument in (arguments;)
+            if argument.text == '--oauth'
+                this.active = true
+
+    function enabled bool;
+        return this.active
+
+    mutable function issue string throws throwable; client string, redirect string, state string, challenge string
+        id = oauth-random; 24
+        expiry = oauth-expiry;
+        entry = instance oauth-entry; client, redirect, state, challenge, expiry
+        this.pending.set; id, entry
+        return id
+
+    mutable function consume-consent oauth-entry|none; id string
+        entry = this.pending.get.checked; id
+        if entry != none
+            this.pending.remove.checked; id
+            if not (entry.expires-at.expired;)
+                return entry
+        return none
+
+    mutable function issue-code string throws throwable; entry oauth-entry
+        code = oauth-random; 32
+        entry.expires-at = oauth-expiry;
+        this.codes.set; code, entry
+        return code
+
+    mutable function exchange oauth-pair|none throws throwable; code string, client string, redirect string, challenge string
+        entry = this.codes.get.checked; code
+        if entry != none
+            if (entry.expires-at.expired;)
+                this.codes.remove.checked; code
+                return none
+            if entry.client == client and entry.redirect == redirect and entry.challenge == challenge
+                issued = this.mint; entry
+                this.codes.remove.checked; code
+                return issued
+        return none
+
+    private mutable function mint oauth-pair throws throwable; entry oauth-entry
+        access-token = oauth-random; 32
+        refresh-token = oauth-random; 32
+        entry.access-token = access-token
+        entry.expires-at = oauth-expiry;
+        this.access.set; access-token, entry
+        this.refresh.set; refresh-token, entry
+        return instance oauth-pair; access-token, refresh-token
+
+    mutable function valid-access bool; token string
+        entry = this.access.get.checked; token
+        if entry != none
+            if not (entry.expires-at.expired;)
+                return true
+            this.access.remove.checked; token
+        return false
+
+    mutable function rotate oauth-pair|none throws throwable; token string, client string
+        entry = this.refresh.get.checked; token
+        if entry != none
+            if (entry.expires-at.expired;)
+                this.refresh.remove.checked; token
+                return none
+            if entry.client == client
+                issued = this.mint; entry
+                this.refresh.remove.checked; token
+                this.access.remove.checked; entry.access-token
+                return issued
+        return none
+
+@[route-group; prefix = '/oauth', document = false]
+class demo-oauth-api uses api
+    private store shared ref oauth-store = create-oauth-store;
+
+    private function allowed bool;
+        request = this.request
+        if request != none
+            peer = request.peer-ip;
+            if peer != none
+                return (peer.contains.start; '127.') or peer == '::1' or peer == '::ffff:127.0.0.1'
+        return false
+
+    private function invocation-request request-context;
+        incoming = this.request
+        if incoming != none
+            return incoming
+        throw http-error; 500, 'Missing invocation context'
+
+    private function unavailable bool;
+        if not (this.store.enabled;) or not (this.allowed;)
+            response = this.response
+            if response != none
+                response.set-status; 404
+            return true
+        return false
+
+    private function token-error document-value; code string, status int
+        response = this.response
+        if response != none
+            response.set-status; status
+            response.set-content-type; 'application/json'
+            response.set-header; 'cache-control', 'no-store'
+            response.set-header; 'pragma', 'no-cache'
+        entries = instance document-map-entries;
+        entries.append; 'error', (make-document-string; code)
+        result = make-document-map; entries
+        return result.value
+
+    private function token-success document-value; tokens oauth-pair
+        entries = instance document-map-entries;
+        entries.append; 'access_token', (make-document-string; tokens.access-token)
+        entries.append; 'refresh_token', (make-document-string; tokens.refresh-token)
+        entries.append; 'token_type', (make-document-string; 'Bearer')
+        lifetime = make-document-integer; '300'
+        if lifetime.failed
+            throw http-error; 500, 'Could not encode token lifetime'
+        entries.append; 'expires_in', lifetime.value
+        entries.append; 'scope', (make-document-string; 'demo.read')
+        response = this.response
+        if response != none
+            response.set-content-type; 'application/json'
+            response.set-header; 'cache-control', 'no-store'
+            response.set-header; 'pragma', 'no-cache'
+        result = make-document-map; entries
+        return result.value
+
+    @[endpoint; method = 'GET', path = '/', content-type = 'text/html', summary = 'OAuth development provider']
+    async function landing string throws throwable;
+        authorization-url string = ''
+        request = this.request
+        store = this.store
+        if request != none
+            if (store.enabled;) and (this.allowed;)
+                address = request.url;
+                if address != none
+                    parsed = parse-url; address
+                    if not parsed.failed and parsed.value.scheme == 'http' and parsed.value.username == '' and parsed.value.password == '' and (parsed.value.host == '127.0.0.1' or parsed.value.host == 'localhost' or parsed.value.host == '[::1]')
+                        redirect = parsed.value.origin + '/oauth/callback'
+                        authorization-url = '/oauth/authorize?response_type=code&client_id=terrane-demo&scope=demo.read&code_challenge_method=S256&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&redirect_uri=' + (oauth-query-encode; redirect) + '&state=' + (oauth-random; 24)
+        return oauth-render; 'OAuth development provider', 'In-memory development-only OAuth provider with fixed demo-user identity. Enable with --oauth and connect over loopback. Restarting clears all authorizations and tokens.', '', authorization-url
+
+    @[endpoint; method = 'GET', path = '/authorize', content-type = 'text/html']
+    async function authorize string throws throwable;
+        if this.unavailable;
+            return ''
+        request = this.request
+        if request != none
+            parsed = parse-url; 'http://localhost' + (request.target;)
+            if parsed.failed
+                throw http-error; 400, 'Invalid authorization request'
+            response-type = oauth-required-query; parsed.value.query, 'response_type'
+            client = oauth-required-query; parsed.value.query, 'client_id'
+            redirect = oauth-required-query; parsed.value.query, 'redirect_uri'
+            state = oauth-required-query; parsed.value.query, 'state'
+            scope = oauth-required-query; parsed.value.query, 'scope'
+            challenge = oauth-required-query; parsed.value.query, 'code_challenge'
+            method = oauth-required-query; parsed.value.query, 'code_challenge_method'
+            if response-type != 'code' or client != 'terrane-demo' or scope != 'demo.read' or method != 'S256' or not (oauth-valid-challenge; challenge)
+                throw http-error; 400, 'Invalid authorization request'
+            callback = parse-url; redirect
+            if callback.failed or callback.value.scheme != 'http' or callback.value.username != '' or callback.value.password != '' or callback.value.fragment != '' or (callback.value.serialized.contains; '?') or (callback.value.serialized.contains; '#') or callback.value.path != '/oauth/callback' or (callback.value.host != 'localhost' and callback.value.host != '127.0.0.1' and callback.value.host != '[::1]')
+                throw http-error; 400, 'Invalid redirect URI'
+            store = this.store
+            id = store.issue; client, redirect, (oauth-query-encode; state), challenge
+            return oauth-render; 'Authorize demo access', 'The client requests demo.read for demo-user. Choose allow or deny.', id
+        throw http-error; 400, 'Missing invocation context'
+
+    @[endpoint; method = 'POST', path = '/authorize', content-type = 'text/html']
+    async function consent string throws throwable; (
+        @[body; formats = (list; 'form')] fields document-value,
+    )
+        if this.unavailable;
+            return ''
+        id-field = fields.field; 'request_id'
+        decision-field = fields.field; 'decision'
+        if id-field.failed or decision-field.failed or id-field.value.kind != 'string' or decision-field.value.kind != 'string' or (decision-field.value.scalar != 'allow' and decision-field.value.scalar != 'deny')
+            response = this.response
+            if response != none
+                response.set-status; 400
+            return 'Invalid consent request'
+        store = this.store
+        entry = store.consume-consent; id-field.value.scalar
+        if entry != none
+            response = this.response
+            if response != none
+                if decision-field.value.scalar == 'deny'
+                    response.redirect; entry.redirect + '?error=access_denied&state=' + entry.state
+                else
+                    code = store.issue-code; entry
+                    response.redirect; entry.redirect + '?code=' + code + '&state=' + entry.state
+            return ''
+        throw http-error; 400, 'Consent request expired or already used'
+
+    @[endpoint; method = 'POST', path = '/token']
+    async function token document-value; (
+        @[body; formats = (list; 'json', 'form')] fields document-value,
+    )
+        if this.unavailable;
+            return this.token-error; 'invalid_request', 404
+        grant-field = fields.field; 'grant_type'
+        client-field = fields.field; 'client_id'
+        if grant-field.failed or client-field.failed or grant-field.value.kind != 'string' or client-field.value.kind != 'string' or grant-field.value.scalar == '' or client-field.value.scalar == ''
+            return this.token-error; 'invalid_request', 400
+        client = client-field.value.scalar
+        if grant-field.value.scalar == 'authorization_code'
+            code-field = fields.field; 'code'
+            redirect-field = fields.field; 'redirect_uri'
+            verifier-field = fields.field; 'code_verifier'
+            if code-field.failed or redirect-field.failed or verifier-field.failed or code-field.value.kind != 'string' or redirect-field.value.kind != 'string' or verifier-field.value.kind != 'string'
+                return this.token-error; 'invalid_request', 400
+            if code-field.value.scalar == '' or redirect-field.value.scalar == '' or not (oauth-valid-verifier; verifier-field.value.scalar)
+                return this.token-error; 'invalid_request', 400
+            challenge = oauth-challenge; verifier-field.value.scalar
+            store = this.store
+            issued = store.exchange; code-field.value.scalar, client, redirect-field.value.scalar, challenge
+            if issued != none
+                return this.token-success; issued
+            return this.token-error; 'invalid_grant', 400
+        if grant-field.value.scalar == 'refresh_token'
+            refresh-field = fields.field; 'refresh_token'
+            if refresh-field.failed or refresh-field.value.kind != 'string' or refresh-field.value.scalar == ''
+                return this.token-error; 'invalid_request', 400
+            store = this.store
+            rotated = store.rotate; refresh-field.value.scalar, client
+            if rotated != none
+                return this.token-success; rotated
+            return this.token-error; 'invalid_grant', 400
+        return this.token-error; 'unsupported_grant_type', 400
+
+    @[endpoint; method = 'GET', path = '/resource']
+    async function resource document-value;
+        if this.unavailable;
+            return this.token-error; 'invalid_request', 404
+        request = this.invocation-request;
+        authorization-values = request.header-values; 'authorization'
+        if authorization-values.length != 1
+            response = this.response
+            if response != none
+                response.set-header; 'www-authenticate', 'Bearer'
+            return this.token-error; 'invalid_token', 401
+        parts list of string = list;
+        for word in (authorization-values[0].split; ' ')
+            if word != ''
+                parts.append; word
+        if parts.length != 2 or (parts[0].lower;) != 'bearer' or parts[1] == ''
+            response = this.response
+            if response != none
+                response.set-header; 'www-authenticate', 'Bearer error="invalid_token"'
+            return this.token-error; 'invalid_token', 401
+        store = this.store
+        if not (store.valid-access; parts[1])
+            response = this.response
+            if response != none
+                response.set-header; 'www-authenticate', 'Bearer error="invalid_token"'
+            return this.token-error; 'invalid_token', 401
+        entries = instance document-map-entries;
+        entries.append; 'subject', (make-document-string; 'demo-user')
+        entries.append; 'scope', (make-document-string; 'demo.read')
+        result = make-document-map; entries
+        return result.value
+
+    @[endpoint; method = 'GET', path = '/callback', content-type = 'text/html']
+    async function callback string throws throwable;
+        if this.unavailable;
+            return ''
+        request = this.invocation-request;
+        parsed = parse-url; 'http://localhost' + (request.target;)
+        outcome = 'The authorization server returned an incomplete callback.'
+        if not parsed.failed
+            code = oauth-single; parsed.value.query, 'code'
+            error = oauth-single; parsed.value.query, 'error'
+            state = oauth-single; parsed.value.query, 'state'
+            if error != none and state != none
+                outcome = 'Authorization was denied. You may return to the client.'
+            else if code != none and state != none
+                outcome = 'Authorization completed. Return to your client and exchange the code there.'
+        return oauth-render; 'OAuth callback', outcome, ''

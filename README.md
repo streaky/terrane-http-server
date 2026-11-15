@@ -8,7 +8,9 @@ The [documentation publication](docs/src/manual.yaml) contains the [general docu
 
 The [annotation guide](docs/src/records/guides/annotations.yaml) describes the package's explicit native Terrane consumer. `endpoint`, `path`, `query`, and `body` metadata generate class-based route adapters, typed scalar and JSON model-body extraction, negotiated JSON/YAML/XML or HTML/text responses, and OpenAPI 3.1 JSON. `route-group` supplies a class mount prefix, schema inclusion, enabled response formats, and their default. Omitting formats preserves JSON-only behavior that ignores `Accept`; an explicit nonempty format list opts into negotiation. Repeatable `static-directory` metadata mounts cwd-relative assets. Signatures determine types and query defaults; malformed inputs return 422, and explicit negotiation returns 406 when no enabled response format is acceptable. Ordinary safe async handlers may throw `throwable`; handler and render failures return HTTP 500.
 
-The [catalog demo](demo/README.md) exercises these capabilities with typed catalog models, AOT template-backed HTML pages, static Stoplight Elements docs, and a prefixed `/api` with OpenAPI at `/api/openapi.json`. Build or run the demo directly through Terrane; its declared consumers are built automatically.
+Request-body formats are independent of response negotiation: `@[body; formats = (list; 'json', 'form')]` accepts JSON or strict URL-encoded form documents. Single form fields are strings; repeated names become ordered lists. Explicit policies enforce media type with HTTP 415 and malformed encoding with 422. Selected model bodies remain JSON-only.
+
+The [catalog demo](demo/README.md) exercises these capabilities with typed catalog models, AOT template-backed HTML pages, static Stoplight Elements docs, and a prefixed `/api` with OpenAPI at `/api/openapi.json`. Its opt-in, loopback-only development OAuth provider demonstrates consent, S256 PKCE, protected resources and token rotation, with an owned end-to-end `streaky/http-client` consumer. Build or run the demo directly through Terrane; its declared consumers are built automatically.
 
 WebSocket upgrades remain publicly authorable with `app = app.websocket; '/events', handler`.
 The asynchronous callback receives a `websocket-session`; ordinary HTTP endpoints stay
@@ -58,7 +60,22 @@ Create an application with `create-application`, compose selected annotated API 
 
 To discover an OS-assigned port before serving, bind a core listener with `listen-tcp; '127.0.0.1:0'`, read its `local-address`, and transfer it with `await app.serve-listener; move listener`. This consumes the existing listener without rebinding; `application.address` is ignored on this path. Both serving methods apply the same network access policies.
 
+For graceful shutdown, use `await app.serve-until; shutdown` or
+`await app.serve-listener-until; move listener, shutdown`. `shutdown` is a
+zero-argument `async function to none throws throwable`; returning or throwing
+stops accepting new connections, then drains active responses and upgraded
+WebSocket sessions. Callback errors propagate after draining without losing
+their identity. Policies and connection limits still apply. There is no automatic
+drain deadline or forced WebSocket close; the application owns cancellation.
+See the application API reference for the complete contract.
+
 Use `app = app.with-connection-limit; 64` to bound concurrently accepted TCP connections. The default is `0` (unlimited), and both serving methods honor the setting. Idle keep-alive connections and upgraded WebSocket sessions retain their slots until their final owner finishes. HTTP/2 streams share their transport's slot. When full, the server stops accepting until a worker becomes available; extra clients are subject to the operating system's listen backlog rather than an application-level HTTP 503 response.
+
+The following eager-worker details describe ordinary `serve`/`serve-listener`.
+Graceful `*-until` serving uses a native pinned-future coordinator and creates
+connection tasks only when sockets are accepted, with the same lifetime/lease cap.
+It reports accept failures as contextual stderr diagnostics and retries after
+one second; its routes and access policies are still composed in Terrane.
 
 The limit is implemented in Terrane: it eagerly starts `maximum` workers, each with a router handle and a pending accept on the shared core listener. Choose a limit appropriate to the deployment rather than treating it as a cost-free ceiling. A native channel sender is the connection lease: its last drop wakes the worker, including after an upgrade, without an async destructor or a per-connection runtime. Routes and access policies are composed once before serving; constant-size service wrappers attach peer identity and the lease to requests. Accept failures retry after a one-second backoff; per-connection setup and transport failures do not cancel the server. The limit does not change payloads, enable streaming, or trim allocator-retained RSS; use allocation profiles alongside RSS when investigating retention.
 
@@ -155,8 +172,9 @@ request metadata, and trust rules.
 The annotation consumer constructs OpenAPI and model schemas as document values and
 encodes the result with the built-in JSON codec. `api-documentation` supplies the
 document title, version, and overview. Repeatable request/response examples provide
-named OpenAPI examples authored as JSON text; request bodies remain JSON regardless
-of the negotiated response format.
+named OpenAPI examples authored as JSON text. Request encodings are selected by
+`body.formats`, independently of the negotiated response representation; omitting
+the request policy preserves the existing JSON-only behavior.
 
 ## Current boundary
 
@@ -169,3 +187,8 @@ catalog demo shares one seeded in-memory store across requests. Dependency/state
 injection, general middleware, authentication metadata, and streaming responses
 remain outside this surface; applications use typed Terrane APIs rather than native
 extractor traits, service types, lifetimes, or borrowing.
+
+Implementation helpers prefer ordinary Terrane, including small, short-lived value
+copies. Inline Rust is reserved for host/projection boundaries or operations where
+the native form preserves important transport, validation, or lifetime semantics;
+avoiding a cheap temporary copy alone is not a reason to use it.

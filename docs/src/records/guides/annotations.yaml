@@ -207,17 +207,27 @@ documentation:
             Import annotations from `/streaky/http-server/annotations`. `endpoint` on a method supplies
             `path`, `method`, optional `summary`, `description`, and `operation-id`, plus
             `content-type` (default `application/json`). `path` and `query` supply an optional
-            external `name`, defaulting to the parameter name. `body` identifies one JSON body
-            parameter. Each parameter has exactly one transport annotation. Path placeholders
-            must match the selected path parameters.
+            external `name`, defaulting to the parameter name. `body` identifies one required
+            `document-value` or selected JSON model parameter. Body `formats` may be a distinct
+            nonempty list containing `json` and/or `form`; omitted formats retain the legacy
+            JSON contract. Selected model bodies remain JSON-only; form policies require
+            `document-value`. Form fields remain strings rather than guessing numeric or boolean
+            types, repeated names become ordered lists, and bracketed names stay literal keys
+            rather than inventing a nested-object binding convention.
+            Each parameter has exactly one transport annotation. Path placeholders must match
+            the selected path parameters.
 
             Requiredness and JSON schema types come from the actual signature. A path
             parameter is always required. A query parameter without a default is required;
             a default appears in both runtime extraction and OpenAPI. Integer conversion,
-            strict boolean conversion, missing required values, and malformed JSON fail with
-            HTTP 422 before calling the handler. The generated endpoint callback accepts the
-            ordinary `throws throwable` effect, so handler failures propagate to the HTTP
-            boundary as HTTP 500 rather than being converted into input errors.
+            strict boolean conversion, missing required values, malformed JSON, and invalid
+            form escapes or UTF-8 fail with HTTP 422 before calling the handler. An explicit
+            body format list selects the representation from `Content-Type`; unsupported media
+            types or form charsets fail with HTTP 415. Form decoding treats `+` as space and
+            preserves duplicate names as arrays in encounter order. The generated endpoint
+            callback accepts the ordinary `throws throwable` effect, so handler failures
+            propagate to the HTTP boundary as HTTP 500 rather than being converted into input
+            errors.
             Structured results default to `application/json`; negotiation may select JSON,
             YAML, or XML when enabled on the route group. A returned string is a JSON string
             by default, not raw JSON text; string endpoints configured as `text/html` or
@@ -225,8 +235,8 @@ documentation:
             204 without a body or content type. For HEAD operations returning `none`, OpenAPI
             documents both 200 (the metadata-only response) and the default 204; an explicit
             status override such as 200 remains available at runtime. Response-context
-            overrides can set explicit status and response metadata; request bodies remain
-            JSON regardless of response negotiation.
+            overrides can set explicit status and response metadata; request bodies are
+            independent of response negotiation.
 
             A route group opts into negotiated automatic responses by explicitly setting
             `response-formats` to a nonempty list drawn from `json`, `yaml`, and `xml`.

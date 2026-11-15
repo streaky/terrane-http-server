@@ -37,6 +37,8 @@ effects = ["build", "networking"]
 
 [rust-modules]
 conversions = "rust/conversions.rs"
+shutdown_serving = "rust/shutdown_serving.rs"
+observation = "rust/observation.rs"
 
 [rust-dependencies.http]
 version = "=1.5.0"
@@ -70,3 +72,17 @@ effects = ["build"]
 
 [testing]
 unit = "tests/unit"
+
+[rust-dependencies.serde-json]
+package = "serde_json"
+version = "=1.0.151"
+effects = ["build"]
+
+[rust-dependencies.tower]
+version = "=0.5.3"
+default-features = false
+effects = ["build"]
+
+[rust-dependencies.pin-project-lite]
+version = "=0.2.17"
+effects = ["build"]

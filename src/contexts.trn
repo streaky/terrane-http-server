@@ -35,6 +35,8 @@ public class request-context
         this.peer = direct-address; request
         this.client = client-address; request
         this.trusted = request-proxy-trust; request
+        # headers() currently projects unapplied HeaderMap, not HeaderMap<HeaderValue>.
+        # Keep this typed snapshot until projected generic defaults unify in source.
         captured native-header-map of native-header-value = rust
             request.headers().clone()
         this.headers = shared ref captured
@@ -94,6 +96,9 @@ public class request-context
 
     function header-value string|none; name string
         return read-header-value; this.headers, name
+
+    function header-byte-count int;
+        return count-header-bytes; this.headers
 
     function cookie-value string|none; name string
         for header in (this.header-values; 'cookie')
@@ -257,3 +262,12 @@ private function forwarded-scheme string|none; context request-context
     if value == 'http' or value == 'https'
         return value
     return none
+
+private function count-header-bytes int; headers shared ref (native-header-map of native-header-value)
+    result int = rust
+        let headers = headers.lock().expect("shared reference lock poisoned");
+        let count = headers.iter().fold(0usize, |total, (name, value)| {
+            total.saturating_add(name.as_str().len()).saturating_add(value.as_bytes().len())
+        });
+        (count as i128).into()
+    return result

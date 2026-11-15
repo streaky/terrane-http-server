@@ -23,7 +23,7 @@ class query
 
 @[annotation; targets = (list; (instance annotation-target::parameter;)), repeatable = false]
 class body
-
+    formats (list of string)|none = none
 
 @[annotation; targets = (list; (instance annotation-target::class;), (instance annotation-target::callable;)), repeatable = false]
 class api-documentation
