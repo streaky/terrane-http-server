@@ -1,0 +1,8 @@
+package = "resource-fixture"
+executor = "threaded"
+
+[namespaces]
+"resource-fixture" = "src"
+
+[terrane-dependencies.streaky.http-server]
+path = "../../.."

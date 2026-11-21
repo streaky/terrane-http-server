@@ -67,6 +67,18 @@ documentation:
         A zero timeout disables the timer. Oversized and timed-out bodies throw
         `request-body-limit` and `request-body-timeout`; invalid JSON throws a coercion error.
 
+        `incoming-request.multipart(maximum-bytes = 16777216, maximum-parts = 32,
+        timeout-ms = 0)` consumes the same request body once and streams multipart
+        fields in wire order. Both text fields and uploaded files are represented in
+        `multipart-form.parts`; each `multipart-part` has a name and either a text
+        value or an uploaded file. Text fields are decoded as UTF-8 strings. The
+        multipart parser bounds aggregate body bytes and counts all parts, not only
+        files; malformed content fails with a coercion error, and missing or
+        unsupported multipart media type returns 415. A zero timeout disables timing.
+
+        Uploaded file content is staged incrementally in a private, exclusively
+        created temporary directory. Client filenames are untrusted metadata only;
+        failures produce HTTP 500 rather than returning a partial form.
         A wire response can hold a public `response-stream` producer. Its asynchronous
         `next-chunk` returns one text chunk or none at EOF; throwing aborts the body.
         Transport demand drives polling without an eager producer queue. `cancel`

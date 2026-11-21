@@ -32,13 +32,25 @@ effects = ["build", "networking"]
 [rust-dependencies.tokio]
 version = "=1.53.3"
 default-features = false
-features = ["net", "sync"]
-effects = ["build", "networking"]
+features = ["net", "sync", "fs", "io-util", "time"]
+effects = ["build", "networking", "filesystem"]
 
 [rust-modules]
 conversions = "rust/conversions.rs"
 shutdown_serving = "rust/shutdown_serving.rs"
 observation = "rust/observation.rs"
+multipart = "rust/multipart.rs"
+
+[rust-dependencies.multer]
+version = "=3.1.0"
+effects = ["build"]
+
+[rust-dependencies.tempfile]
+version = "=3.27.0"
+effects = ["build", "filesystem"]
+[rust-dependencies.futures-util]
+version = "=0.3.34"
+effects = ["build"]
 
 [rust-dependencies.http]
 version = "=1.5.0"

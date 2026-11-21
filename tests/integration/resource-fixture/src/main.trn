@@ -1,0 +1,42 @@
+namespace resource-fixture
+
+from /core/errors import throwable
+from /core/networking import listen-tcp
+from /streaky/http-server import create-application, websocket-group, websocket-session
+from /streaky/http-server/internal import incoming-request, wire-response, encoded-response
+
+async function upload wire-response throws throwable; request incoming-request
+    form = await request.multipart;
+    return encoded-response; 200, 'text/plain', ('' + form.parts.length)
+
+function managed-handler (async function from websocket-session to none throws throwable); group shared ref websocket-group, id string
+    return async function; session websocket-session
+        state = group
+        subscription = state.register; id, 2
+        await session.send-text; 'ready'
+        while true
+            event = await session.receive-managed; subscription
+            if event.kind == 'closed'
+                return
+
+async function main throws throwable;
+    group = shared ref (instance websocket-group;)
+    broadcast = async function wire-response; request incoming-request
+        state = group
+        sent = state.broadcast; 'hello'
+        return encoded-response; 200, 'text/plain', ('' + sent)
+    remove = async function wire-response; request incoming-request
+        state = group
+        closed = state.remove; 'first'
+        if closed
+            return encoded-response; 200, 'text/plain', 'removed'
+        return encoded-response; 404, 'text/plain', 'missing'
+    app = create-application;
+    app = app.websocket; '/first', (managed-handler; group, 'first')
+    app = app.websocket; '/second', (managed-handler; group, 'second')
+    app = app.route; 'POST', '/broadcast', broadcast
+    app = app.route; 'POST', '/remove-first', remove
+    app = app.route; 'POST', '/upload', upload
+    listener = await listen-tcp; '127.0.0.1:0'
+    print; listener.local-address
+    await app.serve-listener; move listener

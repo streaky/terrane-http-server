@@ -12,7 +12,53 @@ from /core/documents import document-value, document-map-entries, make-document-
 from /core/documents/json import parse-json, default-json-options
 from /core/urls import url-query, parse-url
 from /core/errors import throwable, coercion-error
+from /deps/tempfile import TempDir as temp-dir, TempPath as temp-path
 from /streaky/http-server import request-context, response-context, capture-request-context, response-media-type, encode-response-document, http-error, response-stream, request-body-limit, request-body-timeout
+
+public class uploaded-file
+    private temporary temp-path|none = none
+    private directory temp-dir|none = none
+    filename string = ''
+    media-type string|none = none
+    size uint64 = 0
+
+    mutable function claim string throws throwable;
+        if this.temporary == none or this.directory == none
+            throw coercion-error
+        path string|none = rust
+            let temporary = self.temporary.take().expect("checked temporary");
+            let directory = self.directory.take().expect("checked directory");
+            if temporary.to_str().is_none() {
+                None
+            } else {
+                match temporary.keep() {
+                    Ok(path) => {
+                        directory.keep();
+                        Some(path.into_os_string().into_string().expect("checked staging path"))
+                    }
+                    Err(_) => { drop(directory); None }
+                }
+            }
+        if path != none
+            return path
+        throw http-error; 500, 'Unable to transfer multipart upload'
+
+public class multipart-part
+    name string = ''
+    value string|none = none
+    file uploaded-file|none = none
+
+public class multipart-form
+    parts list of multipart-part = list
+
+    function field-values list of string; name string
+        values list of string = list
+        for part in ref this.parts
+            if part.name == name
+                value = part.value
+                if value != none
+                    values.append; value
+        return values
 
 public class incoming-request
     private names list of string = list
@@ -115,6 +161,17 @@ public class incoming-request
         if pairs != none
             return form-document; pairs
         throw coercion-error
+
+    mutable async function multipart multipart-form throws throwable; maximum-bytes uint64 = 16777216, maximum-parts uint32 = 32, timeout-ms uint64 = 0
+        content-type = this.content-type
+        if content-type != none
+            body = move this.body
+            staged = await stage-multipart-body; body, content-type, maximum-bytes, maximum-parts, timeout-ms
+            this.bytes-read = staged.bytes-read
+            form = move staged.form
+            if form != none
+                return move form
+        throw http-error; 415, 'Multipart Content-Type is required'
 
     function body-byte-count uint64;
         return this.bytes-read
@@ -256,6 +313,54 @@ private async function bounded-body-to-bytes native-bytes throws throwable; body
     if result.failed
         throw request-body-limit
     return result.buffer
+
+class multipart-stage-result
+    form multipart-form|none = none
+    bytes-read uint64 = 0
+    error-status uint16 = 0
+
+private async function stage-multipart-body multipart-stage-result throws throwable; body mutable ref (native-body|none), content-type ref string, maximum uint64, maximum-parts uint32, timeout-ms uint64
+    result multipart-stage-result = rust
+        match body.take() {
+            None => MultipartStageResult { form: None, bytes_read: 0, error_status: 400 },
+            Some(body) => match crate::multipart::stage(body, content_type, maximum, maximum_parts, timeout_ms).await {
+                Ok(staged) => {
+                    let bytes_read = staged.bytes_read;
+                    let parts = staged.parts.into_iter().map(|part| {
+                        let file = part.temporary.map(|(temporary, directory)| UploadedFile {
+                            temporary: Some(temporary), directory: Some(directory),
+                            filename: part.filename.unwrap_or_default(),
+                            media_type: part.media_type, size: part.size,
+                        });
+                        MultipartPart { name: part.name, value: part.value, file }
+                    }).collect();
+                    MultipartStageResult {
+                        form: Some(MultipartForm { parts: terrane_collection_support::List::new(parts) }),
+                        bytes_read, error_status: 0,
+                    }
+                }
+                Err(error) => MultipartStageResult {
+                    form: None, bytes_read: 0, error_status: match error {
+                        crate::multipart::StageError::Malformed => 400,
+                        crate::multipart::StageError::Timeout => 408,
+                        crate::multipart::StageError::Limit => 413,
+                        crate::multipart::StageError::Unsupported => 415,
+                        crate::multipart::StageError::Storage => 500,
+                    },
+                },
+            },
+        }
+    if result.error-status == 408
+        throw request-body-timeout
+    if result.error-status == 413
+        throw request-body-limit
+    if result.error-status == 400
+        throw coercion-error
+    if result.error-status == 415
+        throw http-error; 415, 'Multipart Content-Type is required'
+    if result.error-status == 500
+        throw http-error; 500, 'Unable to stage multipart upload'
+    return result
 
 private function body-from-stream native-body; next async function to (string|none) throws throwable, cancel function to none
     return rust
