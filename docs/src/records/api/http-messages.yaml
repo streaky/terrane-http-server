@@ -75,10 +75,19 @@ documentation:
         multipart parser bounds aggregate body bytes and counts all parts, not only
         files; malformed content fails with a coercion error, and missing or
         unsupported multipart media type returns 415. A zero timeout disables timing.
+        `body-byte-count` reports the aggregate bytes consumed on success.
+        `form.field-values; name` returns the text values for that name in order.
 
         Uploaded file content is staged incrementally in a private, exclusively
         created temporary directory. Client filenames are untrusted metadata only;
+        they are never used as filesystem paths. Dropping the form or an unclaimed
+        uploaded file removes its temporary file and directory. The parser also
+        cleans up completed and partial stages on failure, timeout, and disconnect.
+        Remove a part from `form.parts` to transfer its ownership. Calling
+        `uploaded-file.claim;` transfers cleanup responsibility and returns a
+        server-generated path; the caller must manage the file and its directory. Staging
         failures produce HTTP 500 rather than returning a partial form.
+
         A wire response can hold a public `response-stream` producer. Its asynchronous
         `next-chunk` returns one text chunk or none at EOF; throwing aborts the body.
         Transport demand drives polling without an eager producer queue. `cancel`
