@@ -2,7 +2,7 @@ namespace http-server-consumer/formats
 
 from /core/collections import list, range, map
 from /core/documents import document-value, document-map-entries, make-document-string, make-document-list
-from /terrane/annotation-consumer-protocol import get, at, text, scalar, consumer-error
+from /core/build/consumer import get, at, text, scalar, consumer-error
 from /http-server-consumer/documents import source-quote, object-value, type-schema
 from /streaky/http-server import response-media-type
 

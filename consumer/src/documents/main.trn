@@ -4,7 +4,7 @@ from /core/documents import
     document-value, document-map-entries, make-document-none,
     make-document-map, make-document-list, make-document-string
 from /core/documents/json import canonical-json
-from /terrane/annotation-consumer-protocol import consumer-error, get, text
+from /core/build/consumer import consumer-error, get, text
 from /core/collections import list
 from /core/errors import replace-error
 
@@ -66,7 +66,7 @@ function documentation-fence string; line string
         spaces = spaces + ' '
         index = index + 1
     trimmed = line.trim.start; spaces
-    if trimmed.contains.start; '\t'
+    if trimmed.contains.start; "\t"
         return ''
     if not (trimmed.contains.start; '```') and not (trimmed.contains.start; '~~~')
         return ''
@@ -91,7 +91,7 @@ function operation-documentation string; declaration document-value, returns boo
     result string = ''
     in-returns bool = false
     fence string = ''
-    for line in (documentation.split; '\n')
+    for line in (documentation.split; "\n")
         marker = documentation-fence; line
         if fence == ''
             if marker != ''
@@ -104,13 +104,14 @@ function operation-documentation string; declaration document-value, returns boo
                 fence = ''
         if in-returns == returns
             if result != ''
-                result = result + '\n'
+                result = result + "\n"
             result = result + line
     return result
 
 function source-quote string throws consumer-error; value string
     try
-        escaped = value.replace; (list; '\\', '\'', '\n', '\r', '\t'), (list; '\\\\', '\\\'', '\\n', '\\r', '\\t')
-        return '\'' + escaped + '\''
+        escaped = value.replace; (list; '\\', '"', "\n", "\r", "\t", "\0"), (list; '\\\\', '\\"', '\\n', '\\r', '\\t', '\\0')
+        escaped = escaped.replace; (list; '{', '}'), (list; '{{', '}}')
+        return '"' + escaped + '"'
     catch replace-error
         throw (instance consumer-error; (make-document-none;), 'source string escape table has unequal search/replacement counts')

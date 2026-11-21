@@ -1,9 +1,9 @@
 namespace http-server-consumer
 
-from /terrane/annotation-consumer-protocol import
-    get, at, text, truth, scalar, annotation, read-request,
+from /core/build/consumer import
+    get, at, text, truth, scalar, annotation-payload, read-request,
     emit-source, emit-error, error-origin, consumer-error
-from /terrane/consumer-cache import source-cache
+from /core/build/consumer/cache import source-cache
 from /core/collections import list, range, map
 from /core/documents import
     document-value, document-map-entries, make-document-none,
@@ -179,7 +179,7 @@ function route-group-record document-value throws consumer-error; declarations d
     for index in (range; 0, (declarations.length;))
         record = at; declarations, index
         if (text; (get; record, 'identity')) == identity and (text; (get; record, 'kind')) == 'class'
-            metadata = annotation; record, 'route-group', '/streaky/http-server/annotations'
+            metadata = annotation-payload; record, 'route-group', '/streaky/http-server/annotations'
             if metadata.kind == 'none'
                 fail; record, 'HTTP endpoint method requires route-group metadata on its selected class'
             return record
@@ -187,7 +187,7 @@ function route-group-record document-value throws consumer-error; declarations d
     return make-document-none;
 
 function make-operation operation throws consumer-error; declaration document-value, declarations document-value, index int, policies map of string, response-policy, method string
-    metadata = annotation; declaration, 'endpoint', '/streaky/http-server/annotations'
+    metadata = annotation-payload; declaration, 'endpoint', '/streaky/http-server/annotations'
     path = metadata-string; metadata, 'path', declaration
     method-key; method, declaration
     route-shape; path, declaration
@@ -200,7 +200,7 @@ function make-operation operation throws consumer-error; declaration document-va
         fail; declaration, 'HTTP endpoint must be an instance method of a selected route-group class'
     owner = pieces[0] + '::' + pieces[1]
     group = route-group-record; declarations, owner, declaration
-    group-meta = annotation; group, 'route-group', '/streaky/http-server/annotations'
+    group-meta = annotation-payload; group, 'route-group', '/streaky/http-server/annotations'
     prefix = metadata-string; group-meta, 'prefix', group
     route-shape; prefix, group
     if prefix != '/' and (prefix.contains.end; '/')
@@ -256,14 +256,14 @@ function make-operation operation throws consumer-error; declaration document-va
     entries.append; 'summary', (make-document-string; summary)
     entries.append; 'description', (make-document-string; description)
     parameter-values list of document-value = list
-    adapter = '    async function adapt-handler' + index + ' wire-response throws throwable; request incoming-request\n'
+    adapter = '    async function adapt-handler' + index + " wire-response throws throwable; request incoming-request\n"
     arguments string = ''
     parameters = get; signature, 'parameters'
     if parameters.kind != 'list'
         fail; declaration, 'HTTP handler signature must expose parameters'
     if negotiated
-        adapter = adapter + '        response-format = select-response-format; (request.accept-value;), ' + (format-list-source; policy) + ', ' + (source-quote; policy.default-format) + '\n        if response-format == \'\'\n            return encoded-response; 406, \'text/plain; charset=utf-8\', \'No acceptable response representation\'\n'
-    adapter = adapter + '        invocation = this.source\n        invocation.request = request.context;\n        invocation.response = request.response-state;\n'
+        adapter = adapter + '        response-format = select-response-format; (request.accept-value;), ' + (format-list-source; policy) + ', ' + (source-quote; policy.default-format) + "\n        if response-format == ''\n            return encoded-response; 406, 'text/plain; charset=utf-8', 'No acceptable response representation'\n"
+    adapter = adapter + "        invocation = this.source\n        invocation.request = request.context;\n        invocation.response = request.response-state;\n"
     names list of string = list
     locations list of string = list
     path-names list of string = list
@@ -276,9 +276,9 @@ function make-operation operation throws consumer-error; declaration document-va
         if (truth; (get; parameter, 'mutable')) or (truth; (get; parameter, 'variadic'))
             fail; record, 'HTTP parameters cannot be mutable or variadic'
         kind = text; (get; parameter, 'type')
-        path-meta = annotation; record, 'path', '/streaky/http-server/annotations'
-        query-meta = annotation; record, 'query', '/streaky/http-server/annotations'
-        body-meta = annotation; record, 'body', '/streaky/http-server/annotations'
+        path-meta = annotation-payload; record, 'path', '/streaky/http-server/annotations'
+        query-meta = annotation-payload; record, 'query', '/streaky/http-server/annotations'
+        body-meta = annotation-payload; record, 'body', '/streaky/http-server/annotations'
         count int = 0
         if path-meta.kind != 'none'
             count = count + 1
@@ -347,15 +347,15 @@ function make-operation operation throws consumer-error; declaration document-va
                 parameter-schema-entries.append; 'default', (default-json; default, kind, record)
             parameter-entries.append; 'schema', (object-value; parameter-schema-entries, record)
             parameter-values.append; (object-value; parameter-entries, record)
-            adapter = adapter + '        ' + variable + ' ' + kind + ' = ' + initial + '\n        raw-value' + parameter-index + ' = request.' + location + '-value; ' + (source-quote; wire-name) + '\n        if raw-value' + parameter-index + ' != none\n'
+            adapter = adapter + '        ' + variable + ' ' + kind + ' = ' + initial + "\n        raw-value" + parameter-index + ' = request.' + location + '-value; ' + (source-quote; wire-name) + "\n        if raw-value" + parameter-index + " != none\n"
             if kind == 'string'
-                adapter = adapter + '            ' + variable + ' = raw-value' + parameter-index + '\n'
+                adapter = adapter + '            ' + variable + ' = raw-value' + parameter-index + "\n"
             else if kind == 'int'
-                adapter = adapter + '            try\n                ' + variable + ' = raw-value' + parameter-index + '.radix; 10\n            catch\n                return validation-response; ' + (source-quote; ('Invalid integer ' + location + ' parameter: ' + wire-name)) + '\n'
+                adapter = adapter + "            try\n                " + variable + ' = raw-value' + parameter-index + ".radix; 10\n            catch\n                return validation-response; " + (source-quote; ('Invalid integer ' + location + ' parameter: ' + wire-name)) + "\n"
             else
-                adapter = adapter + '            if raw-value' + parameter-index + ' == \'true\'\n                ' + variable + ' = true\n            else if raw-value' + parameter-index + ' == \'false\'\n                ' + variable + ' = false\n            else\n                return validation-response; ' + (source-quote; ('Invalid boolean ' + location + ' parameter: ' + wire-name)) + '\n'
+                adapter = adapter + '            if raw-value' + parameter-index + " == 'true'\n                " + variable + " = true\n            else if raw-value" + parameter-index + " == 'false'\n                " + variable + " = false\n            else\n                return validation-response; " + (source-quote; ('Invalid boolean ' + location + ' parameter: ' + wire-name)) + "\n"
             if not optional
-                adapter = adapter + '        else\n            return validation-response; ' + (source-quote; ('Missing required ' + location + ' parameter: ' + wire-name)) + '\n'
+                adapter = adapter + "        else\n            return validation-response; " + (source-quote; ('Missing required ' + location + ' parameter: ' + wire-name)) + "\n"
     segments = path.split; '/'
     placeholders list of string = list
     for segment in segments
@@ -377,23 +377,23 @@ function make-operation operation throws consumer-error; declaration document-va
         body-parameter = at; parameters, body-index
         body-kind = text; (get; body-parameter, 'type')
         body-record = parameter-record; declarations, identity, (text; (get; body-parameter, 'name')), declaration
-        body-meta = annotation; body-record, 'body', '/streaky/http-server/annotations'
+        body-meta = annotation-payload; body-record, 'body', '/streaky/http-server/annotations'
         request-policy = read-request-policy; body-meta, declaration
         request-explicit = request-policy.explicit
         body-schema = object-value; (instance document-map-entries;), declaration
         if (is-model; body-kind, declarations)
             decoder = model-decoder; body-kind, declarations
             if request-policy.explicit
-                adapter = adapter + '        try\n            body-value = await request.document-body; ' + (request-format-list-source; request-policy) + '\n        catch http-error as error\n            throw error\n        catch\n            return validation-response; \'Invalid request body\'\n'
+                adapter = adapter + "        try\n            body-value = await request.document-body; " + (request-format-list-source; request-policy) + "\n        catch http-error as error\n            throw error\n        catch\n            return validation-response; 'Invalid request body'\n"
             else
-                adapter = adapter + '        try\n            body-value = await request.json-body;\n        catch\n            return validation-response; \'Invalid JSON request body\'\n'
-            adapter = adapter + '        try\n            parameter-value' + body-index + ' = ' + decoder + '; body-value\n        catch\n            return validation-response; \'Invalid request model\'\n'
+                adapter = adapter + "        try\n            body-value = await request.json-body;\n        catch\n            return validation-response; 'Invalid JSON request body'\n"
+            adapter = adapter + "        try\n            parameter-value" + body-index + ' = ' + decoder + "; body-value\n        catch\n            return validation-response; 'Invalid request model'\n"
             body-schema = model-reference; body-kind, declarations
         else
             if request-policy.explicit
-                adapter = adapter + '        try\n            parameter-value' + body-index + ' = await request.document-body; ' + (request-format-list-source; request-policy) + '\n        catch http-error as error\n            throw error\n        catch\n            return validation-response; \'Invalid request body\'\n'
+                adapter = adapter + "        try\n            parameter-value" + body-index + ' = await request.document-body; ' + (request-format-list-source; request-policy) + "\n        catch http-error as error\n            throw error\n        catch\n            return validation-response; 'Invalid request body'\n"
             else
-                adapter = adapter + '        try\n            parameter-value' + body-index + ' = await request.json-body;\n        catch\n            return validation-response; \'Invalid JSON request body\'\n'
+                adapter = adapter + "        try\n            parameter-value" + body-index + " = await request.json-body;\n        catch\n            return validation-response; 'Invalid JSON request body'\n"
         media-entries = instance document-map-entries;
         for format in request-policy.formats
             media-type = 'application/json'
@@ -470,29 +470,29 @@ function make-operation operation throws consumer-error; declaration document-va
         adapter = adapter + '        result = await ' + target + ';'
     if arguments != ''
         adapter = adapter + ' ' + arguments
-    adapter = adapter + '\n'
+    adapter = adapter + "\n"
     encoded string = ''
     if result-none
-        encoded = '        return encoded-response; 204, \'\', \'\'\n'
+        encoded = "        return encoded-response; 204, '', ''\n"
     else if not structured
-        encoded = '        return encoded-response; 200, ' + (source-quote; content-type) + ', result\n'
+        encoded = '        return encoded-response; 200, ' + (source-quote; content-type) + ", result\n"
     else
         if result-document
-            encoded = '        document = result\n'
+            encoded = "        document = result\n"
         else if result-model
-            encoded = '        document = ' + (model-encoder; result-kind, declarations) + '; result\n'
+            encoded = '        document = ' + (model-encoder; result-kind, declarations) + "; result\n"
         else if result-kind == 'int'
-            encoded = '        document-result = make-document-integer; (\'\' + result)\n        if document-result.failed\n            throw coercion-error\n        document = document-result.value\n'
+            encoded = "        document-result = make-document-integer; ('' + result)\n        if document-result.failed\n            throw coercion-error\n        document = document-result.value\n"
         else
             factory = 'make-document-' + result-kind
-            encoded = '        document = ' + factory + '; result\n'
+            encoded = '        document = ' + factory + "; result\n"
         if negotiated
-            encoded = encoded + '        return encode-document-response; document, response-format\n'
+            encoded = encoded + "        return encode-document-response; document, response-format\n"
         else
-            encoded = encoded + '        return encode-document-response; document, \'json\'\n'
+            encoded = encoded + "        return encode-document-response; document, 'json'\n"
     if result-optional
-        indented = (encoded.trim.end;).replace; '\n', '\n    '
-        adapter = adapter + '        if result != none\n    ' + indented + '\n        else\n            return encoded-response; 204, \'\', \'\'\n'
+        indented = (encoded.trim.end;).replace; "\n", "\n    "
+        adapter = adapter + "        if result != none\n    " + indented + "\n        else\n            return encoded-response; 204, '', ''\n"
     else
         adapter = adapter + encoded
     mounted-path = path
@@ -525,7 +525,7 @@ function static-directory-source string throws consumer-error; declaration docum
             mounted = path
             if prefix != '/'
                 mounted = prefix + path
-            code = code + '    app = app.static-directory; ' + (source-quote; mounted) + ', ' + (source-quote; directory) + '\n'
+            code = code + '    app = app.static-directory; ' + (source-quote; mounted) + ', ' + (source-quote; directory) + "\n"
     return code
 
 function validate-api-source throws consumer-error; declaration document-value
@@ -554,11 +554,11 @@ function generate string throws consumer-error; request document-value
         declaration = at; declarations, index
         kind = text; (get; declaration, 'kind')
         if kind == 'callable'
-            metadata = annotation; declaration, 'endpoint', '/streaky/http-server/annotations'
+            metadata = annotation-payload; declaration, 'endpoint', '/streaky/http-server/annotations'
             if metadata.kind != 'none'
                 endpoints.append; declaration
         else if kind == 'class'
-            metadata = annotation; declaration, 'route-group', '/streaky/http-server/annotations'
+            metadata = annotation-payload; declaration, 'route-group', '/streaky/http-server/annotations'
             if metadata.kind != 'none'
                 groups.append; declaration
     policies map of string, response-policy = map
@@ -567,15 +567,15 @@ function generate string throws consumer-error; request document-value
         group = groups[index]
         identity = text; (get; group, 'identity')
         pieces = identity.split; '::'
-        imports = imports + 'from ' + pieces[0] + ' import ' + pieces[1] + ' as route-source' + index + '\n'
-        metadata = annotation; group, 'route-group', '/streaky/http-server/annotations'
+        imports = imports + 'from ' + pieces[0] + ' import ' + pieces[1] + ' as route-source' + index + "\n"
+        metadata = annotation-payload; group, 'route-group', '/streaky/http-server/annotations'
         policies.set; identity, (read-response-policy; metadata, group)
         validate-api-source; group
         prefix = metadata-string; metadata, 'prefix', group
         route-shape; prefix, group
         for previous-index in (range; 0, index)
             previous = groups[previous-index]
-            previous-meta = annotation; previous, 'route-group', '/streaky/http-server/annotations'
+            previous-meta = annotation-payload; previous, 'route-group', '/streaky/http-server/annotations'
             if (metadata-string; previous-meta, 'prefix', previous) == prefix
                 fail; group, 'duplicate HTTP route-group mount prefix'
     if endpoints.length == 0
@@ -583,7 +583,7 @@ function generate string throws consumer-error; request document-value
     operations list of operation = list
     for index in (range; 0, endpoints.length)
         declaration = endpoints[index]
-        metadata = annotation; declaration, 'endpoint', '/streaky/http-server/annotations'
+        metadata = annotation-payload; declaration, 'endpoint', '/streaky/http-server/annotations'
         methods = (metadata-string; metadata, 'method', declaration).split; '|'
         seen list of string = list
         for method in methods
@@ -646,17 +646,17 @@ function generate string throws consumer-error; request document-value
     for index in (range; 0, groups.length)
         group = groups[index]
         owner = text; (get; group, 'identity')
-        metadata = annotation; group, 'route-group', '/streaky/http-server/annotations'
+        metadata = annotation-payload; group, 'route-group', '/streaky/http-server/annotations'
         documented = truth; (scalar; (get; metadata, 'document'))
         generated = generated + (controller-source; engine, 'annotated-group' + index, owner, 'route-source' + index, operations, documented)
-    generated = generated + '\npublic function mount-annotated application; app application\n'
+    generated = generated + "\npublic function mount-annotated application; app application\n"
     for index in (range; 0, groups.length)
         group = groups[index]
-        metadata = annotation; group, 'route-group', '/streaky/http-server/annotations'
+        metadata = annotation-payload; group, 'route-group', '/streaky/http-server/annotations'
         prefix = metadata-string; metadata, 'prefix', group
-        generated = generated + '    app = app.mount; ' + (source-quote; prefix) + ', (instance annotated-group' + index + '; (instance route-source' + index + ';))\n'
+        generated = generated + '    app = app.mount; ' + (source-quote; prefix) + ', (instance annotated-group' + index + '; (instance route-source' + index + ";))\n"
         generated = generated + (static-directory-source; group, prefix)
-    generated = generated + '    return app\n'
+    generated = generated + "    return app\n"
     return generated
 
 function main;

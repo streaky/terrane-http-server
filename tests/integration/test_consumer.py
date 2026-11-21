@@ -236,7 +236,10 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
         overview = "# API overview\n\n```console\ncurl /api/value\n```\n\n@returns This belongs to the overview."
         override = "**Custom overview**\n\nUse the documented request examples."
         def literal(value):
-            return "'" + value.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n") + "'"
+            escaped = (value.replace("\\", "\\\\").replace('"', '\\"')
+                .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
+                .replace("\0", "\\0").replace("{", "{{").replace("}", "}}"))
+            return '"' + escaped + '"'
 
         base_annotation = (
             "@[api-documentation; title = " + literal(title)
@@ -501,10 +504,10 @@ class handlers uses api
         response.set-content-length; length
         return 'café é 👩‍💻'
 
-    @[endpoint; path = '/created', summary = 'A "quoted" café\nand a backslash \\']
+    @[endpoint; path = '/created', summary = "A \"quoted\" café\nand a backslash \\"]
     async function created document-value throws throwable;
         entries = instance document-map-entries;
-        entries.append; 'value', (make-document-string; 'say "hello" \\ café\n\t')
+        entries.append; 'value', (make-document-string; "say \"hello\" \\ café\n\t")
         payload = make-document-map; entries
         if payload.failed
             throw coercion-error
@@ -563,7 +566,7 @@ class handlers uses api
     @[endpoint; path = '/custom-error']
     async function custom-error document-value throws throwable;
         entries = instance document-map-entries;
-        entries.append; 'detail', (make-document-string; 'No café "seat"\nleft')
+        entries.append; 'detail', (make-document-string; "No café \"seat\"\nleft")
         payload = make-document-map; entries
         if payload.failed
             throw coercion-error
@@ -581,7 +584,7 @@ class handlers uses api
     @[endpoint; path = '/invalid-header']
     async function invalid-header string throws throwable;
         response = this.controls;
-        response.set-header; 'x-invalid', 'a\r\nb'
+        response.set-header; 'x-invalid', "a\r\nb"
         return 'must not escape'
 
     @[endpoint; path = '/tampered-error']
@@ -591,7 +594,7 @@ class handlers uses api
         throw error
 
     @[endpoint; path = '/quoted-default']
-    async function quoted-default string; @[query;] label string = 'say "hello" \\ café\n\t'
+    async function quoted-default string; @[query;] label string = "say \"hello\" \\ café\n\t"
         return label
 
 @[route-group; prefix = '/text']

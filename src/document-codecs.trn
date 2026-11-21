@@ -12,7 +12,7 @@ public function encode-response-document string throws throwable; document docum
         case 'yaml'
             return response-yaml; document, ''
         case 'xml'
-            return '<?xml version="1.0" encoding="UTF-8"?>\n<response xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"' + (response-xml; document, 'response') + '\n'
+            return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<response xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"" + (response-xml; document, 'response') + "\n"
         case else
             throw coercion-error
 
@@ -29,7 +29,7 @@ private function yaml-block bool; value document-value
 
 private function response-yaml string throws throwable; document document-value, indent string
     if not (yaml-block; document)
-        return indent + (response-json; document) + '\n'
+        return indent + (response-json; document) + "\n"
     result string = ''
     index int = 0
     while index < (document.length;)
@@ -48,9 +48,9 @@ private function response-yaml string throws throwable; document document-value,
             value = field.value
             prefix = indent + '-'
         if yaml-block; value
-            result = result + prefix + '\n' + (response-yaml; value, (indent + '  '))
+            result = result + prefix + "\n" + (response-yaml; value, (indent + '  '))
         else
-            result = result + prefix + ' ' + (response-json; value) + '\n'
+            result = result + prefix + ' ' + (response-json; value) + "\n"
         index = index + 1
     return result
 
@@ -66,7 +66,7 @@ private function xml-text string throws throwable; value string
         value.chars().all(|c| matches!(c as u32, 0x9 | 0xA | 0xD | 0x20..=0xD7FF | 0xE000..=0xFFFD | 0x10000..=0x10FFFF))
     if not valid
         throw coercion-error
-    return value.replace; (list; '&', '<', '>', '\r'), (list; '&amp;', '&lt;', '&gt;', '&#13;')
+    return value.replace; (list; '&', '<', '>', "\r"), (list; '&amp;', '&lt;', '&gt;', '&#13;')
 
 # The caller owns the opening element name. Maps use named children; lists are
 # wrapped and use item children; none uses xsi:nil instead of an ambiguous empty

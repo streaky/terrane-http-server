@@ -26,13 +26,11 @@ Consumer freshness caching uses the `preparation` request context, including the
 compiler-provided state directory and executable identity. Older compilers without
 these manifest features cannot load the package.
 
-The exported tools currently expect the compiler checkout layout: keep this package
-at `packages/http-server` beside `packages/template`, with the helper packages at
-`tools/annotation-consumers/protocol` and `tools/annotation-consumers/cache`.
-Both consumers use relative path dependencies on these helpers. Copying the HTTP
-package alone or installing it as a standalone Git/source archive does not supply
-the helper sources needed to build its exported tool. Keep sibling consumer
-manifests and protocol imports aligned with `/terrane/annotation-consumer-protocol`.
+The HTTP and template consumers require a toolchain that bundles
+`/core/build/consumer` and `/core/build/consumer/cache`; neither needs helper
+packages from a compiler checkout. The HTTP consumer still resolves template
+through a sibling package path, so place this package beside a compatible
+template checkout. A standalone HTTP source archive does not supply that sibling.
 Build the application normally; Terrane builds the selected template tool before
 the HTTP consumer and then prepares the caller. There is no separate consumer
 bootstrap step.

@@ -2,7 +2,7 @@ namespace http-server-consumer/overview
 
 from /core/collections import range
 from /core/documents import document-value, document-map-entries, make-document-string
-from /terrane/annotation-consumer-protocol import get, at, text, scalar, annotation, consumer-error
+from /core/build/consumer import get, at, text, scalar, annotation-payload, consumer-error
 from /http-server-consumer/documents import object-value, declaration-documentation
 
 # Info describes the entire OpenAPI document, not one route-group's paths.
@@ -14,7 +14,7 @@ function api-info document-value throws consumer-error; declarations document-va
     found bool = false
     for index in (range; 0, (declarations.length;))
         declaration = at; declarations, index
-        metadata = annotation; declaration, 'api-documentation', '/streaky/http-server/annotations'
+        metadata = annotation-payload; declaration, 'api-documentation', '/streaky/http-server/annotations'
         if metadata.kind != 'none'
             if found
                 throw (instance consumer-error; declaration, 'HTTP API documentation must have exactly one selected owner')

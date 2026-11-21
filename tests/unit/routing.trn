@@ -64,7 +64,7 @@ function test-access-policies-and-websocket-routes-compose;
     assert-equal-bool; (app.has-routes;), true
 
 function test-yaml-configures-address-static-content-and-controller-prefixes;
-    source = 'address: 127.0.0.1:8080\nmounts:\n  - controller: site\n    path: /\n  - static-directory: public\n    path: /assets'
+    source = "address: 127.0.0.1:8080\nmounts:\n  - controller: site\n    path: /\n  - static-directory: public\n    path: /assets"
     parsed = parse-config-yaml; source
     assert-equal-bool; parsed.failed, false
     assert-equal-string; parsed.config.address, '127.0.0.1:8080'
@@ -79,18 +79,18 @@ function test-yaml-configures-address-static-content-and-controller-prefixes;
     assert-equal-bool; (app.has-routes;), true
 
 function test-yaml-rejects-ambiguous-mounts;
-    parsed = parse-config-yaml; 'mounts:\n  - controller: site\n    static-directory: public\n    path: /'
+    parsed = parse-config-yaml; "mounts:\n  - controller: site\n    static-directory: public\n    path: /"
     assert-equal-bool; parsed.failed, true
     assert-equal-string; parsed.message, 'each mount requires exactly one of controller or static-directory'
 
 function test-yaml-rejects-malformed-and-colliding-mounts;
-    malformed = parse-config-yaml; 'mounts:\n  - controller: site\n    path: relative'
+    malformed = parse-config-yaml; "mounts:\n  - controller: site\n    path: relative"
     assert-equal-string; malformed.message, 'mount path must begin with /'
-    duplicate-id = parse-config-yaml; 'mounts:\n  - controller: site\n    path: /\n  - controller: site\n    path: /other'
+    duplicate-id = parse-config-yaml; "mounts:\n  - controller: site\n    path: /\n  - controller: site\n    path: /other"
     assert-equal-string; duplicate-id.message, 'controller identifiers must be unique'
-    duplicate-path = parse-config-yaml; 'mounts:\n  - controller: site\n    path: /same\n  - static-directory: public\n    path: /same'
+    duplicate-path = parse-config-yaml; "mounts:\n  - controller: site\n    path: /same\n  - static-directory: public\n    path: /same"
     assert-equal-string; duplicate-path.message, 'mount paths must be unique'
 
 function test-missing-configured-controller-is-explicit;
-    parsed = parse-config-yaml; 'mounts:\n  - controller: site\n    path: /'
+    parsed = parse-config-yaml; "mounts:\n  - controller: site\n    path: /"
     assert-equal-bool; (parsed.config.controller-path; 'missing') == none, true
