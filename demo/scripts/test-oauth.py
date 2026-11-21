@@ -23,12 +23,12 @@ def stop_owned_group(child):
             child.wait()
 
 
-def run_owned(command, capture=False):
+def run_owned(command, capture=False, timeout=600):
     with subprocess.Popen(command, cwd=ROOT, stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE if capture else None, text=True,
             start_new_session=True) as child:
         try:
-            output, _ = child.communicate(timeout=600)
+            output, _ = child.communicate(timeout=timeout)
         except BaseException:
             stop_owned_group(child)
             raise
@@ -38,7 +38,7 @@ def run_owned(command, capture=False):
 
 
 def build(compiler, package):
-    output = run_owned([compiler, "build", str(package)], capture=True)
+    output = run_owned([compiler, "build", str(package)], capture=True, timeout=None)
     for line in reversed(output.splitlines()):
         artifact = Path(line.strip())
         if not artifact.is_absolute():
@@ -56,11 +56,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--all", action="store_true", help="Include existing catalog/context/WebSocket demo checks")
     options = parser.parse_args()
-    selected = os.environ.get("TERRANE", "terrane")
-    compiler = shutil.which(selected)
-    if compiler is None:
+    compiler = os.environ.get("TERRANE", "terrane")
+    if shutil.which(compiler) is None:
         raise RuntimeError("Set TERRANE to a current installed compiler executable")
-    compiler = str(Path(compiler).resolve())
     demo = build(compiler, DEMO)
     client = build(compiler, DEMO / "oauth-client")
     command = [sys.executable, "-B", str(DEMO.parent / "tests/integration/test_demo.py"),

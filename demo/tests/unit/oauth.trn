@@ -3,16 +3,17 @@ namespace http-server-demo
 from /core/testing import assert-equal-bool, advance-time, fail
 from /core/errors import throwable
 
-function test-oauth-pending-consent-expires-at-deadline throws throwable;
+function test-oauth-pending-prunes-expired-on-mutation-without-resetting-live-deadline throws throwable;
     store = instance oauth-store;
-    first = store.issue; 'terrane-demo', 'http://127.0.0.1:8765/oauth/callback', 'state', 'challenge'
-    last = store.issue; 'terrane-demo', 'http://127.0.0.1:8765/oauth/callback', 'state', 'challenge'
-    advance-time; 299000000000
-    before = store.consume-consent; first
-    assert-equal-bool; before != none, true
-    advance-time; 1000000000
-    expired = store.consume-consent; last
-    assert-equal-bool; expired == none, true
+    _expired = store.issue; 'terrane-demo', 'http://127.0.0.1:8765/oauth/callback', 'expired', 'challenge'
+    advance-time; 100000000000
+    live = store.issue; 'terrane-demo', 'http://127.0.0.1:8765/oauth/callback', 'live', 'challenge'
+    advance-time; 200000000000
+    replacement = store.issue; 'terrane-demo', 'http://127.0.0.1:8765/oauth/callback', 'replacement', 'challenge'
+    assert-equal-bool; store.pending.length == 2, true
+    advance-time; 100000000000
+    assert-equal-bool; (store.consume-consent; live) == none, true
+    assert-equal-bool; (store.consume-consent; replacement) != none, true
 
 function test-oauth-code-expires-before-exchange throws throwable;
     store = instance oauth-store;

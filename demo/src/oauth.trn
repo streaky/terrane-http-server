@@ -1,6 +1,6 @@
 namespace http-server-demo
 
-from /core/collections import list, map
+from /core/collections import list, unordered-map
 from /core/urls import parse-url, url-query
 from /core/random import secure-random, secure-bytes, sha256, digest-bytes
 from /core/codecs import encode-base64, bytes-from-octets
@@ -120,12 +120,19 @@ private class oauth-pair
 function create-oauth-store shared ref oauth-store;
     return shared ref (instance oauth-store;)
 
+private function prune-expired; entries mutable ref (unordered-map of string, oauth-entry)
+    keys = entries.keys;
+    for key in keys
+        entry = ref entries[key]
+        if (entry.expires-at.expired;)
+            entries.remove.checked; key
+
 class oauth-store
     private active bool = false
-    private pending map of string, oauth-entry
-    private codes map of string, oauth-entry
-    private access map of string, oauth-entry
-    private refresh map of string, oauth-entry
+    private pending unordered-map of string, oauth-entry
+    private codes unordered-map of string, oauth-entry
+    private access unordered-map of string, oauth-entry
+    private refresh unordered-map of string, oauth-entry
 
     function construct;
         for argument in (arguments;)
@@ -137,6 +144,7 @@ class oauth-store
 
     mutable function issue string throws throwable; client string, redirect string, state string, challenge string
         id = oauth-random; 24
+        prune-expired; this.pending
         expiry = oauth-expiry;
         entry = instance oauth-entry; client, redirect, state, challenge, expiry
         this.pending.set; id, entry
@@ -152,6 +160,7 @@ class oauth-store
 
     mutable function issue-code string throws throwable; entry oauth-entry
         code = oauth-random; 32
+        prune-expired; this.codes
         entry.expires-at = oauth-expiry;
         this.codes.set; code, entry
         return code
@@ -173,6 +182,8 @@ class oauth-store
         refresh-token = oauth-random; 32
         entry.access-token = access-token
         entry.expires-at = oauth-expiry;
+        prune-expired; this.access
+        prune-expired; this.refresh
         this.access.set; access-token, entry
         this.refresh.set; refresh-token, entry
         return instance oauth-pair; access-token, refresh-token
