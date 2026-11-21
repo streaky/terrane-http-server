@@ -19,6 +19,11 @@ private class websocket-channel-pair
         this.sender = move sender
         this.receiver = move receiver
 
+private function websocket-channel websocket-channel-pair; capacity uint32
+    return rust
+        let (sender, receiver) = tokio::sync::mpsc::channel::<String>(capacity as usize);
+        WebsocketChannelPair { sender: Some(sender), receiver: Some(receiver) }
+
 private class websocket-managed-result
     socket native-websocket
     receiver websocket-receiver of string
@@ -34,11 +39,6 @@ private class websocket-managed-result
         this.outgoing = outgoing
         this.socket-error = socket-error
         this.queue-closed = queue-closed
-
-private function websocket-channel websocket-channel-pair; capacity uint32
-    return rust
-        let (sender, receiver) = tokio::sync::mpsc::channel::<String>(capacity as usize);
-        WebsocketChannelPair { sender: Some(sender), receiver: Some(receiver) }
 
 private async function receive-managed-result websocket-managed-result; socket mutable ref (native-websocket|none), receiver mutable ref ((websocket-receiver of string)|none)
     return rust
@@ -99,6 +99,8 @@ public class websocket-group
         channel = websocket-channel; capacity
         endpoint = instance websocket-queue-endpoint; move channel.sender
         this.endpoints.set; id, move endpoint
+        # Re-registering an ID replaces the old sender; its receiver drains queued
+        # messages before reporting closure to its managed session.
         return instance websocket-subscription; move channel.receiver
 
     mutable function broadcast int; text string

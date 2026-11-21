@@ -5,7 +5,7 @@ from /deps/axum-core/extract import Request as native-request
 from /deps/http/request import Builder as request-builder
 from /core/testing import assert-equal-bool, assert-equal-string, assert-equal-int
 from /core/errors import throwable, coercion-error
-from /core/collections import list
+from /core/collections import list, range
 from /core/documents/json import parse-json, default-json-options
 from /streaky/http-server import api, response-context, http-error, request-body-limit, select-response-format
 
@@ -74,6 +74,48 @@ async function test-form-body-decodes-utf8-plus-and-duplicate-fields throws thro
     assert-equal-string; count-field.value.scalar, '007'
     assert-equal-string; bracket-field.value.scalar, 'v'
     assert-equal-string; symbol-field.value.scalar, '#raw#fragment'
+
+function test-form-body-groups-repeated-fields throws throwable;
+    pairs list of string = list;
+    for index in (range; 0, 256)
+        pairs.append; 'same'
+        pairs.append; (index.to-string;)
+    document = form-document; pairs
+    values = document.field; 'same'
+    assert-equal-string; values.value.kind, 'list'
+    assert-equal-int; (values.value.length;), 256
+    first = values.value.item; 0
+    last = values.value.item; 255
+    assert-equal-string; first.value.scalar, '0'
+    assert-equal-string; last.value.scalar, '255'
+
+async function test-body-read-over-limit-keeps-limit-error;
+    request = instance incoming-request; (native-request::new; (body-from-text; '123456')), '/'
+    limited bool = false
+    try
+        await request.json-body; 2
+    catch request-body-limit
+        limited = true
+    assert-equal-bool; limited, true
+
+private function failing-body native-body;
+    return rust
+        ::axum::body::Body::from_stream(::futures_util::stream::once(async {
+            Err::<::axum::body::Bytes, std::io::Error>(std::io::Error::other("test body failure"))
+        }))
+
+async function test-body-read-transport-error-is-not-size-limit;
+    request = instance incoming-request; (native-request::new; (failing-body;)), '/'
+    limited bool = false
+    failed bool = false
+    try
+        await request.json-body;
+    catch request-body-limit
+        limited = true
+    catch http-error
+        failed = true
+    assert-equal-bool; limited, false
+    assert-equal-bool; failed, true
 
 async function test-form-body-rejects-malformed-escapes-and-utf8;
     for source in (list; 'name=%', 'name=%GG', 'name=%C3%28')
@@ -195,6 +237,34 @@ async function test-multipart-stages-fields-and-files-in-wire-order throws throw
             let directory_removed = path.parent().is_some_and(|parent| std::fs::remove_dir(parent).is_ok());
             file_removed && directory_removed && content.is_ok_and(|bytes| bytes == b"payload-data")
         assert-equal-bool; cleaned, true
+
+private function upload-with-non-utf8-path uploaded-file;
+    return rust
+        use std::{ffi::OsStr, os::unix::ffi::OsStrExt as _};
+        let directory = ::tempfile::tempdir().unwrap();
+        let file = ::tempfile::Builder::new()
+            .prefix(OsStr::from_bytes(b"upload-\xff"))
+            .tempfile_in(directory.path()).unwrap()
+            .into_temp_path();
+        UploadedFile {
+            temporary: Some(file), directory: Some(directory),
+            filename: String::new(), media_type: None, size: 0,
+        }
+
+private function upload-still-staged bool; file ref uploaded-file
+    return rust
+        file.temporary.as_ref().is_some_and(|path| path.is_file()) &&
+            file.directory.as_ref().is_some_and(|directory| directory.path().is_dir())
+
+function test-multipart-claim-rejection-retains-staged-file throws throwable;
+    file = upload-with-non-utf8-path;
+    failed bool = false
+    try
+        file.claim;
+    catch http-error
+        failed = true
+    assert-equal-bool; failed, true
+    assert-equal-bool; (upload-still-staged; file), true
 
 async function test-multipart-rejects-part-count-overflow;
     builder = request-builder::new;

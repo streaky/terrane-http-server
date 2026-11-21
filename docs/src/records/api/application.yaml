@@ -101,13 +101,20 @@ documentation:
         These methods preserve route composition, network policies, peer metadata,
         WebSocket support, and connection limits. The listener overloads use the
         supplied sockets without rebinding or consulting `application.address`.
-        `serve-listeners-until` consumes a nonempty list of bound listeners and
-        accepts across them concurrently. The connection cap is shared globally.
+        `serve-listeners-until` consumes a nonempty list of bound listeners;
+        passing an empty list throws the generic `coercion-error` without a
+        descriptive message. The method accepts across them concurrently.
         Setup failures propagate before the shutdown callback starts.
         There is no implicit grace timeout or forced WebSocket close: applications
         must arrange their own cancellation/close policy if active work or sessions
         must finish within a deadline. Cancelling the serving operation itself is
         not a graceful-shutdown request.
+
+        `observe-transport` configures one observer for the final application router;
+        registering routes before or after this call is equivalent. The observer
+        sees admitted HTTP requests, including WebSocket upgrade handshakes, but not
+        WebSocket frames or requests rejected by the network access policy. Calling
+        `observe-transport` again replaces the previous configuration.
     - type: example
       id: signatures
       title: Public declaration synopsis
@@ -119,6 +126,7 @@ documentation:
         public class application
             address string = '127.0.0.1:3000'
             consuming function websocket application; path string, handler async function from websocket-session to none throws throwable
+            consuming function observe-transport application; observer function from string to none, capture-limit uint32 = 65536, capture-all bool = false
             consuming function static-directory application; prefix string, directory string
             consuming function with-address application; address string
             consuming function with-connection-limit application; maximum uint32

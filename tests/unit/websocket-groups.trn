@@ -27,6 +27,18 @@ function test-websocket-group-removes-only-the-targeted-session throws throwable
     assert-equal-int; (group.broadcast; 'still-connected-again'), 1
     assert-equal-bool; (group.remove; 'first'), false
 
+function test-websocket-group-replacement-overwrites-only-mapped-endpoint throws throwable;
+    group = instance websocket-group;
+    old = group.register; 'same', 1
+    assert-equal-int; (group.broadcast; 'queued-before-replacement'), 1
+    replacement = group.register; 'same', 1
+    assert-equal-int; (group.length;), 1
+    assert-equal-int; (group.broadcast; 'new-endpoint-message'), 1
+    assert-equal-bool; (group.remove; 'same'), true
+    assert-equal-int; (group.length;), 0
+    discard-websocket-subscription; move old
+    discard-websocket-subscription; move replacement
+
 function test-websocket-group-cleans-up-a-dropped-subscription throws throwable;
     group = instance websocket-group;
     subscription = group.register; 'dropped', 1

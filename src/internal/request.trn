@@ -7,13 +7,13 @@ from /deps/axum-core/response import Response as native-response
 from /deps/http import StatusCode as status-code
 from /deps/http/response import Builder as response-builder
 from /deps/http/uri import PathAndQuery as path-and-query
-from /core/collections import list, map
+from /streaky/http-server import request-context, response-context, capture-request-context, response-media-type, encode-response-document, http-error, response-stream, request-body-limit, request-body-timeout
+from /core/collections import list, map, unordered-map
 from /core/documents import document-value, document-map-entries, make-document-map, make-document-list, make-document-string
 from /core/documents/json import parse-json, default-json-options
 from /core/urls import url-query, parse-url
 from /core/errors import throwable, coercion-error
 from /deps/tempfile import TempDir as temp-dir, TempPath as temp-path
-from /streaky/http-server import request-context, response-context, capture-request-context, response-media-type, encode-response-document, http-error, response-stream, request-body-limit, request-body-timeout
 
 public class uploaded-file
     private temporary temp-path|none = none
@@ -25,19 +25,19 @@ public class uploaded-file
     mutable function claim string throws throwable;
         if this.temporary == none or this.directory == none
             throw coercion-error
+        valid-path bool = rust
+            self.temporary.as_ref().expect("checked temporary").to_str().is_some()
+        if not valid-path
+            throw http-error; 500, 'Multipart upload path is not valid UTF-8'
         path string|none = rust
             let temporary = self.temporary.take().expect("checked temporary");
             let directory = self.directory.take().expect("checked directory");
-            if temporary.to_str().is_none() {
-                None
-            } else {
-                match temporary.keep() {
-                    Ok(path) => {
-                        directory.keep();
-                        Some(path.into_os_string().into_string().expect("checked staging path"))
-                    }
-                    Err(_) => { drop(directory); None }
+            match temporary.keep() {
+                Ok(path) => {
+                    directory.keep();
+                    Some(path.into_os_string().into_string().expect("path checked before transfer"))
                 }
+                Err(_) => { drop(directory); None }
             }
         if path != none
             return path
@@ -291,27 +291,29 @@ class body-read-result
     buffer native-bytes = native-bytes::new;
     failed bool = false
     timed-out bool = false
+    limited bool = false
     missing bool = false
-
 # The optional slot makes ownership explicit without reading an owned non-Clone
 # native body directly from inline Rust.
 private async function bounded-body-to-bytes native-bytes throws throwable; body mutable ref (native-body|none), maximum uint64, timeout-ms uint64
     result body-read-result = rust
         match body.take() {
-            None => BodyReadResult { buffer: ::axum::body::Bytes::new(), failed: false, timed_out: false, missing: true },
+            None => BodyReadResult { buffer: ::axum::body::Bytes::new(), failed: false, timed_out: false, limited: false, missing: true },
             Some(body) => match crate::conversions::bounded_body_to_bytes(
                 body, usize::try_from(maximum).unwrap_or(usize::MAX), timeout_ms
             ).await {
-                Ok(buffer) => BodyReadResult { buffer, failed: false, timed_out: false, missing: false },
-                Err(status) => BodyReadResult { buffer: ::axum::body::Bytes::new(), failed: true, timed_out: status == 408, missing: false },
+                Ok(buffer) => BodyReadResult { buffer, failed: false, timed_out: false, limited: false, missing: false },
+                Err(status) => BodyReadResult { buffer: ::axum::body::Bytes::new(), failed: status == 400, timed_out: status == 408, limited: status == 413, missing: false },
             },
         }
     if result.missing
         throw coercion-error
     if result.timed-out
         throw request-body-timeout
-    if result.failed
+    if result.limited
         throw request-body-limit
+    if result.failed
+        throw http-error; 400, 'Unable to read request body'
     return result.buffer
 
 class multipart-stage-result
@@ -409,19 +411,21 @@ private function select-request-format string; content-type string|none, formats
     throw http-error; 415, 'A supported request Content-Type is required'
 
 private function form-document document-value; pairs ref (list of string)
-    grouped map of string, (list of string) = map;
+    grouped unordered-map of string, (list of string) = unordered-map;
     keys list of string = list;
     position int = 0
-    while position < pairs.length
+    pair-count = pairs.length
+    while position < pair-count
         key = pairs[position]
-        previous = grouped.get.checked; key
-        repeated list of string = list;
+        previous = grouped.remove.checked; key
         if previous != none
             repeated = previous
+            repeated.append; pairs[position + 1]
+            grouped.set; key, move repeated
         else
             keys.append; key
-        repeated.append; pairs[position + 1]
-        grouped.set; key, repeated
+            repeated list of string = list; pairs[position + 1]
+            grouped.set; key, move repeated
         position = position + 2
     entries = instance document-map-entries;
     for key in keys

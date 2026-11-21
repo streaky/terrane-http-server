@@ -18,10 +18,9 @@ import yaml
 
 
 PACKAGE = Path(__file__).resolve().parents[2]
-ROOT = PACKAGE.parents[1]
-COMPILER = Path(os.environ.get("TERRANE", ROOT / "target/release/terrane"))
+COMPILER = os.environ.get("TERRANE", "terrane")
 # Includes first-use HTTP and nested template host-tool builds.
-COMPILER_TIMEOUT = 600
+COMPILER_TIMEOUT = float(os.environ.get("TERRANE_CONSUMER_COMPILER_TIMEOUT", "1200"))
 
 
 class ConsumerDiagnosticsTests(unittest.TestCase):
@@ -632,16 +631,16 @@ main
                         process.wait()
                         self.fail("Method fixture did not start: " + process.stderr.read().decode())
                     time.sleep(0.05)
-            def request(method, path, body=None, status=200, content_type="application/json"):
+            def request(method, path, body=None, status=200, content_type="application/json",
+                        response_type="application/json"):
                 connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
                 try:
                     connection.request(method, path, body=body, headers={"Content-Type": content_type})
                     response = connection.getresponse()
                     self.assertEqual(response.status, status)
-                    if response.status == 200:
-                        self.assertEqual(response.getheader("Content-Type"), "application/json")
+                    self.assertEqual(response.getheader("Content-Type"), response_type)
                     payload = response.read()
-                    return json.loads(payload) if response.status == 200 else payload
+                    return json.loads(payload) if response_type == "application/json" else payload
                 finally:
                     connection.close()
             expected = {"GET": 7, "POST": 8, "PUT": True, "PATCH": False, "DELETE": "deleted"}
@@ -760,15 +759,17 @@ main
                     '{"related":{}}', '{"related":[1]}', '{"related":[{"extra":true}]}',
                     '{"count":256}', '{"count":-1}', '{"ratio":1e10000}', '{"small":1e40}', '{"internal":"leak"}', '{"selected":1}']:
                 with self.subTest(invalid=invalid):
-                    request("POST", "/models", invalid, status=422)
+                    error = request("POST", "/models", invalid, status=422)
+                    self.assertIn(error["detail"], {"Invalid request model", "Invalid JSON request body"})
             self.assertEqual(request("POST", "/form/echo", "name=Ada+Lovelace&scope=read&scope=write",
                 content_type="application/x-www-form-urlencoded; charset=utf-8"),
                 {"name": "Ada Lovelace", "scope": ["read", "write"]})
             self.assertEqual(request("POST", "/form/echo", '{"mode":"json"}'), {"mode": "json"})
-            request("POST", "/form/echo", "name=%GG",
+            error = request("POST", "/form/echo", "name=%GG",
                 status=422, content_type="application/x-www-form-urlencoded")
-            request("POST", "/form/echo", "name=x",
-                status=415, content_type="text/plain")
+            self.assertEqual(error["detail"], "Invalid request body")
+            request("POST", "/form/echo", "name=x", status=415,
+                content_type="text/plain", response_type="text/plain; charset=utf-8")
             schema = request("GET", "/openapi.json")
             self.assertEqual(set(schema["paths"]["/form/echo"]["post"]["requestBody"]["content"]),
                 {"application/json", "application/x-www-form-urlencoded"})

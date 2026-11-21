@@ -1,6 +1,12 @@
-//! Opt-in generic HTTP transport observation for an Axum router.
+//! Opt-in HTTP transport observation.
+//!
+//! Terrane cannot currently author a Tower `Layer` or an `http_body::Body`
+//! adapter with pin-projected async polling, so this boundary wraps Axum's
+//! generic router/body and emits bounded diagnostic events without buffering
+//! either stream. Remove it when source code can implement and poll those
+//! protocols directly while preserving demand-driven bodies and drop events.
 use axum::{body::{Body, Bytes}, extract::Request, Router};
-use http_body::Frame;
+use http_body::{Body as _, Frame};
 use serde_json::{json, Value};
 use std::{future::Future, pin::Pin, sync::{Arc, atomic::{AtomicU64, Ordering}}, task::{Context, Poll}, time::Instant};
 use tower::{Layer, Service};
@@ -133,18 +139,25 @@ impl http_body::Body for ObservedBody {
                         }
                     }
                 }
+                if this.inner.is_end_stream() {
+                    this.finish("transport_complete");
+                }
                 Poll::Ready(Some(Ok(frame)))
             }
         }
     }
-    fn is_end_stream(&self) -> bool { self.inner.is_end_stream() }
+    fn is_end_stream(&self) -> bool { self.finished || self.inner.is_end_stream() }
     fn size_hint(&self) -> http_body::SizeHint { self.inner.size_hint() }
 }
 impl Drop for ObservedBody {
     fn drop(&mut self) {
-        if !self.finished {
-            let event = if self.direction == "response" { "response_dropped" } else { "request_body_dropped" };
-            self.finish(event);
-        }
+        let event = if self.inner.is_end_stream() {
+            "transport_complete"
+        } else if self.direction == "response" {
+            "response_dropped"
+        } else {
+            "request_body_dropped"
+        };
+        self.finish(event);
     }
 }

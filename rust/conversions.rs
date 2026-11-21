@@ -1,11 +1,19 @@
 //! Owned conversions and native HTTP body pin/poll/drop mechanics.
-//! Routing, protocol formatting, authorization and redaction remain in Terrane.
+//! Terrane currently cannot author the native `http_body::Body` adapters or
+//! classify Axum's body-collection length-limit error separately from transport
+//! errors. Remove each operation when those native body and error-source
+//! capabilities are available; routing, protocol formatting, authorization and
+//! redaction remain in Terrane.
 use axum::body::{Body, Bytes};
 use http_body::Frame;
 use std::{future::Future, pin::Pin, task::{Context, Poll}, time::Duration};
 
+// Remove these owned conversions when projected From and String::from_utf8
+// can transfer their inputs without an extra copy.
 pub fn body_from_text(text: String) -> Body { Body::from(text) }
 pub fn buffer_into_text(buffer: Bytes) -> Option<String> { String::from_utf8(buffer.into()).ok() }
+
+// Remove when the projected URL decoder can expose both Cow variants by value.
 pub fn decode_path_component(value: String) -> Option<String> {
     match urlencoding::decode(&value) {
         Ok(std::borrow::Cow::Borrowed(_)) => Some(value),
@@ -14,15 +22,30 @@ pub fn decode_path_component(value: String) -> Option<String> {
     }
 }
 
-/// Distinct outcomes let Source retain timeout versus size/error diagnostics.
+/// The body implementation is native and not expressible as a Terrane source
+/// adapter; retain until source can implement/poll `http_body::Body` directly.
 /// Axum's collector bounds incremental consumption without quadratic concatenation.
+/// Distinguish the collector's size-limit error from a failed body transport.
 pub async fn bounded_body_to_bytes(body: Body, maximum: usize, timeout_ms: u64) -> Result<Bytes, u16> {
     let read = axum::body::to_bytes(body, maximum);
     if timeout_ms == 0 {
-        read.await.map_err(|_| 413)
+        read.await.map_err(classify_body_error)
     } else {
         tokio::time::timeout(Duration::from_millis(timeout_ms), read)
-            .await.map_err(|_| 408u16)?.map_err(|_| 413)
+            .await.map_err(|_| 408u16)?.map_err(classify_body_error)
+    }
+}
+
+fn classify_body_error(error: axum::Error) -> u16 {
+    let mut source: &(dyn std::error::Error + 'static) = &error;
+    loop {
+        if source.downcast_ref::<http_body_util::LengthLimitError>().is_some() {
+            return 413;
+        }
+        match source.source() {
+            Some(cause) => source = cause,
+            None => return 400,
+        }
     }
 }
 

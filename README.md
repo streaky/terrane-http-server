@@ -58,9 +58,11 @@ Create an application with `create-application`, compose selected annotated API 
 
 To discover an OS-assigned port before serving, bind a core listener with `listen-tcp; '127.0.0.1:0'`, read its `local-address`, and transfer it with `await app.serve-listener; move listener`. This consumes the existing listener without rebinding; `application.address` is ignored on this path. Both serving methods apply the same network access policies.
 
-For graceful shutdown, use `await app.serve-until; shutdown` or
-`await app.serve-listener-until; move listener, shutdown`. `shutdown` is a
-zero-argument `async function to none throws throwable`; returning or throwing
+For graceful shutdown, use `await app.serve-until; shutdown`,
+`await app.serve-listener-until; move listener, shutdown`, or
+`await app.serve-listeners-until; move listeners, shutdown` for multiple bound
+listeners sharing one connection cap. See the [application reference](docs/src/records/api/application.yaml).
+`shutdown` is a zero-argument `async function to none throws throwable`; returning or throwing
 stops accepting new connections, then drains active responses and upgraded
 WebSocket sessions. Callback errors propagate after draining without losing
 their identity. Policies and connection limits still apply. There is no automatic
@@ -155,6 +157,9 @@ WebSocket endpoints are handled by the framework's internal route registration. 
 
 The current typed payload surface is text-first. Binary event payloads and explicit ping/pong payload APIs remain future additions; non-text events are identified without exposing Axum's message enum.
 
+Use `websocket-group` for bounded per-session outbound queues, broadcast, and
+targeted close. See the [WebSocket session reference](docs/src/records/api/websocket-session.yaml).
+
 ## Response control
 
 Return a typed body (or `none`) and use the class's optional `response` context to
@@ -174,6 +179,11 @@ named OpenAPI examples authored as JSON text. Request encodings are selected by
 `body.formats`, independently of the negotiated response representation; omitting
 the request policy preserves the existing JSON-only behavior.
 
+Raw handlers can stage multipart uploads and return pull-based streaming bodies,
+including sequences of owned producers. See [HTTP messages](docs/src/records/api/http-messages.yaml).
+`observe-transport` installs bounded transport observation; see the
+[application reference](docs/src/records/api/application.yaml).
+
 ## Current boundary
 
 The class-bound annotation consumer supports GET, POST, PUT, PATCH, DELETE, HEAD, and
@@ -182,9 +192,9 @@ handlers, static directories, authored examples, Markdown descriptions, and Open
 generation. HEAD suppresses the body while preserving representation metadata;
 metadata-only handlers may provide a known length without retrieving a body. The
 catalog demo shares one seeded in-memory store across requests. Dependency/state
-injection, general middleware, authentication metadata, and streaming responses
-remain outside this surface; applications use typed Terrane APIs rather than native
-extractor traits, service types, lifetimes, or borrowing.
+injection, general middleware, and declarative authentication metadata remain
+outside the annotation consumer. Applications use typed Terrane APIs rather
+than native extractor traits, service types, lifetimes, or borrowing.
 
 Implementation helpers prefer ordinary Terrane, including small, short-lived value
 copies. Inline Rust is reserved for host/projection boundaries or operations where

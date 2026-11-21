@@ -43,19 +43,28 @@ documentation:
         catching a particular native type requires its descriptor import, while a broad
         `catch throwable` needs no native import.
 
+        `receive-managed(subscription)` reports a native socket receive failure as
+        `http-error` with status 500 and the native error text as its detail. Unlike
+        `receive()`, this managed path does not preserve the concrete native throwable
+        type; callers should handle it as a general `throwable`.
+
         `websocket-group` owns a map of session IDs to bounded outbound senders. Call
         `register(id, capacity)` with a positive capacity to obtain a
         `websocket-subscription`, then pass it to `websocket-session.receive-managed`.
         This receive operation waits for either a socket event or a queued group message;
         queued text is sent on the connection's own socket and returned as event kind `sent`.
-        Removing an endpoint (or registering a replacement with the same ID) lets
-        its session send any already queued messages, then issue a WebSocket close
-        from the connection loop. Dropping the subscription closes its receiver; a
-        later broadcast detects and removes that stale endpoint. `broadcast(text)` returns
-        the number of queues that accepted the text. Full queues skip that session without
+        Removing an endpoint, replacing its ID, or dropping the group closes its
+        sender. Its subscription drains queued messages in FIFO order, then
+        `receive-managed` sends a close frame and returns `closed`. A replacement
+        has an independent queue and is the only endpoint addressed by subsequent
+        broadcasts under that ID. Dropping a subscription closes its receiver; a later
+        broadcast detects and removes that stale endpoint. `broadcast(text)` returns the
+        number of queues that accepted the text. Full queues skip that session without
         delaying others or removing it. `remove(id)` affects only that ID. Group map access
         is synchronous, and neither session nor group locks are held across an await.
-        The API is text-oriented: there is no binary send or payload accessor for non-text events.
+        Cancelling an in-flight managed receive ends that session and drops its
+        subscription receiver. It is not a resumable timeout or a WebSocket close
+        handshake. Use group removal for an orderly close that drains queued text.
     - type: example
       id: signatures
       title: Public declaration synopsis
