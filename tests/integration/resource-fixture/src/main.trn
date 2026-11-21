@@ -1,0 +1,137 @@
+namespace resource-fixture
+
+from /core/errors import throwable
+from /core/networking import listen-tcp
+from /core/collections import list
+from /core/time import clock, duration
+from /streaky/http-server import create-application, websocket-group, websocket-session, websocket-subscription, response-part, compose-response-stream
+from /streaky/http-server/internal import incoming-request, wire-response, encoded-response
+
+async function upload wire-response throws throwable; request incoming-request
+    form = await request.multipart;
+    return encoded-response; 200, 'text/plain', ('' + form.parts.length)
+
+function log-observation; event string
+    rust
+        eprintln!("observer {event}");
+
+private class fixture-stream-state
+    started bool = false
+
+    mutable function start bool;
+        if this.started
+            return false
+        this.started = true
+        return true
+
+private class fixture-part implements response-part
+    private state shared ref fixture-stream-state = shared ref (instance fixture-stream-state;)
+    private hang bool = false
+
+    function construct; hang bool
+        this.hang = hang
+
+    async function next-chunk string|none throws throwable;
+        state = this.state
+        if (state.start;)
+            return 'chunk'
+        if this.hang
+            await clock::sleep; (duration::seconds; 60)
+        return none
+
+    function cancel;
+        return
+
+function stream-response wire-response throws throwable; hang bool
+    parts list of response-part = list;
+    parts.append; (instance fixture-part; hang)
+    response = encoded-response; 200, 'text/plain', ''
+    response.stream = compose-response-stream; move parts
+    return move response
+
+async function finite-stream wire-response throws throwable; request incoming-request
+    return stream-response; false
+
+async function pending-stream wire-response throws throwable; request incoming-request
+    return stream-response; true
+
+async function sized-response wire-response; request incoming-request
+    return encoded-response; 200, 'text/plain', 'hello'
+
+async function empty-response wire-response; request incoming-request
+    return encoded-response; 204, 'text/plain', ''
+
+async function read-body wire-response throws throwable; request incoming-request
+    _body = await request.json-body;
+    return encoded-response; 200, 'text/plain', 'read'
+
+private async function cancel-idle-receive bool; session mutable ref websocket-session, subscription mutable ref websocket-subscription
+    return rust
+        ::tokio::time::timeout(
+            std::time::Duration::from_millis(10), session.receive_managed(subscription),
+        ).await.is_err()
+
+function managed-handler (async function from websocket-session to none throws throwable); group shared ref websocket-group, id string
+    return async function; session websocket-session
+        state = group
+        subscription = state.register; id, 2
+        if id == 'cancel'
+            await session.send-text; 'ready'
+            canceled = await cancel-idle-receive; session, subscription
+            if canceled
+                await clock::sleep; (duration::seconds; 60)
+            return
+        await session.send-text; 'ready'
+        while true
+            event = await session.receive-managed; subscription
+            if event.kind == 'closed'
+                return
+
+private function queued-subscription websocket-subscription throws throwable;
+    group = instance websocket-group;
+    subscription = group.register; 'queued', 2
+    group.broadcast; 'one'
+    group.broadcast; 'two'
+    return move subscription
+
+private async function drain-after-group-drop; session websocket-session
+    try
+        subscription = queued-subscription;
+        await session.send-text; 'ready'
+        while true
+            event = await session.receive-managed; subscription
+            if event.kind == 'closed'
+                return
+    catch throwable
+        return
+
+async function main throws throwable;
+    group = shared ref (instance websocket-group;)
+    broadcast = async function wire-response; request incoming-request
+        state = group
+        sent = state.broadcast; 'hello'
+        return encoded-response; 200, 'text/plain', ('' + sent)
+    remove = async function wire-response; request incoming-request
+        state = group
+        closed = state.remove; 'first'
+        if closed
+            return encoded-response; 200, 'text/plain', 'removed'
+        return encoded-response; 404, 'text/plain', 'missing'
+    app = create-application;
+    app = app.observe-transport; log-observation, 4
+    app = app.websocket; '/first', (managed-handler; group, 'first')
+    app = app.websocket; '/second', (managed-handler; group, 'second')
+    app = app.websocket; '/cancel', (managed-handler; group, 'cancel')
+    app = app.websocket; '/queued', drain-after-group-drop
+    app = app.route; 'POST', '/broadcast', broadcast
+    app = app.route; 'POST', '/remove-first', remove
+    app = app.route; 'GET', '/sized', sized-response
+    app = app.route; 'GET', '/empty', empty-response
+    app = app.route; 'GET', '/finite', finite-stream
+    app = app.route; 'GET', '/pending', pending-stream
+    app = app.route; 'POST', '/read', read-body
+    app = app.route; 'POST', '/ignore', sized-response
+    app = app.route; 'POST', '/upload', upload
+    listener = await listen-tcp; '127.0.0.1:0'
+    print; listener.local-address
+    await app.serve-listener; move listener

@@ -1,0 +1,15 @@
+{% include "header.html" %}
+  <p>{{ message }}</p>
+  {% if authorization_url %}
+  <p><a href="{{ authorization_url }}">Start demo authorization</a></p>
+  <p>The browser example uses the public RFC 7636 verifier <code>dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk</code>. Real clients generate a fresh private verifier.</p>
+  {% endif %}
+  {% if request_id %}
+  <form method="post" action="{{ action }}">
+    <input type="hidden" name="request_id" value="{{ request_id }}">
+    <button type="submit" name="decision" value="allow">Allow</button>
+    <button type="submit" name="decision" value="deny">Deny</button>
+  </form>
+  {% endif %}
+  <p><a href="/oauth">OAuth demo information</a></p>
+{% include "footer.html" %}

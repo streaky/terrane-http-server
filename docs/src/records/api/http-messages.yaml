@@ -40,8 +40,10 @@ documentation:
         returns the first matching raw cookie value without URL decoding.
 
         `path-value`, `query-value`, `accept-value`, and `json-body` belong to the
-        internal incoming-request transport used by generated adapters; they are not
-        public request-context methods. The request context is an immutable metadata
+        incoming-request transport used by generated adapters and low-level
+        `application.route` handlers; they are not request-context methods.
+        `header-byte-count` sums header-name and raw-value bytes, including repetitions.
+        The request context is an immutable metadata
         snapshot and does not own or buffer the body.
         Header capture retains an owned native header map behind a shared handle, rather
         than rebuilding lists of every header name and raw byte value. Copying a request
@@ -54,6 +56,66 @@ documentation:
         undecodable values. Returned lists and byte values do not expose mutable native
         storage. No guard is retained across an `await`. Other metadata remains captured
         eagerly; this is not general lazy request-context construction.
+
+        Low-level `application.route(method, path, handler)` invokes its asynchronous
+        incoming-request handler before body extraction, allowing authentication and
+        admission first. The handler returns a `wire-response`; both transport types
+        are imported from `/streaky/http-server/internal`.
+        `incoming-request.json-body(maximum-bytes = 2097152, timeout-ms = 0,
+        maximum-depth = 256)` retains the request while consuming its body once.
+        `body-byte-count` reports the original bytes read after a successful read.
+        A zero timeout disables the timer. Oversized bodies throw
+        `request-body-limit` (HTTP 413); timed-out bodies throw
+        `request-body-timeout` (HTTP 408). Other body-read transport failures return
+        HTTP 400. Invalid JSON throws a coercion error.
+
+        `incoming-request.multipart(maximum-bytes = 16777216, maximum-parts = 32,
+        timeout-ms = 0)` consumes the same request body once and streams multipart
+        fields in wire order. Both text fields and uploaded files are represented in
+        `multipart-form.parts`; each `multipart-part` has a name and either a text
+        value or an uploaded file. Text fields are fully buffered as UTF-8 strings;
+        their size is bounded by the aggregate `maximum-bytes` limit, not a separate
+        per-field limit. The multipart parser bounds aggregate body bytes and counts
+        all parts, not only files; malformed content fails with a coercion error, and
+        missing or unsupported multipart media type returns 415. A zero timeout
+        disables timing. `body-byte-count` reports the aggregate bytes consumed on
+        success. A part with `filename=""` remains an uploaded file (including when
+        empty); it is distinct from a text field and is staged with the same cleanup
+        rules. `form.field-values; name` returns the text values for that name in order.
+
+        Uploaded file content is staged incrementally in a private, exclusively
+        created temporary directory. Client filenames are untrusted metadata only;
+        they are never used as filesystem paths. Dropping the form or an unclaimed
+        uploaded file removes its temporary file and directory. The parser also
+        cleans up completed and partial stages on failure, timeout, and disconnect.
+        Remove a part from `form.parts` to transfer its ownership. Calling
+        `uploaded-file.claim;` transfers cleanup responsibility and returns a
+        server-generated UTF-8 path; a non-UTF-8 temporary path fails without
+        consuming the staged upload. The caller must manage the file and directory.
+        Staging failures produce HTTP 500 rather than returning a partial form.
+
+        A wire response can hold a public `response-stream` producer. Its asynchronous
+        `next-chunk` returns one text chunk or none at EOF; throwing aborts the body.
+        Transport demand drives polling without an eager producer queue. `cancel`
+        runs exactly once on EOF, error, disconnect, or body suppression for HEAD
+        and bodyless statuses, including when the producer was never started.
+
+        `compose-response-stream; parts` transfers a `list of response-part` into a
+        single `response-stream`. Each `response-part` is an owning protocol with
+        `next-chunk` and `cancel` operations. The composite pulls parts in list order
+        and does not start a later part until the previous part reaches EOF. EOF
+        finalizes that part; an error, disconnect, or suppressed body finalizes the
+        active part and every queued part exactly once, including unstarted ones.
+        A part need not have been polled to receive `cancel`. As with other response
+        producers, do not poll the composite concurrently.
+
+        `application.observe-transport` installs an optional per-application observer
+        for headers, polled body data, completion, and drop events. Raw bytes use UTF-8
+        or hexadecimal encoding; the observer owns any redaction policy. Observation
+        does not pre-read request bodies or buffer response streams.
+        Completion means the body source reached EOF (including a known-empty body),
+        not that the peer acknowledged the bytes. The default capture limit applies
+        to the aggregate request body and to each response chunk separately.
 
         The response context modifies response state for the current invocation:
         `set-status(status)`, `set-header(name, value)` (case-insensitive replacement),
@@ -90,6 +152,11 @@ documentation:
         preserving representation headers. A metadata-only HEAD handler may return no
         value and set status 200, content length, and content type; an unknown length
         must not be represented as zero.
+        Request body parsing keeps the existing compatibility behavior: a JSON body
+        can be decoded by model adapters without requiring `Content-Type:
+        application/json` when formats are omitted. Content-Type is a representation
+        selection signal, not authorization or CSRF protection; enforce authorization
+        and origin policy independently.
 
         With a nonempty enabled format list, generated adapters negotiate JSON, YAML, or XML using quality values, wildcards, specific exclusions, and canonical application media types. If no representation is acceptable, the server returns HTTP 406. A missing `Accept` uses the configured enabled default.
 

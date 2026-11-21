@@ -3,7 +3,7 @@ namespace http-server-consumer/examples
 from /core/collections import list, range
 from /core/documents import document-value, document-map-entries, make-document-none, make-document-string
 from /core/documents/json import parse-json, default-json-options
-from /terrane/annotation-consumer-protocol import get, at, text, consumer-error
+from /core/build/consumer import get, at, text, consumer-error
 from /http-server-consumer/documents import object-value
 from /streaky/http-server import encode-response-document
 

@@ -1,0 +1,12 @@
+package = "shutdown-fixture"
+executor = "threaded"
+prelude = true
+
+[namespaces]
+"shutdown-fixture" = "src"
+
+[terrane-dependencies.streaky.http-server]
+path = "../../.."
+
+[rust-modules]
+fixture = "fixture.rs"

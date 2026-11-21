@@ -1,9 +1,9 @@
 namespace http-server-consumer/formats
 
 from /core/collections import list, range, map
-from /core/documents import document-value, document-map-entries, make-document-string
-from /terrane/annotation-consumer-protocol import get, at, text, scalar, consumer-error
-from /http-server-consumer/documents import source-quote, object-value
+from /core/documents import document-value, document-map-entries, make-document-string, make-document-list
+from /core/build/consumer import get, at, text, scalar, consumer-error
+from /http-server-consumer/documents import source-quote, object-value, type-schema
 from /streaky/http-server import response-media-type
 
 function format-media-type string throws consumer-error; format string, origin document-value
@@ -16,6 +16,38 @@ class response-policy
     formats list of string = list
     default-format string = 'json'
     negotiated bool = false
+
+class request-policy
+    formats list of string = list
+    explicit bool = false
+
+function read-request-policy request-policy throws consumer-error; metadata document-value, declaration document-value
+    policy = instance request-policy;
+    if metadata.kind != 'none'
+        values = get; (get; metadata, 'formats'), 'value'
+        if values.kind != 'none'
+            if values.kind != 'list' or (values.length;) == 0
+                throw (instance consumer-error; declaration, 'HTTP body formats must be a nonempty list')
+            policy.explicit = true
+            for index in (range; 0, (values.length;))
+                format = text; (scalar; (at; values, index))
+                if format != 'json' and format != 'form'
+                    throw (instance consumer-error; declaration, 'HTTP body format must be json or form')
+                for previous in policy.formats
+                    if previous == format
+                        throw (instance consumer-error; declaration, 'duplicate HTTP body format')
+                policy.formats.append; format
+    if policy.formats.length == 0
+        policy.formats.append; 'json'
+    return policy
+
+function request-format-list-source string throws consumer-error; policy request-policy
+    result = '(list; '
+    for index in (range; 0, policy.formats.length)
+        if index > 0
+            result = result + ', '
+        result = result + (source-quote; policy.formats[index])
+    return result + ')'
 
 function selected-response-policy response-policy throws consumer-error; policies map of string, response-policy, owner string, declaration document-value
     selected = policies.get.checked; owner
@@ -79,4 +111,20 @@ function named-xml-schema document-value throws consumer-error; schema document-
             xml.append; key, (get; existing, key)
     xml.append; 'name', (make-document-string; name)
     fields.append; 'xml', (object-value; xml, origin)
+    return object-value; fields, origin
+
+function form-body-schema document-value throws consumer-error; origin document-value
+    text-schema = type-schema; 'string'
+    array = instance document-map-entries;
+    array.append; 'type', (make-document-string; 'array')
+    array.append; 'items', text-schema
+    choices list of document-value = list; text-schema, (object-value; array, origin)
+    alternatives = make-document-list; choices
+    if alternatives.failed
+        throw (instance consumer-error; origin, 'Could not describe form fields')
+    values = instance document-map-entries;
+    values.append; 'oneOf', alternatives.value
+    fields = instance document-map-entries;
+    fields.append; 'type', (make-document-string; 'object')
+    fields.append; 'additionalProperties', (object-value; values, origin)
     return object-value; fields, origin

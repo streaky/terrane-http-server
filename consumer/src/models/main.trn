@@ -3,7 +3,7 @@ namespace http-server-consumer/models
 from /http-server-consumer/rendering import render-code
 from /streaky/template import template-engine, template-value, text-value, bool-value
 
-from /terrane/annotation-consumer-protocol import get, at, text, truth, annotation, consumer-error
+from /core/build/consumer import get, at, text, truth, annotation-payload, consumer-error
 from /core/collections import list, range, map
 from /core/documents import
     document-value, document-map-entries, make-document-none,
@@ -63,7 +63,7 @@ function is-model bool; kind string, declarations document-value
     return false
 
 function route-group-class bool; declaration document-value
-    metadata = annotation; declaration, 'route-group', '/streaky/http-server/annotations'
+    metadata = annotation-payload; declaration, 'route-group', '/streaky/http-server/annotations'
     return metadata.kind != 'none'
 
 # Class field summaries carry type/default contracts, not declaration documentation.
@@ -161,7 +161,7 @@ function model-schemas document-value throws consumer-error; declarations docume
     return (object-value; schemas, declarations)
 
 function model-codecs string throws consumer-error; engine ref template-engine, declarations document-value
-    generated = 'from /core/collections import list\nfrom /core/documents import document-value, document-map-entries, make-document-none, make-document-string, make-document-bool, make-document-integer, make-document-decimal, make-document-list, make-document-map\nfrom /core/errors import coercion-error, throwable\n'
+    generated = "from /core/collections import list\nfrom /core/documents import document-value, document-map-entries, make-document-none, make-document-string, make-document-bool, make-document-integer, make-document-decimal, make-document-list, make-document-map\nfrom /core/errors import coercion-error, throwable\n"
     for index in (range; 0, (declarations.length;))
         cls = at; declarations, index
         if (text; (get; cls, 'kind')) == 'class' and not (route-group-class; cls)
@@ -169,8 +169,8 @@ function model-codecs string throws consumer-error; engine ref template-engine, 
             pieces = identity.split; '::'
             class-name = short-name; identity
             class-alias = model-alias; identity
-            generated = generated + 'from ' + pieces[0] + ' import ' + class-name + ' as ' + class-alias + '\n'
-    generated = generated + '\n'
+            generated = generated + 'from ' + pieces[0] + ' import ' + class-name + ' as ' + class-alias + "\n"
+    generated = generated + "\n"
     generated = generated + (floating-codecs; declarations)
     for index in (range; 0, (declarations.length;))
         cls = at; declarations, index
@@ -195,9 +195,9 @@ function floating-codecs string throws consumer-error; declarations document-val
                         needed = true
         if needed
             if generated == ''
-                generated = 'from /core/documents/json import parse-json, default-json-options\n\n'
-            generated = generated + 'class parsed-model-float' + precision + '\n    value float' + precision + ' = 0.0\n    failed bool = true\n\nfunction parse-model-float' + precision + ' float' + precision + ' throws coercion-error; text string\n    parsed parsed-model-float' + precision + ' = rust\n        match text.parse::<f' + precision + '>() {\n            Ok(value) if value.is_finite() => ParsedModelFloat' + precision + ' { value, failed: false },\n            _ => ParsedModelFloat' + precision + ' { value: 0.0, failed: true },\n        }\n    if parsed.failed\n        throw coercion-error\n    return parsed.value\n\n'
-            generated = generated + 'function encode-model-float' + precision + ' document-value; value float' + precision + '\n    return (parse-json; (\'\' + value), (default-json-options;)).value\n\n'
+                generated = "from /core/documents/json import parse-json, default-json-options\n\n"
+            generated = generated + 'class parsed-model-float' + precision + "\n    value float" + precision + " = 0.0\n    failed bool = true\n\nfunction parse-model-float" + precision + ' float' + precision + " throws coercion-error; text string\n    parsed parsed-model-float" + precision + " = rust\n        match text.parse::<f" + precision + ">() {{\n            Ok(value) if value.is_finite() => ParsedModelFloat" + precision + " {{ value, failed: false }},\n            _ => ParsedModelFloat" + precision + " {{ value: 0.0, failed: true }},\n        }}\n    if parsed.failed\n        throw coercion-error\n    return parsed.value\n\n"
+            generated = generated + 'function encode-model-float' + precision + ' document-value; value float' + precision + "\n    return (parse-json; ('' + value), (default-json-options;)).value\n\n"
     return generated
 
 function model-encoder string throws consumer-error; kind string, declarations document-value
@@ -228,7 +228,7 @@ function codec-for string throws consumer-error; engine ref template-engine, kin
         field = at; fields, ix
         if (text; (get; field, 'visibility')) == 'public' and not (truth; (get; field, 'static'))
             source = source + (decode-field; engine, field, ix, declarations)
-    return source + '    return value\n\n'
+    return source + "    return value\n\n"
 
 function encode-field-fragments string throws consumer-error; engine ref template-engine, fields document-value, declarations document-value
     source = ''
@@ -278,9 +278,9 @@ function decode-assignment string throws consumer-error; engine ref template-eng
         item-check = ''
         expected = document-kind; item
         if expected == 'float'
-            item-check = indent + '    if item' + index + '.value.kind != \'decimal\' and item' + index + '.value.kind != \'integer\'\n' + indent + '        throw coercion-error\n'
+            item-check = indent + '    if item' + index + '.value.kind != \'decimal\' and item' + index + ".value.kind != 'integer'\n" + indent + "        throw coercion-error\n"
         else if expected != 'map'
-            item-check = indent + '    if item' + index + '.value.kind != ' + (source-quote; expected) + '\n' + indent + '        throw coercion-error\n'
+            item-check = indent + '    if item' + index + '.value.kind != ' + (source-quote; expected) + "\n" + indent + "        throw coercion-error\n"
         values map of string, template-value = map;
         values.set; 'indent', (text-value; indent)
         values.set; 'index', (text-value; (index.to-string;))
@@ -292,10 +292,10 @@ function decode-assignment string throws consumer-error; engine ref template-eng
     expected = document-kind; kind
     check = ''
     if expected == 'float'
-        check = indent + 'if slot' + index + '.value.kind != \'decimal\' and slot' + index + '.value.kind != \'integer\'\n' + indent + '    throw coercion-error\n'
+        check = indent + 'if slot' + index + '.value.kind != \'decimal\' and slot' + index + ".value.kind != 'integer'\n" + indent + "    throw coercion-error\n"
     else if expected != 'map'
-        check = indent + 'if slot' + index + '.value.kind != ' + (source-quote; expected) + '\n' + indent + '    throw coercion-error\n'
-    return check + indent + 'value.' + member + ' = ' + (decode-expression; kind, ('slot' + index + '.value'), declarations, field) + '\n'
+        check = indent + 'if slot' + index + '.value.kind != ' + (source-quote; expected) + "\n" + indent + "    throw coercion-error\n"
+    return check + indent + 'value.' + member + ' = ' + (decode-expression; kind, ('slot' + index + '.value'), declarations, field) + "\n"
 
 function document-kind string; kind string
     if integer-kind; kind
@@ -319,14 +319,14 @@ function encode-field string throws consumer-error; engine ref template-engine, 
     if optional
         base = kind.replace; '|none', ''
         local = 'member-value' + index
-        prefix = '    ' + local + ' = value.' + member + '\n    if ' + local + ' != none\n'
-        suffix = '    else\n        entries.append; ' + (source-quote; wire) + ', (make-document-none;)\n'
+        prefix = '    ' + local + ' = value.' + member + "\n    if " + local + " != none\n"
+        suffix = "    else\n        entries.append; " + (source-quote; wire) + ", (make-document-none;)\n"
         if (base.contains.start; 'list of ')
             return prefix + (encode-list-field; engine, base, local, wire, index, declarations, field, '        ') + suffix
-        return prefix + '        entries.append; ' + (source-quote; wire) + ', ' + (encode-expression; base, local, declarations, field) + '\n' + suffix
+        return prefix + '        entries.append; ' + (source-quote; wire) + ', ' + (encode-expression; base, local, declarations, field) + "\n" + suffix
     if (base.contains.start; 'list of ')
         return (encode-list-field; engine, base, ('value.' + member), wire, index, declarations, field, '    ')
-    return '    entries.append; ' + (source-quote; wire) + ', ' + (encode-expression; base, ('value.' + member), declarations, field) + '\n'
+    return '    entries.append; ' + (source-quote; wire) + ', ' + (encode-expression; base, ('value.' + member), declarations, field) + "\n"
 
 function encode-list-field string throws consumer-error; engine ref template-engine, kind string, expression string, wire string, index int, declarations document-value, field document-value, indent string
     item = kind.replace; 'list of ', ''

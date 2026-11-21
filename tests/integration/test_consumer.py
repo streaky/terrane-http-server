@@ -18,10 +18,9 @@ import yaml
 
 
 PACKAGE = Path(__file__).resolve().parents[2]
-ROOT = PACKAGE.parents[1]
-COMPILER = Path(os.environ.get("TERRANE", ROOT / "target/release/terrane"))
+COMPILER = os.environ.get("TERRANE", "terrane")
 # Includes first-use HTTP and nested template host-tool builds.
-COMPILER_TIMEOUT = 600
+COMPILER_TIMEOUT = float(os.environ.get("TERRANE_CONSUMER_COMPILER_TIMEOUT", "1200"))
 
 
 class ConsumerDiagnosticsTests(unittest.TestCase):
@@ -195,6 +194,16 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
                     f"@[route-group; {policy}]\nclass api\n",
                     ["api"], origin="api")
 
+    def test_invalid_request_body_format_policies_are_rejected(self):
+        for formats in ("(list;)", "(list; 'form', 'form')", "(list; 'yaml')"):
+            with self.subTest(formats=formats):
+                self.check("from /core/collections import list\n"
+                    "from /core/documents import document-value\n"
+                    "from /streaky/http-server/annotations import body\n"
+                    "@[endpoint; path = '/token']\n"
+                    "async function token document-value; @[body; formats = " + formats + "] value document-value\n"
+                    "    return value\n", ["token", "token::value"], origin="token::value")
+
     def test_explicit_empty_response_formats_are_rejected_at_the_class(self):
         self.check("from /streaky/http-server/annotations import route-group\n"
             "from /core/collections import list\n"
@@ -226,7 +235,10 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
         overview = "# API overview\n\n```console\ncurl /api/value\n```\n\n@returns This belongs to the overview."
         override = "**Custom overview**\n\nUse the documented request examples."
         def literal(value):
-            return "'" + value.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n") + "'"
+            escaped = (value.replace("\\", "\\\\").replace('"', '\\"')
+                .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
+                .replace("\0", "\\0").replace("{", "{{").replace("}", "}}"))
+            return '"' + escaped + '"'
 
         base_annotation = (
             "@[api-documentation; title = " + literal(title)
@@ -307,6 +319,7 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
             "xml-api::denied", "xml-api::invalid-xml", "xml-api::model", "xml-api::model::value",
             "legacy-api", "legacy-api::value", "json-api", "json-api::value",
             "yaml-api", "yaml-api::value", "text-api", "text-api::denied",
+            "form-api", "form-api::echo", "form-api::echo::value",
         ]
         (self.directory / "package.toml").write_text('\n'.join([
             'package = "http-annotation-test"',
@@ -365,6 +378,12 @@ class xml-api uses api
 
     @[endpoint; method = 'POST', path = '/model']
     async function model data-model; @[body;] value data-model
+        return value
+
+@[route-group; prefix = '/form']
+class form-api uses api
+    @[endpoint; method = 'POST', path = '/echo']
+    async function echo document-value; @[body; formats = (list; 'json', 'form')] value document-value
         return value
 
 @[route-group; prefix = '/yaml', response-formats = (list; 'yaml', 'xml')]
@@ -484,10 +503,10 @@ class handlers uses api
         response.set-content-length; length
         return 'café é 👩‍💻'
 
-    @[endpoint; path = '/created', summary = 'A "quoted" café\nand a backslash \\']
+    @[endpoint; path = '/created', summary = "A \"quoted\" café\nand a backslash \\"]
     async function created document-value throws throwable;
         entries = instance document-map-entries;
-        entries.append; 'value', (make-document-string; 'say "hello" \\ café\n\t')
+        entries.append; 'value', (make-document-string; "say \"hello\" \\ café\n\t")
         payload = make-document-map; entries
         if payload.failed
             throw coercion-error
@@ -546,7 +565,7 @@ class handlers uses api
     @[endpoint; path = '/custom-error']
     async function custom-error document-value throws throwable;
         entries = instance document-map-entries;
-        entries.append; 'detail', (make-document-string; 'No café "seat"\nleft')
+        entries.append; 'detail', (make-document-string; "No café \"seat\"\nleft")
         payload = make-document-map; entries
         if payload.failed
             throw coercion-error
@@ -564,7 +583,7 @@ class handlers uses api
     @[endpoint; path = '/invalid-header']
     async function invalid-header string throws throwable;
         response = this.controls;
-        response.set-header; 'x-invalid', 'a\r\nb'
+        response.set-header; 'x-invalid', "a\r\nb"
         return 'must not escape'
 
     @[endpoint; path = '/tampered-error']
@@ -574,7 +593,7 @@ class handlers uses api
         throw error
 
     @[endpoint; path = '/quoted-default']
-    async function quoted-default string; @[query;] label string = 'say "hello" \\ café\n\t'
+    async function quoted-default string; @[query;] label string = "say \"hello\" \\ café\n\t"
         return label
 
 @[route-group; prefix = '/text']
@@ -612,14 +631,16 @@ main
                         process.wait()
                         self.fail("Method fixture did not start: " + process.stderr.read().decode())
                     time.sleep(0.05)
-            def request(method, path, body=None, status=200):
+            def request(method, path, body=None, status=200, content_type="application/json",
+                        response_type="application/json"):
                 connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
                 try:
-                    connection.request(method, path, body=body, headers={"Content-Type": "application/json"})
+                    connection.request(method, path, body=body, headers={"Content-Type": content_type})
                     response = connection.getresponse()
                     self.assertEqual(response.status, status)
-                    self.assertEqual(response.getheader("Content-Type"), "application/json")
-                    return json.loads(response.read())
+                    self.assertEqual(response.getheader("Content-Type"), response_type)
+                    payload = response.read()
+                    return json.loads(payload) if response_type == "application/json" else payload
                 finally:
                     connection.close()
             expected = {"GET": 7, "POST": 8, "PUT": True, "PATCH": False, "DELETE": "deleted"}
@@ -722,6 +743,7 @@ main
             defaults = request("POST", "/models", "{}")
             self.assertEqual(defaults, {"active": True, "ratio": 1.5, "small": 0.5, "nickname": None,
                 "values": [], "count": 7, "children": [], "selected": None, "related": None})
+            self.assertEqual(request("POST", "/models", "{}", content_type="text/plain"), defaults)
             model = {"active": False, "ratio": 2, "small": 1.5, "nickname": "Ada",
                 "values": [-32768, 32767], "count": 255,
                 "children": [{"name": "nested", "children": [{"name": "leaf", "children": []}]}],
@@ -737,8 +759,26 @@ main
                     '{"related":{}}', '{"related":[1]}', '{"related":[{"extra":true}]}',
                     '{"count":256}', '{"count":-1}', '{"ratio":1e10000}', '{"small":1e40}', '{"internal":"leak"}', '{"selected":1}']:
                 with self.subTest(invalid=invalid):
-                    request("POST", "/models", invalid, status=422)
+                    error = request("POST", "/models", invalid, status=422)
+                    self.assertIn(error["detail"], {"Invalid request model", "Invalid JSON request body"})
+            self.assertEqual(request("POST", "/form/echo", "name=Ada+Lovelace&scope=read&scope=write",
+                content_type="application/x-www-form-urlencoded; charset=utf-8"),
+                {"name": "Ada Lovelace", "scope": ["read", "write"]})
+            self.assertEqual(request("POST", "/form/echo", '{"mode":"json"}'), {"mode": "json"})
+            error = request("POST", "/form/echo", "name=%GG",
+                status=422, content_type="application/x-www-form-urlencoded")
+            self.assertEqual(error["detail"], "Invalid request body")
+            request("POST", "/form/echo", "name=x", status=415,
+                content_type="text/plain", response_type="text/plain; charset=utf-8")
             schema = request("GET", "/openapi.json")
+            self.assertEqual(set(schema["paths"]["/form/echo"]["post"]["requestBody"]["content"]),
+                {"application/json", "application/x-www-form-urlencoded"})
+            self.assertIn("415", schema["paths"]["/form/echo"]["post"]["responses"])
+            form_schema = schema["paths"]["/form/echo"]["post"]["requestBody"]["content"]["application/x-www-form-urlencoded"]["schema"]
+            self.assertEqual(form_schema["type"], "object")
+            variants = form_schema["additionalProperties"]["oneOf"]
+            self.assertTrue(any(value.get("type") == "string" for value in variants))
+            self.assertTrue(any(value.get("type") == "array" and value.get("items", {}).get("type") == "string" for value in variants))
             operations = schema["paths"]["/method"]
             self.assertEqual(set(operations), {method.lower() for method in expected} | {"head", "options"})
             for method, value in expected.items():

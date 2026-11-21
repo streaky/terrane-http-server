@@ -1,0 +1,9 @@
+namespace streaky/http-server
+
+from /deps/axum import Router as native-router
+
+# Installs an opt-in observer around generic HTTP transport. Events are JSON
+# strings; raw header/body bytes use UTF-8 when valid and lowercase hex otherwise.
+public function install-transport-observer native-router; router native-router, callback function from string to none, capture-limit uint32 = 65536, capture-all bool = false
+    return rust
+        crate::observation::observe(router, move |event| callback(event), capture_limit, capture_all)

@@ -56,7 +56,7 @@ function test-invalid-status-and-header-are-rejected throws throwable;
         catch coercion-error
             rejected = true
         assert-equal-bool; rejected, true
-    for name in (list; 'bad header', 'x-test\nInjected')
+    for name in (list; 'bad header', "x-test\nInjected")
         response = instance response-context;
         rejected bool = false
         try

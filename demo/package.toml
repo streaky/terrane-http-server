@@ -12,7 +12,7 @@ path = "../../template"
 
 [consumers.template]
 tool = "streaky/template::template"
-args = ["--namespace", "generated/template/http-server-demo", "--root", "templates", "--template", "home.html", "--template", "about.html", "--template", "websocket.html"]
+args = ["--namespace", "generated/template/http-server-demo", "--root", "templates", "--template", "home.html", "--template", "about.html", "--template", "websocket.html", "--template", "oauth.html"]
 declarations = ["/http-server-demo::main"]
 
 [consumers.http]
@@ -84,4 +84,16 @@ declarations = [
   "/http-server-demo::site::websocket-playground",
   "/http-server-demo::site::catalog-note",
   "/http-server-demo::site::catalog-redirect",
+  "/http-server-demo::demo-oauth-api",
+  "/http-server-demo::demo-oauth-api::landing",
+  "/http-server-demo::demo-oauth-api::authorize",
+  "/http-server-demo::demo-oauth-api::consent",
+  "/http-server-demo::demo-oauth-api::consent::fields",
+  "/http-server-demo::demo-oauth-api::token",
+  "/http-server-demo::demo-oauth-api::token::fields",
+  "/http-server-demo::demo-oauth-api::resource",
+  "/http-server-demo::demo-oauth-api::callback",
 ]
+
+[testing]
+unit = "tests/unit"

@@ -1,0 +1,96 @@
+namespace http-demo-oauth-client
+
+from /core/collections import list
+from /core/documents import document-value, document-map-entries, make-document-map, make-document-string
+from /core/documents/json import parse-json, default-json-options
+from /core/encodings import utf8
+from /core/errors import throwable
+from /core/process import arguments
+from /core/streams import stdin
+from /streaky/http-client import client-options, create-client, http-client-error, http-header, http-request, oauth-options, oauth-authorization, oauth-tokens, begin-oauth, complete-oauth, refresh-oauth
+
+# A real library consumer: private OAuth handoff data travels through stdin/stdout,
+# not command-line arguments or a global credential cache. The test owner supplies
+# browser consent separately and never needs an external identity provider.
+private function required-text string; input ref document-value, key string
+    field = input.field; key
+    if not field.failed and field.value.kind == 'string'
+        return field.value.scalar
+    throw http-client-error; 'Missing string field: ' + key
+
+private function read-input document-value;
+    source = stdin;
+    reader = source.text; utf8
+    incoming = reader.read-all; 65536
+    if incoming.failed or not incoming.end
+        throw http-client-error; 'Expected a bounded JSON object on stdin'
+    parsed = parse-json; incoming.text, (default-json-options;)
+    if parsed.failed or parsed.value.kind != 'map'
+        throw http-client-error; 'Expected a JSON object on stdin'
+    return parsed.value
+
+private function number-value document-value; value int
+    parsed = parse-json; (value.to-string;), (default-json-options;)
+    if parsed.failed
+        throw http-client-error; 'Could not encode integer'
+    return parsed.value
+
+private function token-document document-value; tokens ref oauth-tokens
+    entries = instance document-map-entries;
+    entries.append; 'access_token', (make-document-string; tokens.access-token)
+    entries.append; 'refresh_token', (make-document-string; tokens.refresh-token)
+    entries.append; 'id_token', (make-document-string; tokens.id-token)
+    entries.append; 'token_type', (make-document-string; tokens.token-type)
+    entries.append; 'expires_in', (number-value; tokens.expires-in)
+    encoded = make-document-map; entries
+    return encoded.value
+
+async function main throws throwable;
+    supplied = arguments;
+    if supplied.length != 2
+        throw http-client-error; 'usage: oauth-client begin|complete|refresh|resource ORIGIN; private handoff JSON on stdin'
+    action = supplied[0].text
+    origin = supplied[1].text
+    options = instance oauth-options; origin + '/oauth/authorize', origin + '/oauth/token', 'terrane-demo', origin + '/oauth/callback'
+    options.scope = 'demo.read'
+    if action == 'begin'
+        authorization = begin-oauth; options
+        fields = instance document-map-entries;
+        fields.append; 'url', (make-document-string; authorization.url)
+        fields.append; 'state', (make-document-string; authorization.state)
+        fields.append; 'verifier', (make-document-string; authorization.verifier)
+        fields.append; 'redirect_uri', (make-document-string; authorization.redirect-uri)
+        begun-document = make-document-map; fields
+        print; begun-document.value.encoded
+    else
+        settings = instance client-options;
+        settings.timeout-ms = 10000
+        transport = create-client; settings
+        input = read-input;
+        if action == 'complete'
+            authorization = instance oauth-authorization; (required-text; input, 'url'), (required-text; input, 'state'), (required-text; input, 'verifier'), options.redirect-uri, options.client-id, options.token-url
+            callback = required-text; input, 'callback_url'
+            tokens = await complete-oauth; transport, options, authorization, callback
+            completed-document = token-document; tokens
+            print; completed-document.encoded
+        else if action == 'refresh'
+            previous = instance oauth-tokens; (required-text; input, 'access_token'), (required-text; input, 'refresh_token'), '', 'Bearer', 0
+            json-mode = input.field; 'json'
+            if not json-mode.failed and json-mode.value.kind == 'bool'
+                options.refresh-json = json-mode.value.scalar == 'true'
+            refreshed = await refresh-oauth; transport, options, previous
+            refreshed-document = token-document; refreshed
+            print; refreshed-document.encoded
+        else if action == 'resource'
+            access-token = required-text; input, 'access_token'
+            headers list of http-header = list; (instance http-header; 'Authorization', 'Bearer ' + access-token)
+            request = instance http-request; 'GET', origin + '/oauth/resource', headers
+            response = await transport.send; request
+            body = response.json;
+            fields = instance document-map-entries;
+            fields.append; 'status', (number-value; response.status)
+            fields.append; 'body', body
+            resource-document = make-document-map; fields
+            print; resource-document.value.encoded
+        else
+            throw http-client-error; 'Unknown oauth-client action'

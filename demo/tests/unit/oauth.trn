@@ -1,0 +1,47 @@
+namespace http-server-demo
+
+from /core/testing import assert-equal-bool, advance-time, fail
+from /core/errors import throwable
+
+function test-oauth-pending-prunes-expired-on-mutation-without-resetting-live-deadline throws throwable;
+    store = instance oauth-store;
+    _expired = store.issue; 'terrane-demo', 'http://127.0.0.1:8765/oauth/callback', 'expired', 'challenge'
+    advance-time; 100000000000
+    live = store.issue; 'terrane-demo', 'http://127.0.0.1:8765/oauth/callback', 'live', 'challenge'
+    advance-time; 200000000000
+    replacement = store.issue; 'terrane-demo', 'http://127.0.0.1:8765/oauth/callback', 'replacement', 'challenge'
+    assert-equal-bool; store.pending.length == 2, true
+    advance-time; 100000000000
+    assert-equal-bool; (store.consume-consent; live) == none, true
+    assert-equal-bool; (store.consume-consent; replacement) != none, true
+
+function test-oauth-code-expires-before-exchange throws throwable;
+    store = instance oauth-store;
+    id = store.issue; 'terrane-demo', 'http://127.0.0.1:8765/oauth/callback', 'state', 'challenge'
+    pending = store.consume-consent; id
+    if pending != none
+        code = store.issue-code; pending
+        advance-time; 300000000000
+        expired = store.exchange; code, 'terrane-demo', 'http://127.0.0.1:8765/oauth/callback', 'challenge'
+        assert-equal-bool; expired == none, true
+    else
+        fail; 'A new authorization request must be available'
+
+function test-oauth-access-and-refresh-expire-at-deadline throws throwable;
+    store = instance oauth-store;
+    id = store.issue; 'terrane-demo', 'http://127.0.0.1:8765/oauth/callback', 'state', 'challenge'
+    pending = store.consume-consent; id
+    if pending != none
+        code = store.issue-code; pending
+        tokens = store.exchange; code, 'terrane-demo', 'http://127.0.0.1:8765/oauth/callback', 'challenge'
+        if tokens != none
+            advance-time; 299000000000
+            assert-equal-bool; (store.valid-access; tokens.access-token), true
+            advance-time; 1000000000
+            assert-equal-bool; (store.valid-access; tokens.access-token), false
+            refreshed = store.rotate; tokens.refresh-token, 'terrane-demo'
+            assert-equal-bool; refreshed == none, true
+        else
+            fail; 'A valid code must issue tokens'
+    else
+        fail; 'A new authorization request must be available'

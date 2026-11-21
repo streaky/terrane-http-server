@@ -16,7 +16,7 @@ private function render-page string throws throwable; name string, title string,
 @[static-directory; path = '/docs', directory = 'public/docs']
 @[static-directory; path = '/assets', directory = 'public/assets']
 class site uses api
-    private note string = 'Terrane catalog API\n'
+    private note string = "Terrane catalog API\n"
     private note-size int
 
     function construct;

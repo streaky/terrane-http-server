@@ -1,0 +1,123 @@
+namespace streaky/http-server
+
+from /core/collections import list
+from /core/errors import throwable
+from /core/time import clock, duration
+from /deps/axum-core/body import Body as native-body
+from /streaky/http-server/internal import encoded-response, into-native-response
+from /core/testing import assert-equal-int, assert-equal-string, assert-equal-bool
+
+private class sequence-counts
+    polls int = 0
+    cancels int = 0
+
+    mutable function polled;
+        this.polls = this.polls + 1
+
+    mutable function canceled;
+        this.cancels = this.cancels + 1
+
+private class counted-part implements response-part
+    private counts shared ref sequence-counts
+    private text string
+    private wait-after-first bool
+
+    function construct; counts shared ref sequence-counts, text string, wait-after-first bool = false
+        this.counts = counts
+        this.text = text
+        this.wait-after-first = wait-after-first
+
+    async function next-chunk string|none throws throwable;
+        counts = this.counts
+        counts.polled;
+        if counts.polls == 1
+            return this.text
+        if this.wait-after-first
+            await clock::sleep; (duration::seconds; 60)
+        return none
+
+    function cancel;
+        counts = this.counts
+        counts.canceled;
+
+async function test-response-sequence-pulls-in-order-and-cancels-remaining throws throwable;
+    first = shared ref (instance sequence-counts;)
+    second = shared ref (instance sequence-counts;)
+    last = shared ref (instance sequence-counts;)
+    parts list of response-part = list;
+    parts.append; (instance counted-part; first, 'first')
+    parts.append; (instance counted-part; second, 'second')
+    parts.append; (instance counted-part; last, 'last')
+    response = compose-response-stream; move parts
+    chunk = await response.next-chunk;
+    if chunk != none
+        assert-equal-string; chunk, 'first'
+    else
+        assert-equal-bool; false, true
+    assert-equal-int; second.polls, 0
+    chunk = await response.next-chunk;
+    if chunk != none
+        assert-equal-string; chunk, 'second'
+    else
+        assert-equal-bool; false, true
+    assert-equal-int; first.cancels, 1
+    assert-equal-int; last.polls, 0
+    response.cancel;
+    response.cancel;
+    assert-equal-int; first.cancels, 1
+    assert-equal-int; second.cancels, 1
+    assert-equal-int; last.cancels, 1
+    assert-equal-int; last.polls, 0
+    done = await response.next-chunk;
+    assert-equal-bool; done == none, true
+
+function test-response-sequence-head-cancels-without-polling throws throwable;
+    first = shared ref (instance sequence-counts;)
+    second = shared ref (instance sequence-counts;)
+    parts list of response-part = list;
+    parts.append; (instance counted-part; first, 'first')
+    parts.append; (instance counted-part; second, 'second')
+    response = encoded-response; 200, 'text/plain', ''
+    response.stream = compose-response-stream; move parts
+    into-native-response; move response, false, true
+    assert-equal-int; first.polls, 0
+    assert-equal-int; second.polls, 0
+    assert-equal-int; first.cancels, 1
+    assert-equal-int; second.cancels, 1
+
+private async function start-and-drop-body bool; body mutable ref (native-body|none), counts shared ref sequence-counts
+    return rust
+        use ::http_body::Body as _;
+        use std::{future::poll_fn, pin::Pin, task::Poll};
+        let mut body = body.take().expect("response body");
+        let first = poll_fn(|cx| Pin::new(&mut body).poll_frame(cx)).await;
+        assert!(matches!(first, Some(Ok(frame)) if frame.data_ref().is_some_and(|data| data.as_ref() == b"active")));
+        ::tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                let pending = poll_fn(|cx| Poll::Ready(Pin::new(&mut body).poll_frame(cx).is_pending())).await;
+                if !pending {
+                    return false;
+                }
+                if counts.lock().expect("poll counters").polls == terrane_int_support::Int::from(2_i128) {
+                    return true;
+                }
+                ::tokio::task::yield_now().await;
+            }
+        }).await.unwrap_or(false)
+
+async function test-response-sequence-drop-cancels-pending-and-unstarted throws throwable;
+    active = shared ref (instance sequence-counts;)
+    queued = shared ref (instance sequence-counts;)
+    parts list of response-part = list;
+    parts.append; (instance counted-part; active, 'active', true)
+    parts.append; (instance counted-part; queued, 'queued')
+    response = encoded-response; 200, 'text/plain', ''
+    response.stream = compose-response-stream; move parts
+    native = into-native-response; move response
+    body native-body|none = native.into_body;
+    pending = await start-and-drop-body; body, active
+    assert-equal-bool; pending, true
+    assert-equal-int; active.polls, 2
+    assert-equal-int; active.cancels, 1
+    assert-equal-int; queued.polls, 0
+    assert-equal-int; queued.cancels, 1

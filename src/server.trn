@@ -6,16 +6,26 @@ from /deps/axum-core/response import Response as native-response
 from /deps/axum/middleware import Next as middleware-next, from_fn as from-fn
 from /deps/tower-http/services import ServeDir as serve-dir
 from /core/networking import listen-tcp, tcp-listener
-from /core/networking/native import native-socket-address as socket-addr
+from /core/networking/native import native-socket-address as socket-addr, native-tcp-listener
+from /core/errors import throwable, coercion-error
+from /streaky/http-server/internal import routes, http-method, incoming-request, wire-response
+from /core/collections import list
 from /deps/axum/extract/connect-info import IntoMakeServiceWithConnectInfo as into-make-service-with-connect-info
 from /deps/http import StatusCode as status-code
-from /core/errors import throwable
-from /streaky/http-server/internal import routes
-from /core/collections import list
 
 # Generated class composition protocol. Endpoints are declared on api-using route groups.
 public interface controller
     consuming function routes routes; registered-routes routes
+
+private class transport-observation
+    callback function from string to none
+    limit uint32
+    capture-all bool
+
+    function construct; callback function from string to none, limit uint32, capture-all bool
+        this.callback = callback
+        this.limit = limit
+        this.capture-all = capture-all
 
 public class application
     private router native-router = native-router::new;
@@ -23,13 +33,15 @@ public class application
     private policy access-policy = instance access-policy;
     private websockets list of websocket-route
     private maximum-connections uint32 = 0
+    private observation transport-observation|none = none
 
-    private function construct; router native-router, address string, policy access-policy, websockets list of websocket-route, maximum uint32
+    private function construct; router native-router, address string, policy access-policy, websockets list of websocket-route, maximum uint32, observation transport-observation|none = none
         this.router = move router
         this.address = address
         this.policy = move policy
         this.websockets = move websockets
         this.maximum-connections = maximum
+        this.observation = observation
 
     consuming function mount application; prefix string, handler-controller controller
         registered-routes routes = instance routes; (native-router::new;)
@@ -40,7 +52,36 @@ public class application
             router = router.merge; move nested
         else
             router = router.nest; prefix, move nested
-        return instance application; move router, this.address, (move this.policy), (move this.websockets), this.maximum-connections
+        return instance application; move router, this.address, (move this.policy), (move this.websockets), this.maximum-connections, this.observation
+
+    # Low-level routes run before body extraction, allowing authorization and
+    # admission to precede bounded reads without a second request representation.
+    consuming function route application throws throwable; method string, path string, handler async function from incoming-request to wire-response throws throwable
+        selected http-method = http-method::get
+        if method == 'GET'
+            selected = http-method::get
+        else if method == 'POST'
+            selected = http-method::post
+        else if method == 'PUT'
+            selected = http-method::put
+        else if method == 'PATCH'
+            selected = http-method::patch
+        else if method == 'DELETE'
+            selected = http-method::delete
+        else if method == 'HEAD'
+            selected = http-method::head
+        else if method == 'OPTIONS'
+            selected = http-method::options
+        else
+            throw coercion-error
+        registered = instance routes; (move this.router)
+        registered = registered.endpoint; selected, path, handler
+        return instance application; (move registered.router), this.address, (move this.policy), (move this.websockets), this.maximum-connections, this.observation
+
+    # Apply to the final route tree, inside the network access policy.
+    consuming function observe-transport application; observer function from string to none, capture-limit uint32 = 65536, capture-all bool = false
+        this.observation = instance transport-observation; observer, capture-limit, capture-all
+        return this
 
     consuming function websocket application; path string, handler async function from websocket-session to none throws throwable
         this.websockets.append; (instance websocket-route; path, handler)
@@ -50,17 +91,17 @@ public class application
         service = serve-dir::new; directory
         router = move this.router
         router = router.nest_service; prefix, service
-        return instance application; move router, this.address, (move this.policy), (move this.websockets), this.maximum-connections
+        return instance application; move router, this.address, (move this.policy), (move this.websockets), this.maximum-connections, this.observation
 
     consuming function with-address application; address string
         router = move this.router
-        return instance application; move router, address, (move this.policy), (move this.websockets), this.maximum-connections
+        return instance application; move router, address, (move this.policy), (move this.websockets), this.maximum-connections, this.observation
 
     consuming function with-connection-limit application; maximum uint32
-        return instance application; (move this.router), this.address, (move this.policy), (move this.websockets), maximum
+        return instance application; (move this.router), this.address, (move this.policy), (move this.websockets), maximum, this.observation
 
     consuming function configure application; config server-config
-        app application = instance application; (move this.router), config.address, (move this.policy), (move this.websockets), this.maximum-connections
+        app application = instance application; (move this.router), config.address, (move this.policy), (move this.websockets), this.maximum-connections, this.observation
         index int = 0
         while index < config.static-directories.length
             mount = config.static-directories[index]
@@ -71,15 +112,25 @@ public class application
     consuming function allow-direct application; network string
         policy = move this.policy
         policy = policy.allow-direct; network
-        return instance application; (move this.router), this.address, move policy, (move this.websockets), this.maximum-connections
+        return instance application; (move this.router), this.address, move policy, (move this.websockets), this.maximum-connections, this.observation
 
     consuming function allow-client application; network string
         policy = move this.policy
         policy = policy.allow-client; network
-        return instance application; (move this.router), this.address, move policy, (move this.websockets), this.maximum-connections
+        return instance application; (move this.router), this.address, move policy, (move this.websockets), this.maximum-connections, this.observation
 
     function has-routes bool;
         return (this.router.has_routes;) or this.websockets.length > 0
+
+    private consuming function serving-router native-router;
+        router = move this.router
+        direct-policy = compile-network-policy; this.policy.direct-connections
+        client-policy = compile-network-policy; this.policy.client-addresses
+        router = install-websockets; move router, this.websockets
+        observation = this.observation
+        if observation != none
+            router = install-transport-observer; move router, observation.callback, observation.limit, observation.capture-all
+        return apply-access-policy; move router, direct-policy, client-policy
 
     consuming async function serve none throws throwable;
         bound = await listen-tcp; this.address
@@ -87,19 +138,41 @@ public class application
         return none
 
     consuming async function serve-listener none throws throwable; bound tcp-listener
-        router = this.router
-        direct-policy network-policy = compile-network-policy; this.policy.direct-connections
-        client-policy network-policy = compile-network-policy; this.policy.client-addresses
-        websockets = move this.websockets
-        # Compose and validate all routes before either accept path starts.
-        router = install-websockets; router, websockets
-        router = apply-access-policy; router, direct-policy, client-policy
-        if this.maximum-connections > 0
-            await serve-limited; move bound, router, this.maximum-connections
+        maximum = this.maximum-connections
+        router = this.serving-router;
+        if maximum > 0
+            await serve-limited; move bound, router, maximum
             return none
         listener = bound.into-native;
         service into-make-service-with-connect-info of (native-router, socket-addr) = (router.into_make_service_with_connect_info of socket-addr);
         await native-serve; listener, service
+        return none
+
+    # Wait for shutdown, stop accepting, and drain active responses and upgrades.
+    # The callback may begin application-specific cancellation before returning.
+    consuming async function serve-until none throws throwable; shutdown async function to none throws throwable
+        bound = await listen-tcp; this.address
+        await this.serve-listener-until; move bound, move shutdown
+        return none
+
+    consuming async function serve-listeners-until none throws throwable; bounds list of tcp-listener, shutdown async function to none throws throwable
+        if bounds.length == 0
+            throw coercion-error
+        maximum = this.maximum-connections
+        router = this.serving-router;
+        native-listeners list of native-tcp-listener = list
+        while bounds.length > 0
+            bound = bounds.remove; bounds.length - 1
+            listener = bound.into-native;
+            native-listeners.append; move listener
+        listeners (list of native-tcp-listener)|none = move native-listeners
+        await serve-gracefully; listeners, router, maximum, move shutdown
+        return none
+
+    consuming async function serve-listener-until none throws throwable; bound tcp-listener, shutdown async function to none throws throwable
+        bounds list of tcp-listener = list
+        bounds.append; move bound
+        await this.serve-listeners-until; move bounds, move shutdown
         return none
 
 public function create-application application;
@@ -123,3 +196,14 @@ private function apply-access-policy native-router; router native-router, direct
             return await next.run; request
         return (status-code::FORBIDDEN).into_response;
     return router.layer; (from-fn; middleware)
+
+# Transfer unique backing into the native accept/drain coordinator.
+private async function serve-gracefully none throws throwable; listeners mutable ref ((list of native-tcp-listener)|none), router native-router, maximum uint32, shutdown async function to none throws throwable
+    failure throwable|none = rust
+        crate::shutdown_serving::serve_listeners_until(
+            listeners.take().expect("graceful listeners are owned exactly once").into_unique_vec(),
+            router, maximum, async move { shutdown().await },
+        ).await.err()
+    if failure != none
+        throw failure
+    return none

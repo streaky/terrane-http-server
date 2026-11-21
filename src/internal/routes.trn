@@ -63,14 +63,13 @@ public class routes
         return instance routes; move router
 
 private function request-is-head bool; request ref native-request
-    value bool = rust
-        request.method() == ::http::Method::HEAD
-    return value
+    return ((request.method;).as_str;) == 'HEAD'
 
 private function status-reason string; code status-code
-    value string = rust
+    # Remove when borrowed optional text can materialize correctly in source:
+    # unwrap_or remains chain-only (T0112); map lowers &String instead of &str.
+    return rust
         code.canonical_reason().unwrap_or("HTTP error").to_owned()
-    return value
 
 private function http-error-native native-response; error throwable, vary bool, is-head bool
     try

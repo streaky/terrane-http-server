@@ -5,6 +5,7 @@ from /core/errors import throwable, coercion-error
 from /core/documents import make-document-string
 from /core/documents/json import canonical-json
 from /streaky/http-server/internal import wire-response
+from /deps/http import HeaderName as native-header-name, HeaderValue as native-header-value
 
 /// Mutable instructions for one response, shared only within one invocation.
 public class response-context
@@ -112,10 +113,10 @@ class response-settings
             throw coercion-error
 
 private function checked-header; name string, value string
-    valid bool = rust
-        ::http::header::HeaderName::from_bytes(name.as_bytes()).is_ok()
-            && ::http::HeaderValue::from_str(&value).is_ok()
-    if not valid
+    try
+        native-header-name::from_str; name
+        native-header-value::from_str; value
+    catch
         throw coercion-error
 
 private function check-cookie; name string, value string

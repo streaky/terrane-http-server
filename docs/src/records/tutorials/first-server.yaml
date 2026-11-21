@@ -127,9 +127,10 @@ documentation:
             Run the following command from `hello-http`. The default address is
             `127.0.0.1:3000`, so the server is initially reachable only on the
             local machine. Leave this terminal running and make requests from
-            a second terminal. Stop the process with your terminal's interrupt
-            when finished; the library does not currently expose a graceful
-            shutdown callback.
+            a second terminal. This example uses ordinary `serve`; stop it with
+            your terminal's interrupt when finished. Applications that need to
+            drain active requests can use `serve-until` with a shutdown callback;
+            see [[http-server.api.application]].
         - type: example
           id: run-command
           title: Start the application
@@ -317,8 +318,9 @@ documentation:
             Consult [[http-server.api.application]] for application builders and
             [[http-server.guide.annotations]] for typed endpoints, request
             extraction, structured responses, and supported GET and HEAD methods.
-            Binary WebSocket payloads and graceful shutdown remain outside the
-            current public APIs.
+            That application reference also documents graceful shutdown through
+            `serve-until` and `serve-listener-until`. Binary WebSocket payloads
+            remain outside the current public APIs.
       sections: []
   see-also:
     - http-server.guide.application-routing
