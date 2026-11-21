@@ -65,6 +65,7 @@ documentation:
         Cancelling an in-flight managed receive ends that session and drops its
         subscription receiver. It is not a resumable timeout or a WebSocket close
         handshake. Use group removal for an orderly close that drains queued text.
+        The API is text-oriented: there is no binary send or payload accessor for non-text events.
     - type: example
       id: signatures
       title: Public declaration synopsis

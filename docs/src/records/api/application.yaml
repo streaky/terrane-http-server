@@ -104,6 +104,7 @@ documentation:
         `serve-listeners-until` consumes a nonempty list of bound listeners;
         passing an empty list throws the generic `coercion-error` without a
         descriptive message. The method accepts across them concurrently.
+        The connection cap is shared globally across all supplied listeners.
         Setup failures propagate before the shutdown callback starts.
         There is no implicit grace timeout or forced WebSocket close: applications
         must arrange their own cancellation/close policy if active work or sessions

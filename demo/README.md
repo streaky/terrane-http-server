@@ -210,6 +210,7 @@ python -B packages/http-server/tests/integration/test_consumer.py
 ```
 
 The HTTP suite starts the real built application from an isolated directory containing only copied public assets, with no template sources. It checks typed bodies and outputs, defaults, templated HTML pages, static documentation and assets, and the mounted OpenAPI schema. The consumer suite checks malformed declarations through the real compiler/consumer pipeline, plus throwing handlers returning success or HTTP 500 without taking down the server.
+Set `TERRANE_CONSUMER_COMPILER_TIMEOUT` to override the consumer suite's per-compiler-call deadline in seconds (default: 1200).
 The OAuth runner also builds `oauth-client/` and passes its executable to the HTTP suite. Direct invocation without `--oauth-client <artifact>` explicitly skips only the client-interoperability class; the owned OAuth runner supplies it and runs that class. Expiration boundaries are checked without wall-clock sleeps by `terrane test packages/http-server/demo --filter oauth`.
 
 The same demo suite also upgrades a raw socket to `/ws/echo`, verifies multiple text
