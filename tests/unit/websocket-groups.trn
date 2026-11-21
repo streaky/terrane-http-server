@@ -1,0 +1,36 @@
+namespace streaky/http-server/internal
+
+from /core/testing import assert-equal-bool, assert-equal-int
+from /core/errors import throwable
+from /streaky/http-server import websocket-group, websocket-subscription
+
+private function discard-websocket-subscription; subscription websocket-subscription
+    _discarded = move subscription
+
+function test-websocket-group-bounds-each-session-queue throws throwable;
+    group = instance websocket-group;
+    _first = group.register; 'first', 1
+    _second = group.register; 'second', 1
+
+    assert-equal-int; (group.broadcast; 'one'), 2
+    assert-equal-int; (group.broadcast; 'two'), 0
+    assert-equal-int; (group.length;), 2
+
+function test-websocket-group-removes-only-the-targeted-session throws throwable;
+    group = instance websocket-group;
+    _first = group.register; 'first', 2
+    _second = group.register; 'second', 2
+
+    assert-equal-bool; (group.remove; 'first'), true
+    assert-equal-int; (group.length;), 1
+    assert-equal-int; (group.broadcast; 'still-connected'), 1
+    assert-equal-int; (group.broadcast; 'still-connected-again'), 1
+    assert-equal-bool; (group.remove; 'first'), false
+
+function test-websocket-group-cleans-up-a-dropped-subscription throws throwable;
+    group = instance websocket-group;
+    subscription = group.register; 'dropped', 1
+
+    discard-websocket-subscription; move subscription
+    assert-equal-int; (group.broadcast; 'cleanup'), 0
+    assert-equal-int; (group.length;), 0

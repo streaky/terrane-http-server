@@ -13,7 +13,7 @@ documentation:
   status: complete
   title: "websocket-session"
   title-style: code
-  summary: Framework-owned asynchronous text send, close, and event receive operations for one upgraded connection.
+  summary: Asynchronous WebSocket sessions and managed groups with bounded per-session outbound queues.
   tags: [http-server, websocket, session]
   blocks:
     - type: markdown
@@ -21,8 +21,8 @@ documentation:
         `websocket-session` has a private constructor and is obtained only by the framework
         after a successful upgrade, then passed to the registered callback. Its socket field
         is private and mutable; application code cannot construct or directly access the
-        native socket. All three public operations are mutable and asynchronous, and can
-        report concrete native transport throwables.
+        native socket. The public session operations are mutable and asynchronous.
+        `send-text`, `close`, and `receive` can report concrete native transport throwables.
 
         `send-text(text: string) -> async none throws throwable` sends a native text
         frame when the session still has a socket; it returns none. `close() -> async none
@@ -42,6 +42,19 @@ documentation:
         must widen to `throws throwable`. Errors are not normalized to `dependency-error`;
         catching a particular native type requires its descriptor import, while a broad
         `catch throwable` needs no native import.
+
+        `websocket-group` owns a map of session IDs to bounded outbound senders. Call
+        `register(id, capacity)` with a positive capacity to obtain a
+        `websocket-subscription`, then pass it to `websocket-session.receive-managed`.
+        This receive operation waits for either a socket event or a queued group message;
+        queued text is sent on the connection's own socket and returned as event kind `sent`.
+        Removing an endpoint (or registering a replacement with the same ID) lets
+        its session send any already queued messages, then issue a WebSocket close
+        from the connection loop. Dropping the subscription closes its receiver; a
+        later broadcast detects and removes that stale endpoint. `broadcast(text)` returns
+        the number of queues that accepted the text. Full queues skip that session without
+        delaying others or removing it. `remove(id)` affects only that ID. Group map access
+        is synchronous, and neither session nor group locks are held across an await.
         The API is text-oriented: there is no binary send or payload accessor for non-text events.
     - type: example
       id: signatures
@@ -55,6 +68,12 @@ documentation:
             mutable async function send-text none throws throwable; text string
             mutable async function close none throws throwable;
             mutable async function receive websocket-event throws throwable;
+            mutable async function receive-managed websocket-event throws throwable; subscription mutable ref websocket-subscription
+        public class websocket-group
+            mutable function register websocket-subscription throws coercion-error; id string, capacity uint32
+            mutable function broadcast int; text string
+            mutable function remove bool; id string
+            function length int;
       response: null
       diagnostic: null
       markdown: Method bodies and private implementation members are omitted from this declaration synopsis.

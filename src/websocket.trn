@@ -2,13 +2,121 @@ namespace streaky/http-server
 
 from /deps/axum/extract/ws import Message as websocket-message, WebSocket as native-websocket
 from /deps/axum/extract import WebSocketUpgrade as websocket-upgrade
+from /deps/axum import Error as websocket-error, Router as native-router
 from /deps/axum-core/response import Response as native-response
 from /deps/axum/routing import get as native-websocket-get
-from /deps/axum import Router as native-router
 from /deps/axum-core/extract import Request as native-request
-from /core/errors import throwable
-from /core/collections import list
+from /core/errors import throwable, coercion-error
+from /core/collections import list, map
 from /deps/tokio/sync/broadcast import Sender as connection-lease
+from /deps/tokio/sync/mpsc import Sender as websocket-sender, Receiver as websocket-receiver
+
+private class websocket-channel-pair
+    sender websocket-sender of string
+    receiver websocket-receiver of string
+
+    function construct; sender websocket-sender of string, receiver websocket-receiver of string
+        this.sender = move sender
+        this.receiver = move receiver
+
+private class websocket-managed-result
+    socket native-websocket
+    receiver websocket-receiver of string
+    message websocket-message|none
+    outgoing string|none
+    socket-error string|none
+    queue-closed bool
+
+    function construct; socket native-websocket, receiver websocket-receiver of string, message websocket-message|none, outgoing string|none, socket-error string|none, queue-closed bool
+        this.socket = move socket
+        this.receiver = move receiver
+        this.message = move message
+        this.outgoing = outgoing
+        this.socket-error = socket-error
+        this.queue-closed = queue-closed
+
+private function websocket-channel websocket-channel-pair; capacity uint32
+    return rust
+        let (sender, receiver) = tokio::sync::mpsc::channel::<String>(capacity as usize);
+        WebsocketChannelPair { sender: Some(sender), receiver: Some(receiver) }
+
+private async function receive-managed-result websocket-managed-result; socket mutable ref (native-websocket|none), receiver mutable ref ((websocket-receiver of string)|none)
+    return rust
+        let mut socket = socket.take().expect("managed session socket is present");
+        let mut receiver = receiver.take().expect("managed subscription receiver is present");
+        let (message, outgoing, socket_error, queue_closed) = tokio::select! {
+            result = socket.recv() => match result {
+                Some(Ok(message)) => (Some(message), None, None, false),
+                Some(Err(error)) => (None, None, Some(error.to_string()), false),
+                None => (None, None, None, false),
+            },
+            outgoing = receiver.recv() => {
+                let closed = outgoing.is_none();
+                (None, outgoing, None, closed)
+            },
+        };
+        WebsocketManagedResult {
+            socket: Some(socket), receiver: Some(receiver),
+            message, outgoing, socket_error, queue_closed,
+        }
+
+public class websocket-subscription
+    private receiver (websocket-receiver of string)|none = none
+
+    private function construct; receiver websocket-receiver of string
+        this.receiver = move receiver
+
+private owning interface websocket-outbound-endpoint
+    function try-send bool; text ref string
+    function is-closed bool;
+
+private class websocket-queue-endpoint implements websocket-outbound-endpoint
+    private sender websocket-sender of string
+
+    function construct; sender websocket-sender of string
+        this.sender = move sender
+
+    function try-send bool; text ref string
+        return rust
+            let sender = self.sender.as_ref().expect("initialized websocket endpoint");
+            match sender.try_reserve() {
+                Ok(permit) => { permit.send(text.to_owned()); true }
+                Err(_) => false,
+            }
+
+    function is-closed bool;
+        return this.sender.is_closed;
+
+public class websocket-group
+    private endpoints map of string, websocket-outbound-endpoint
+
+    function construct;
+        this.endpoints = map;
+
+    mutable function register websocket-subscription throws coercion-error; id string, capacity uint32
+        if capacity == 0
+            throw coercion-error
+        channel = websocket-channel; capacity
+        endpoint = instance websocket-queue-endpoint; move channel.sender
+        this.endpoints.set; id, move endpoint
+        return instance websocket-subscription; move channel.receiver
+
+    mutable function broadcast int; text string
+        delivered int = 0
+        keys = this.endpoints.keys;
+        for id in keys
+            if (ref this.endpoints[id]).try-send; text
+                delivered = delivered + 1
+            else if (ref this.endpoints[id]).is-closed;
+                this.endpoints.remove.checked; id
+        return delivered
+
+    mutable function remove bool; id string
+        removed = this.endpoints.remove.checked; id
+        return removed != none
+
+    function length int;
+        return this.endpoints.length
 
 public class websocket-event
     kind string = 'closed'
@@ -39,6 +147,39 @@ public class websocket-session
             await socket.send; (websocket-message::Close; none)
         this.socket = move socket
         return none
+
+    mutable async function receive-managed websocket-event throws throwable; subscription mutable ref websocket-subscription
+        socket = move this.socket
+        receiver = move subscription.receiver
+        subscription.receiver = none
+        if socket == none
+            return instance websocket-event; 'closed', none
+        if receiver == none
+            this.socket = move socket
+            await this.close;
+            return instance websocket-event; 'closed', none
+        result = await receive-managed-result; socket, receiver
+        this.socket = move result.socket
+        subscription.receiver = move result.receiver
+        socket-error = move result.socket-error
+        if socket-error != none
+            throw http-error; 500, socket-error
+        if result.queue-closed
+            await this.close;
+            return instance websocket-event; 'closed', none
+        outgoing = move result.outgoing
+        if outgoing != none
+            await this.send-text; outgoing
+            return instance websocket-event; 'sent', outgoing
+        message = move result.message
+        if message != none
+            kind = message.variant-name;
+            if kind == 'Text'
+                native-text = (move message).into_text;
+                text = native-text.as_str;
+                return instance websocket-event; 'text', text
+            return instance websocket-event; kind, none
+        return instance websocket-event; 'closed', none
 
     mutable async function receive websocket-event throws throwable;
         message websocket-message|none = none
