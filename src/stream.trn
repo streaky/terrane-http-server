@@ -1,5 +1,6 @@
 namespace streaky/http-server
 
+from /core/collections import list
 from /core/errors import throwable
 
 # A demand-driven producer. Returning none completes the body; throwing aborts it.
@@ -7,6 +8,94 @@ from /core/errors import throwable
 public interface response-stream
     async function next-chunk string|none throws throwable;
     function cancel;
+
+# The composite takes each producer once and owns it through cancellation.
+public owning interface response-part
+    async function next-chunk string|none throws throwable;
+    function cancel;
+
+private class owned-response-part
+    producer response-part
+
+    function construct; producer response-part
+        this.producer = move producer
+
+    consuming function destruct;
+        this.producer.cancel;
+
+private class response-sequence-state
+    private queued (list of owned-response-part)|none = none
+    private current owned-response-part|none = none
+
+    function construct; producers list of response-part
+        # Reverse once so taking the next part never shifts the remainder.
+        queued list of owned-response-part = list;
+        while producers.length > 0
+            part = producers.remove; producers.length - 1
+            queued.append; (instance owned-response-part; move part)
+        this.queued = move queued
+
+    mutable function take owned-response-part|none;
+        part = move this.current
+        this.current = none
+        if part != none
+            return move part
+        queued = move this.queued
+        this.queued = none
+        if queued != none
+            if queued.length > 0
+                next = queued.remove; queued.length - 1
+                this.queued = move queued
+                return move next
+        return none
+
+    mutable function restore owned-response-part|none; part owned-response-part
+        if this.queued == none
+            return move part
+        this.current = move part
+        return none
+
+    mutable function drain (list of owned-response-part)|none;
+        remaining = move this.queued
+        this.queued = none
+        part = move this.current
+        this.current = none
+        if remaining != none
+            if part != none
+                remaining.append; move part
+            return move remaining
+        return none
+
+private class response-sequence implements response-stream
+    private state shared ref response-sequence-state
+
+    function construct; producers list of response-part
+        this.state = shared ref (instance response-sequence-state; move producers)
+
+    async function next-chunk string|none throws throwable;
+        state = this.state
+        while true
+            part = state.take;
+            if part != none
+                chunk = await part.producer.next-chunk;
+                if chunk != none
+                    released = state.restore; move part
+                    if released != none
+                        return none
+                    return chunk
+            else
+                return none
+        return none
+
+    function cancel;
+        state = this.state
+        # Drop outside the shared-state guard: the cancellation hooks are user code.
+        remaining = state.drain;
+        if remaining != none
+            remaining.clear;
+
+public function compose-response-stream response-stream; producers list of response-part
+    return instance response-sequence; move producers
 
 public class request-body-limit implements throwable
     message string = 'request exceeds the configured byte limit'

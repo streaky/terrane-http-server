@@ -93,6 +93,16 @@ documentation:
         Transport demand drives polling without an eager producer queue. `cancel`
         runs exactly once on EOF, error, disconnect, or body suppression for HEAD
         and bodyless statuses, including when the producer was never started.
+
+        `compose-response-stream; parts` transfers a `list of response-part` into a
+        single `response-stream`. Each `response-part` is an owning protocol with
+        `next-chunk` and `cancel` operations. The composite pulls parts in list order
+        and does not start a later part until the previous part reaches EOF. EOF
+        finalizes that part; an error, disconnect, or suppressed body finalizes the
+        active part and every queued part exactly once, including unstarted ones.
+        A part need not have been polled to receive `cancel`. As with other response
+        producers, do not poll the composite concurrently.
+
         `application.observe-transport` installs an optional per-application observer
         for headers, polled body data, completion, and drop events. Raw bytes use UTF-8
         or hexadecimal encoding; the observer owns any redaction policy. Observation
