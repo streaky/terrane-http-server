@@ -7,11 +7,11 @@ from /deps/axum/middleware import Next as middleware-next, from_fn as from-fn
 from /deps/tower-http/services import ServeDir as serve-dir
 from /core/networking import listen-tcp, tcp-listener
 from /core/networking/native import native-socket-address as socket-addr, native-tcp-listener
-from /deps/axum/extract/connect-info import IntoMakeServiceWithConnectInfo as into-make-service-with-connect-info
-from /deps/http import StatusCode as status-code
 from /core/errors import throwable, coercion-error
 from /streaky/http-server/internal import routes, http-method, incoming-request, wire-response
 from /core/collections import list
+from /deps/axum/extract/connect-info import IntoMakeServiceWithConnectInfo as into-make-service-with-connect-info
+from /deps/http import StatusCode as status-code
 
 # Generated class composition protocol. Endpoints are declared on api-using route groups.
 public interface controller
@@ -139,16 +139,29 @@ public class application
         await this.serve-listener-until; move bound, move shutdown
         return none
 
-    consuming async function serve-listener-until none throws throwable; bound tcp-listener, shutdown async function to none throws throwable
+    consuming async function serve-listeners-until none throws throwable; bounds list of tcp-listener, shutdown async function to none throws throwable
+        if bounds.length == 0
+            throw coercion-error
         router = move this.router
         direct-policy network-policy = compile-network-policy; this.policy.direct-connections
         client-policy network-policy = compile-network-policy; this.policy.client-addresses
         websockets = move this.websockets
         router = install-websockets; router, websockets
         router = apply-access-policy; router, direct-policy, client-policy
+        native-listeners list of native-tcp-listener = list
+        while bounds.length > 0
+            bound = bounds.remove; bounds.length - 1
+            listener = bound.into-native;
+            native-listeners.append; move listener
+        listeners (list of native-tcp-listener)|none = move native-listeners
         maximum = this.maximum-connections
-        listener (native-tcp-listener)|none = bound.into-native;
-        await serve-gracefully; listener, router, maximum, move shutdown
+        await serve-gracefully; listeners, router, maximum, move shutdown
+        return none
+
+    consuming async function serve-listener-until none throws throwable; bound tcp-listener, shutdown async function to none throws throwable
+        bounds list of tcp-listener = list
+        bounds.append; move bound
+        await this.serve-listeners-until; move bounds, move shutdown
         return none
 
 public function create-application application;
@@ -173,13 +186,11 @@ private function apply-access-policy native-router; router native-router, direct
         return (status-code::FORBIDDEN).into_response;
     return router.layer; (from-fn; middleware)
 
-# Borrow an explicit ownership slot: direct owned non-Clone reads inside inline
-# Rust reject T0134. Take the listener once and pin/drain its native connections.
-# Remove the slot and native module when source can express that complete graph.
-private async function serve-gracefully none throws throwable; listener mutable ref (native-tcp-listener|none), router native-router, maximum uint32, shutdown async function to none throws throwable
+# Transfer unique backing into the native accept/drain coordinator.
+private async function serve-gracefully none throws throwable; listeners mutable ref ((list of native-tcp-listener)|none), router native-router, maximum uint32, shutdown async function to none throws throwable
     failure throwable|none = rust
-        crate::shutdown_serving::serve_until(
-            listener.take().expect("graceful listener is owned exactly once"),
+        crate::shutdown_serving::serve_listeners_until(
+            listeners.take().expect("graceful listeners are owned exactly once").into_unique_vec(),
             router, maximum, async move { shutdown().await },
         ).await.err()
     if failure != none

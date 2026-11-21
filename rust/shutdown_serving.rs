@@ -14,7 +14,13 @@ use hyper_util::{
     server::conn::auto::Builder,
     service::TowerToHyperService,
 };
-use std::{future::Future, net::SocketAddr, time::Duration};
+use std::{
+    future::{Future, poll_fn},
+    net::SocketAddr,
+    pin::Pin,
+    task::Poll,
+    time::Duration,
+};
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::{broadcast, watch},
@@ -22,9 +28,13 @@ use tokio::{
 };
 use tower_http::add_extension::AddExtension;
 
-// Preserve the shutdown callback's source error identity after connection drain.
-pub async fn serve_until<F, E>(
-    listener: TcpListener,
+struct Listener {
+    socket: TcpListener,
+    retry: Option<Pin<Box<tokio::time::Sleep>>>,
+}
+
+pub async fn serve_listeners_until<F, E>(
+    listeners: Vec<TcpListener>,
     router: Router,
     maximum: u32,
     shutdown: F,
@@ -34,10 +44,17 @@ where
     E: Send + 'static,
 {
     let (stop, stopping) = watch::channel(false);
+    let mut listeners: Vec<_> = listeners
+        .into_iter()
+        .map(|socket| Listener {
+            socket,
+            retry: None,
+        })
+        .collect();
+    let mut next_listener = 0;
     let mut workers = JoinSet::new();
     tokio::pin!(shutdown);
     let outcome = loop {
-        // A slot covers HTTP and any upgraded session, not merely the handshake.
         if maximum > 0 && workers.len() >= maximum as usize {
             tokio::select! {
                 biased;
@@ -50,23 +67,35 @@ where
             biased;
             result = &mut shutdown => break result,
             _ = workers.join_next(), if !workers.is_empty() => {},
-            accepted = listener.accept() => match accepted {
-                Ok((stream, peer)) => {
-                    workers.spawn(connection(stream, peer, router.clone(), stopping.clone()));
-                }
-                Err(error) => {
-                    eprintln!("http-server.accept: {error}");
-                    tokio::select! {
-                        biased;
-                        result = &mut shutdown => break result,
-                        _ = tokio::time::sleep(Duration::from_secs(1)) => {}
+            (stream, peer) = poll_fn(|cx| {
+                let count = listeners.len();
+                for _ in 0..count {
+                    let listener = &mut listeners[next_listener];
+                    next_listener = (next_listener + 1) % count;
+                    if let Some(retry) = &mut listener.retry {
+                        if retry.as_mut().poll(cx).is_pending() {
+                            continue;
+                        }
+                        listener.retry = None;
+                    }
+                    match listener.socket.poll_accept(cx) {
+                        Poll::Pending => {}
+                        Poll::Ready(Ok(accepted)) => return Poll::Ready(accepted),
+                        Poll::Ready(Err(error)) => {
+                            eprintln!("http-server.accept: {error}");
+                            let mut retry = Box::pin(tokio::time::sleep(Duration::from_secs(1)));
+                            let _ = retry.as_mut().poll(cx);
+                            listener.retry = Some(retry);
+                        }
                     }
                 }
+                Poll::Pending
+            }) => {
+                workers.spawn(connection(stream, peer, router.clone(), stopping.clone()));
             }
         }
     };
-    // Release the port before waiting for responses/upgrades to finish.
-    drop(listener);
+    drop(listeners);
     let _ = stop.send(true);
     while workers.join_next().await.is_some() {}
     outcome

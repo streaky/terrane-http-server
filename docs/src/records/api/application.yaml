@@ -88,18 +88,21 @@ documentation:
         `await app.serve-listener; move listener`. The printed address and served socket
         are the same; no reserve-and-release port-selection race is needed.
 
-        `serve-until(shutdown: async function to none throws throwable)` and
+        `serve-until(shutdown: async function to none throws throwable)`,
         `serve-listener-until(bound: tcp-listener, shutdown: async function to none
-        throws throwable)` consume the application and provide graceful shutdown.
-        The callback takes no arguments and is awaited concurrently with serving.
-        Completion, including a thrown error, closes the listening socket and stops
-        accepting new connections. Active HTTP responses and upgraded WebSocket
-        sessions are then drained before returning. A callback error retains its
-        original identity and propagates only after that drain.
+        throws throwable)`, and `serve-listeners-until(bounds: list of tcp-listener,
+        shutdown: async function to none throws throwable)` consume the application
+        and provide graceful shutdown. The callback takes no arguments and is awaited
+        concurrently with serving. Completion, including a thrown error, closes all
+        listening sockets and stops accepting new connections. Active HTTP responses
+        and upgraded WebSocket sessions are then drained before returning. A callback
+        error retains its original identity and propagates only after that drain.
 
         These methods preserve route composition, network policies, peer metadata,
-        WebSocket support, and connection limits. The listener overload uses the
-        supplied socket without rebinding or consulting `application.address`.
+        WebSocket support, and connection limits. The listener overloads use the
+        supplied sockets without rebinding or consulting `application.address`.
+        `serve-listeners-until` consumes a nonempty list of bound listeners and
+        accepts across them concurrently. The connection cap is shared globally.
         Setup failures propagate before the shutdown callback starts.
         There is no implicit grace timeout or forced WebSocket close: applications
         must arrange their own cancellation/close policy if active work or sessions
@@ -127,6 +130,7 @@ documentation:
             consuming async function serve-listener none throws throwable; bound tcp-listener
             consuming async function serve-until none throws throwable; shutdown async function to none throws throwable
             consuming async function serve-listener-until none throws throwable; bound tcp-listener, shutdown async function to none throws throwable
+            consuming async function serve-listeners-until none throws throwable; bounds list of tcp-listener, shutdown async function to none throws throwable
       response: null
       diagnostic: null
       markdown: Method bodies and private implementation members are omitted from this declaration synopsis.

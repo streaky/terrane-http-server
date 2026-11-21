@@ -33,8 +33,13 @@ class ShutdownTests(unittest.TestCase):
                     with selectors.DefaultSelector() as ready:
                         ready.register(process.stdout, selectors.EVENT_READ)
                         self.assertTrue(ready.select(10), "server did not publish its bound address")
-                    host, port = process.stdout.readline().strip().rsplit(":", 1)
-                    port = int(port)
+                    addresses = [process.stdout.readline().strip().rsplit(":", 1) for _ in range(2)]
+                    host, port = addresses[0][0], int(addresses[0][1])
+                    second_host, second_port = addresses[1][0], int(addresses[1][1])
+                    probe = http.client.HTTPConnection(second_host, second_port, timeout=5)
+                    probe.request("GET", "/peer", headers={"Connection": "close"})
+                    self.assertEqual(probe.getresponse().read(), b"127.0.0.1")
+                    probe.close()
                     # Verify peer context survived the custom limited transport path.
                     probe = http.client.HTTPConnection(host, port, timeout=5)
                     probe.request("GET", "/peer", headers={"Connection": "close"})
@@ -60,18 +65,30 @@ class ShutdownTests(unittest.TestCase):
                         response = connection.getresponse()
                         self.assertEqual(response.status, 200)
                         self.assertEqual(response.read(len(b"started\n")), b"started\n")
+                    if maximum == 1:
+                        blocked = http.client.HTTPConnection(second_host, second_port, timeout=.2)
+                        try:
+                            blocked.request("GET", "/peer", headers={"Connection": "close"})
+                            with self.assertRaises(TimeoutError):
+                                blocked.getresponse()
+                        finally:
+                            blocked.close()
                     if fail:
                         (root / "fail-shutdown").touch()
                     (root / "shutdown").touch()
                     deadline = time.monotonic() + 5
                     while True:
-                        try:
-                            with socket.create_connection((host, port), timeout=.1):
+                        open_ports = []
+                        for address in ((host, port), (second_host, second_port)):
+                            try:
+                                with socket.create_connection(address, timeout=.1):
+                                    open_ports.append(address)
+                            except (ConnectionRefusedError, ConnectionResetError):
                                 pass
-                        except ConnectionRefusedError:
+                        if not open_ports:
                             break
                         if time.monotonic() >= deadline:
-                            self.fail("shutdown did not close the listening socket")
+                            self.fail(f"shutdown did not close all listening sockets: {open_ports}")
                         time.sleep(.005)
                     self.assertIsNone(process.poll(), "shutdown cancelled the active response or upgrade")
                     if websocket:
