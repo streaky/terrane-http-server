@@ -195,19 +195,13 @@ private function request-proxy-trust bool; request ref native-request
 # Borrow the native map under the shared handle's short-lived guard, not a clone.
 # A source `ref` to this shared native value currently lowers to Weak, not &HeaderMap.
 private function read-header-bytes list of bytes; headers shared ref (native-header-map of native-header-value), name ref string
-    # Projected iteration must materialize an ordered list of owned bytes under one guard.
-    values list of bytes = rust
-        let headers = headers.lock().expect("shared reference lock poisoned");
-        terrane_collection_support::List::new(headers.get_all(name.as_str()).iter().map(|value| value.as_bytes().to_vec()).collect())
-    return values
+    return ((headers.get_all; name).iter;).map_collect; copy-header-bytes
 
 private function read-header-values list of string; headers shared ref (native-header-map of native-header-value), name ref string
-    # Accept UTF-8, not HeaderValue::to_str's narrower visible-ASCII subset;
-    # validate borrowed bytes and allocate only for successful entries.
-    values list of string = rust
-        let headers = headers.lock().expect("shared reference lock poisoned");
-        terrane_collection_support::List::new(headers.get_all(name.as_str()).iter().filter_map(|value| std::str::from_utf8(value.as_bytes()).ok().map(str::to_owned)).collect())
-    return values
+    return ((headers.get_all; name).iter;).filter_map_collect; decode-header-text
+
+private function copy-header-bytes bytes; header ref native-header-value
+    return header.as_bytes;
 
 private function read-header-value string|none; headers shared ref (native-header-map of native-header-value), name ref string
     return ((headers.get_all; name).iter;).find_map; decode-header-text
@@ -287,7 +281,8 @@ private function forwarded-scheme string|none; context request-context
     return none
 
 private function count-header-bytes int; headers shared ref (native-header-map of native-header-value)
-    # Count borrowed header bytes in place, including repetitions, without snapshots.
+    # The entry iterator lends a pair, not a single borrowed value. Counting
+    # needs a paired reduction and borrowed byte lengths without snapshots.
     result int = rust
         let headers = headers.lock().expect("shared reference lock poisoned");
         let count = headers.iter().fold(0usize, |total, (name, value)| {
