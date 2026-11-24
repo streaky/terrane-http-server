@@ -8,11 +8,6 @@ use axum::body::{Body, Bytes};
 use http_body::Frame;
 use std::{future::Future, pin::Pin, task::{Context, Poll}, time::Duration};
 
-// Remove these owned conversions when projected From and String::from_utf8
-// can transfer their inputs without an extra copy.
-pub fn body_from_text(text: String) -> Body { Body::from(text) }
-pub fn buffer_into_text(buffer: Bytes) -> Option<String> { String::from_utf8(buffer.into()).ok() }
-
 // Remove when the projected URL decoder can expose both Cow variants by value.
 pub fn decode_path_component(value: String) -> Option<String> {
     match urlencoding::decode(&value) {

@@ -353,14 +353,13 @@ documentation:
             This is a conservative consumer-validation restriction; use a directory
             name without that substring.
 
-            A narrow authored Rust module, `rust/conversions.rs`, supplies only owned
-            conversions: native text to Axum `Body`, buffered bytes to UTF-8 text, and
-            percent-decoded text. `projection/from-conversions` tracks the missing concrete
-            `From` surface; `projection/owned-percent-decoding` tracks scoped native `Cow`
-            results borrowing ordinary source locals. Remove the corresponding adapters
-            when ordinary projection admits those capabilities. Routing, query extraction,
-            JSON parsing, validation, generation, and OpenAPI construction remain Terrane
-            code. This module is not a Rust framework facade and must not gain HTTP policy.
+            Terrane constructs Axum text bodies with projected `From` and decodes
+            buffered request bytes by transferring them to the strict UTF-8 decoder.
+            `rust/conversions.rs` still drives native body polling and classifies native
+            collection errors. Its percent-decoding adapter remains until projection
+            exposes both variants of the scoped native `Cow` without copying unchanged
+            input. Routing, query extraction, JSON parsing, validation, generation,
+            and OpenAPI construction remain Terrane code.
 
             Where a model uses binary floats, generated codecs use a small typed Rust
             boundary around the standard finite floating-point parser. Numeric coercion does

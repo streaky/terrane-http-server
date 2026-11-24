@@ -12,8 +12,9 @@ from /core/collections import list, map, unordered-map
 from /core/documents import document-value, document-map-entries, make-document-map, make-document-list, make-document-string
 from /core/documents/json import parse-json, default-json-options
 from /core/urls import url-query, parse-url
-from /core/errors import throwable, coercion-error
+from /core/errors import throwable, coercion-error, decode-error
 from /deps/tempfile import TempDir as temp-dir, TempPath as temp-path
+from /core/encodings import utf8
 
 public class uploaded-file
     private temporary temp-path|none = none
@@ -131,7 +132,7 @@ public class incoming-request
         body = move this.body
         buffered = await bounded-body-to-bytes; body, maximum-bytes, timeout-ms
         this.bytes-read = buffered.len;
-        source = buffer-into-text; buffered
+        source = buffer-into-text; move buffered
         if not source.failed
             options = default-json-options;
             options.max-depth = maximum-depth
@@ -146,7 +147,7 @@ public class incoming-request
         body = move this.body
         buffered = await bounded-body-to-bytes; body, maximum-bytes, timeout-ms
         this.bytes-read = buffered.len;
-        source = buffer-into-text; buffered
+        source = buffer-into-text; move buffered
         if source.failed
             throw coercion-error
         if format == 'json'
@@ -369,19 +370,22 @@ private function body-from-stream native-body; next async function to (string|no
         crate::conversions::streaming_body(move || next(), move || cancel())
 
 private function body-from-text native-body; text string
-    return rust
-        crate::conversions::body_from_text(text)
+    return native-body::from; move text
 
 private function metadata-only-body native-body;
     return rust
         crate::conversions::metadata_only_body()
 
 private function buffer-into-text decoded-text; buffer native-bytes
-    return rust
-        match crate::conversions::buffer_into_text(buffer) {
-            Some(value) => DecodedText { value, failed: false },
-            None => DecodedText { value: String::new(), failed: true },
+    octets bytes = (move buffer).into;
+    try
+        text = (move octets).decode; utf8
+        return instance decoded-text; {
+            value = move text
+            failed = false
         }
+    catch decode-error
+        return instance decoded-text;
 
 private function decode-path-component decoded-text; value string
     return rust

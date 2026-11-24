@@ -1,6 +1,7 @@
 namespace streaky/http-server/internal
 
 from /deps/axum-core/body import Body as native-body
+from /deps/axum/body import Bytes as native-bytes
 from /deps/axum-core/extract import Request as native-request
 from /deps/http/request import Builder as request-builder
 from /core/testing import assert-equal-bool, assert-equal-string, assert-equal-int
@@ -38,6 +39,17 @@ async function test-request-decodes-a-json-body throws throwable;
     assert-equal-bool; quantity.failed, false
     assert-equal-string; quantity.value.kind, 'integer'
     assert-equal-string; quantity.value.scalar, '3'
+
+async function test-request-rejects-invalid-utf8-body throws throwable;
+    invalid = native-bytes::from; b'{}\xff'
+    native = native-request::new; (native-body::from; move invalid)
+    request = instance incoming-request; move native, '/'
+    failed bool = false
+    try
+        await request.json-body;
+    catch coercion-error
+        failed = true
+    assert-equal-bool; failed, true
 
 async function test-request-rejects-malformed-json;
     native = native-request::new; (body-from-text; '{broken')
