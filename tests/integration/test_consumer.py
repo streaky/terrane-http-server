@@ -306,7 +306,7 @@ class ConsumerDiagnosticsTests(unittest.TestCase):
         handlers = [
             "read", "create", "replace", "change", "remove", "head-read", "head-scalar",
             "method-options", "echo-model", "echo-model::value", "failing-handler",
-            "throwing-success", "created", "redirect", "empty", "denied", "custom-error",
+            "throwing-success", "created", "redirect", "empty", "denied", "unknown-error", "custom-error",
             "invalid-code", "invalid-header", "override-content-type", "final-continue",
             "final-upgrade", "nonfinite-model", "nonfinite-model::single", "tampered-error",
             "quoted-default", "quoted-default::label", "head-metadata",
@@ -562,6 +562,10 @@ class handlers uses api
     async function denied string throws throwable;
         throw http-error; 403
 
+    @[endpoint; path = '/unknown-error']
+    async function unknown-error string throws throwable;
+        throw http-error; 599
+
     @[endpoint; path = '/custom-error']
     async function custom-error document-value throws throwable;
         entries = instance document-map-entries;
@@ -707,6 +711,7 @@ main
             self.assertEqual([value for name, value in headers if name.lower() == "content-type"],
                              ["application/vnd.example+json"])
             for path, code, body in [("/denied", 403, b"Forbidden"),
+                                     ("/unknown-error", 599, b"HTTP error"),
                                      ("/text/denied", 401, b"Unauthorized")]:
                 with self.subTest(path=path):
                     status, _, payload = raw_request(path)
