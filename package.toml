@@ -36,9 +36,13 @@ features = ["net", "sync", "fs", "io-util", "time"]
 effects = ["build", "networking", "filesystem"]
 
 [rust-modules]
+# Native Body poll/size-hint implementations and bounded body collection.
 conversions = "rust/conversions.rs"
+# Pinned Hyper connection draining with admission leases through upgrades.
 shutdown_serving = "rust/shutdown_serving.rs"
+# Native Tower Layer/Service and Body wrappers observe streaming and drop.
 observation = "rust/observation.rs"
+# Stream borrowed multipart fields into the original temporary descriptors.
 multipart = "rust/multipart.rs"
 
 [rust-dependencies.multer]

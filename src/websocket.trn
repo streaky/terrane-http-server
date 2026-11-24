@@ -20,6 +20,7 @@ private class websocket-channel-pair
         this.receiver = move receiver
 
 private function websocket-channel websocket-channel-pair; capacity uint32
+    # Keep the concrete Tokio sender and move-only receiver from one native tuple.
     return rust
         let (sender, receiver) = tokio::sync::mpsc::channel::<String>(capacity as usize);
         WebsocketChannelPair { sender: Some(sender), receiver: Some(receiver) }
@@ -41,6 +42,7 @@ private class websocket-managed-result
         this.queue-closed = queue-closed
 
 private async function receive-managed-result websocket-managed-result; socket mutable ref (native-websocket|none), receiver mutable ref ((websocket-receiver of string)|none)
+    # Select between two borrowed native receives and return both owners on completion.
     return rust
         let mut socket = socket.take().expect("managed session socket is present");
         let mut receiver = receiver.take().expect("managed subscription receiver is present");
@@ -77,6 +79,7 @@ private class websocket-queue-endpoint implements websocket-outbound-endpoint
         this.sender = move sender
 
     function try-send bool; text ref string
+        # Reserve queue capacity before allocating text; the permit borrows the sender.
         return rust
             let sender = self.sender.as_ref().expect("initialized websocket endpoint");
             match sender.try_reserve() {

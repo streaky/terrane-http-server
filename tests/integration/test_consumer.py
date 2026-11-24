@@ -443,11 +443,12 @@ class handlers uses api
     async function nonfinite-model data-model; @[query;] single bool = false
         value = instance data-model;
         if single
-            value.small = rust
-                f32::NAN
+            zero float64 = 0.0
+            nan = zero / zero
+            value.small = nan.coerce; float32
         else
-            value.ratio = rust
-                f64::INFINITY
+            zero float64 = 0.0
+            value.ratio = 1.0 / zero
         return value
 
     @[endpoint; path = '/method']

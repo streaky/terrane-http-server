@@ -30,6 +30,8 @@ public class uploaded-file
             self.temporary.as_ref().expect("checked temporary").to_str().is_some()
         if not valid-path
             throw http-error; 500, 'Multipart upload path is not valid UTF-8'
+        # Transfer the two non-Clone cleanup owners only after validation.
+        # The initialized optional fields need consuming extraction together.
         path string|none = rust
             let temporary = self.temporary.take().expect("checked temporary");
             let directory = self.directory.take().expect("checked directory");
@@ -248,6 +250,8 @@ public function into-native-response native-response throws throwable; response 
     return builder.body; (body-from-text; move response.body)
 
 public function native-status-response native-response; status status-code, vary bool
+    # Keep the static Accept value allocation-free; from_static's lifetime
+    # requirement is not admitted by projection (from_str would allocate).
     response native-response = rust
         let mut response = ::axum::response::IntoResponse::into_response(status);
         if vary {
@@ -270,6 +274,8 @@ private function request-has-accept-header bool; request ref native-request
     return (request.headers;).contains_key; 'accept'
 
 private function request-accept-header string; request ref native-request
+    # Validate comma-separated borrowed byte ranges independently before joining;
+    # a whole-value conversion discards valid ranges beside malformed bytes.
     result string = rust
         let mut combined = String::new();
         for value in request.headers().get_all("accept").iter() {
@@ -297,6 +303,7 @@ class body-read-result
 # The optional slot makes ownership explicit without reading an owned non-Clone
 # native body directly from inline Rust.
 private async function bounded-body-to-bytes native-bytes throws throwable; body mutable ref (native-body|none), maximum uint64, timeout-ms uint64
+    # Take a non-Clone Body once and keep the native collector's outcome categories.
     result body-read-result = rust
         match body.take() {
             None => BodyReadResult { buffer: ::axum::body::Bytes::new(), failed: false, timed_out: false, limited: false, missing: true },
@@ -323,6 +330,7 @@ class multipart-stage-result
     error-status uint16 = 0
 
 private async function stage-multipart-body multipart-stage-result throws throwable; body mutable ref (native-body|none), content-type ref string, maximum uint64, maximum-parts uint32, timeout-ms uint64
+    # Bridge native streaming output and move both temporary owners into each file.
     result multipart-stage-result = rust
         match body.take() {
             None => MultipartStageResult { form: None, bytes_read: 0, error_status: 400 },
@@ -366,6 +374,7 @@ private async function stage-multipart-body multipart-stage-result throws throwa
     return result
 
 private function body-from-stream native-body; next async function to (string|none) throws throwable, cancel function to none
+    # The native poll-driven body needs the exact async callable ABI and drop hook.
     return rust
         crate::conversions::streaming_body(move || next(), move || cancel())
 
@@ -373,6 +382,7 @@ private function body-from-text native-body; text string
     return native-body::from; move text
 
 private function metadata-only-body native-body;
+    # HEAD without an explicit length requires an unknown native Body size hint.
     return rust
         crate::conversions::metadata_only_body()
 
@@ -388,6 +398,7 @@ private function buffer-into-text decoded-text; buffer native-bytes
         return instance decoded-text;
 
 private function decode-path-component decoded-text; value string
+    # Keep Cow's unchanged branch as the original owned text and reject invalid UTF-8.
     return rust
         match crate::conversions::decode_path_component(value) {
             Some(value) => DecodedText { value, failed: false },

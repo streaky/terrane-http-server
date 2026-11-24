@@ -3,6 +3,7 @@ namespace streaky/http-server
 from /deps/ipnet import IpNet as ip-net
 from /deps/ipnet import IpAddr as ip-addr
 from /core/networking/native import native-socket-address as socket-addr
+from /deps/tokio/net import SocketAddr as projected-socket-addr
 from /deps/axum/extract import ConnectInfo as connect-info
 from /deps/axum-core/extract import Request as native-request
 from /core/collections import list
@@ -20,11 +21,13 @@ function install-proxy-metadata; request mutable ref native-request, client ip-a
     # Declare the mutable native borrow; the inline insertion uses that same request.
     # Rust below (and in request-proxy-metadata) depends on the emitted
     # ProxyRequestMetadata name and its client/trusted field layout.
+    # Native Extensions cannot yet select a source-defined class as its generic argument.
     request.extensions_mut;
     rust
         request.extensions_mut().insert(ProxyRequestMetadata { client, trusted });
 
 private function request-proxy-metadata proxy-request-metadata; request ref native-request
+    # Keep the private nominal key and default; a primitive key could collide with middleware.
     metadata proxy-request-metadata = rust
         request.extensions().get::<ProxyRequestMetadata>().cloned().unwrap_or(ProxyRequestMetadata { client: None, trusted: false })
     return metadata
@@ -37,13 +40,11 @@ function request-proxy-metadata-trusted bool; request ref native-request
     metadata = request-proxy-metadata; request
     return metadata.trusted
 
-function native-peer-ip ip-addr; address ref socket-addr
-    return rust
-        address.ip()
+private function native-peer-ip ip-addr; address ref projected-socket-addr
+    return address.ip;
 
 function peer-address ip-addr; peer ref (connect-info of socket-addr)
-    payload socket-addr = peer.n0
-    return native-peer-ip; payload
+    return native-peer-ip; peer.n0
 
 function direct-address ip-addr|none; request ref native-request
     return request.extensions;

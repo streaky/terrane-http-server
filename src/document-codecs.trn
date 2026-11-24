@@ -55,6 +55,7 @@ private function response-yaml string throws throwable; document document-value,
     return result
 
 private function xml-name bool; name string
+    # Validate the ASCII name grammar directly on bytes without a text snapshot.
     valid bool = rust
         let mut bytes = name.bytes();
         bytes.next().is_some_and(|b| b.is_ascii_alphabetic() || b == b'_')
@@ -62,6 +63,7 @@ private function xml-name bool; name string
     return valid
 
 private function xml-text string throws throwable; value string
+    # Validate XML 1.0 scalar ranges without splitting the text into owned substrings.
     valid bool = rust
         value.chars().all(|c| matches!(c as u32, 0x9 | 0xA | 0xD | 0x20..=0xD7FF | 0xE000..=0xFFFD | 0x10000..=0x10FFFF))
     if not valid
