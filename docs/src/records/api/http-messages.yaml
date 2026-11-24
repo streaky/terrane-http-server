@@ -33,6 +33,8 @@ documentation:
         `route-pattern() -> string`, `http-version() -> string`, `scheme() -> string|none`,
         `authority() -> string|none`, `url() -> string|none`, `peer-ip() -> string|none`,
         `client-ip() -> string|none`, and `via-trusted-proxy() -> bool`.
+        `path()` excludes the query and preserves percent escapes. On a mounted route it
+        uses Axum's original URI when available; otherwise it uses the current request URI.
         `header-value(name) -> string|none` returns the first valid text value;
         `header-values(name) -> list of string` returns repeated valid text values.
         Invalid UTF-8 header values are omitted from text accessors but retained by

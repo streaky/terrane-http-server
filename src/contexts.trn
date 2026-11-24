@@ -4,7 +4,7 @@ from /core/collections import list
 from /core/errors import coercion-error
 from /deps/axum-core/extract import Request as native-request
 from /deps/ipnet import IpAddr as ip-addr
-from /deps/axum/extract import MatchedPath as matched-path
+from /deps/axum/extract import MatchedPath as matched-path, OriginalUri as original-uri
 from /deps/http import HeaderMap as native-header-map, HeaderValue as native-header-value
 
 /// Adds optional invocation context without imposing a base class or handler parameters.
@@ -128,10 +128,15 @@ private function request-target string; request ref native-request
     return value
 
 private function request-path string; request ref native-request
-    value string = rust
-        let uri = request.extensions().get::<::axum::extract::OriginalUri>().map(|v| &v.0).unwrap_or(request.uri());
-        uri.path().to_owned()
-    return value
+    path string|none = request.extensions;
+        .get of original-uri;
+        .map; original-uri-path
+    if path != none
+        return move path
+    return (request.uri;).path;
+
+private function original-uri-path string; original ref original-uri
+    return (original.n0).path;
 
 private function request-route-pattern string; request ref native-request, fallback string
     matched string|none = request.extensions;

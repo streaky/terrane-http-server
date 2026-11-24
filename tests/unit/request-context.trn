@@ -1,12 +1,26 @@
 namespace streaky/http-server
 
+from /deps/axum/extract import OriginalUri as original-uri
 from /deps/axum-core/extract import Request as native-request
 from /deps/ipnet import IpAddr as ip-addr
 from /deps/axum-core/body import Body as native-body
 from /deps/http/request import Builder as request-builder
-from /deps/http import HeaderValue as native-header-value, HeaderName as native-header-name
+from /deps/http import HeaderValue as native-header-value, HeaderName as native-header-name, Uri as native-uri
 from /core/collections import list
 from /core/testing import assert-equal-bool, assert-equal-string, assert-equal-int
+
+function test-request-path-prefers-original-uri-and-excludes-query;
+    builder = request-builder::new;
+    builder = builder.uri; '/item%20one?active=true'
+    request = builder.body; (native-body::empty;)
+    direct = capture-request-context; request, '/item'
+    assert-equal-string; (direct.path;), '/item%20one'
+
+    uri = native-uri::from_str; '/mounted/item%20one?active=true'
+    original = instance original-uri; move uri
+    (request.extensions_mut;).insert; move original
+    mounted = capture-request-context; request, '/item'
+    assert-equal-string; (mounted.path;), '/mounted/item%20one'
 
 function context-with-forwarding request-context; forwarded string, legacy string, trusted bool
     builder = request-builder::new;
