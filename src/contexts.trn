@@ -1,7 +1,8 @@
 namespace streaky/http-server
 
 from /core/collections import list
-from /core/errors import coercion-error
+from /core/encodings import utf8
+from /core/errors import coercion-error, decode-error
 from /deps/axum-core/extract import Request as native-request
 from /deps/ipnet import IpAddr as ip-addr
 from /deps/axum/extract import MatchedPath as matched-path, OriginalUri as original-uri
@@ -170,10 +171,6 @@ private function request-version string; request ref native-request
         format!("{:?}", request.version())
     return value
 
-class optional-text
-    value string = ''
-    present bool = false
-
 private function request-authority string|none; request ref native-request
     authority string|none = (request.uri;).authority;
         .map; authority-text
@@ -213,16 +210,13 @@ private function read-header-values list of string; headers shared ref (native-h
     return values
 
 private function read-header-value string|none; headers shared ref (native-header-map of native-header-value), name ref string
-    # Stop at the first valid borrowed UTF-8 value; rejected bytes must not be copied.
-    decoded optional-text = rust
-        let headers = headers.lock().expect("shared reference lock poisoned");
-        match headers.get_all(name.as_str()).iter().find_map(|value| std::str::from_utf8(value.as_bytes()).ok()) {
-            Some(value) => OptionalText { value: value.to_owned(), present: true },
-            None => OptionalText { value: String::new(), present: false },
-        }
-    if decoded.present
-        return decoded.value
-    return none
+    return ((headers.get_all; name).iter;).find_map; decode-header-text
+
+private function decode-header-text string|none; header ref native-header-value
+    try
+        return (header.as_bytes;).decode; utf8
+    catch decode-error
+        return none
 
 # Split only outside quoted Forwarded parameter values. Unsupported quoted-pair
 # escapes fail closed rather than treating their punctuation as trusted metadata.

@@ -4,7 +4,7 @@ from /deps/axum/body import Bytes as native-bytes
 from /deps/axum-core/extract import Request as native-request
 from /deps/axum-core/body import Body as native-body
 from /deps/axum-core/response import Response as native-response
-from /deps/http import StatusCode as status-code
+from /deps/http import HeaderName as native-header-name, HeaderValue as native-header-value, StatusCode as status-code
 from /deps/http/response import Builder as response-builder
 from /deps/http/uri import PathAndQuery as path-and-query
 from /streaky/http-server import request-context, response-context, capture-request-context, response-media-type, encode-response-document, http-error, response-stream, request-body-limit, request-body-timeout
@@ -250,14 +250,11 @@ public function into-native-response native-response throws throwable; response 
     return builder.body; (body-from-text; move response.body)
 
 public function native-status-response native-response; status status-code, vary bool
-    # Keep the static Accept value allocation-free; from_static's lifetime
-    # requirement is not admitted by projection (from_str would allocate).
-    response native-response = rust
-        let mut response = ::axum::response::IntoResponse::into_response(status);
-        if vary {
-            response.headers_mut().append(::http::header::VARY, ::http::HeaderValue::from_static("Accept"));
-        }
-        response
+    response native-response = status.into_response;
+    if vary
+        name = native-header-name::from_static; 'vary'
+        value = native-header-value::from_static; 'Accept'
+        (response.headers_mut;).append; name, value
     return move response
 
 private function body-byte-length int; text ref string

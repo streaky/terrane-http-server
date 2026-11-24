@@ -43,6 +43,8 @@ documentation:
         Invalid UTF-8 header values are omitted from text accessors but retained by
         `header-bytes(name) -> list of bytes`. `cookie-value(name) -> string|none`
         returns the first matching raw cookie value without URL decoding.
+        First-value lookup scans the borrowed header bytes under one map guard and
+        owns only the first valid text result.
 
         `path-value`, `query-value`, `accept-value`, and `json-body` belong to the
         incoming-request transport used by generated adapters and low-level
