@@ -51,6 +51,7 @@ documentation:
         incoming-request transport used by generated adapters and low-level
         `application.route` handlers; they are not request-context methods.
         `header-byte-count` sums header-name and raw-value bytes, including repetitions.
+        The count traverses borrowed header entries without making a snapshot.
         The request context is an immutable metadata
         snapshot and does not own or buffer the body.
         Header capture retains an owned native header map behind a shared handle, rather

@@ -130,6 +130,7 @@ function test-request-snapshot-retains-invalid-bytes-without-fabricating-text;
     builder = builder.header; 'x-tag', 'last'
     native = builder.body; (native-body::empty;)
     context = capture-request-context; native, '/metadata'
+    assert-equal-int; (context.header-byte-count;), 25
     values = context.header-values; 'X-Tag'
     assert-equal-int; values.length, 2
     assert-equal-string; values[0], 'first'
@@ -155,6 +156,8 @@ function test-header-snapshot-owns-values-and-detaches-accessor-results;
     value = native-header-value::from_str; 'changed'
     (native.headers_mut;).insert; key, value
     successor = capture-request-context; native, '/'
+    assert-equal-int; (original.header-byte-count;), 25
+    assert-equal-int; (successor.header-byte-count;), 12
     first = original.header-value; 'X-TAG'
     assert-equal-bool; first != none, true
     if first != none
