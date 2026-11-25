@@ -271,21 +271,16 @@ private function request-has-accept-header bool; request ref native-request
     return (request.headers;).contains_key; 'accept'
 
 private function request-accept-header string; request ref native-request
-    # Validate comma-separated borrowed byte ranges independently before joining;
-    # a whole-value conversion discards valid ranges beside malformed bytes.
-    result string = rust
-        let mut combined = String::new();
-        for value in request.headers().get_all("accept").iter() {
-            for range in value.as_bytes().split(|byte| *byte == b',') {
-                if !range.iter().all(|byte| *byte == b'\t' || (b' '..=b'~').contains(byte)) { continue; }
-                if let Ok(text) = std::str::from_utf8(range) {
-                    if !combined.is_empty() { combined.push(','); }
-                    combined.push_str(text);
-                }
-            }
-        }
-        combined
-    return result
+    combined string = ''
+    name = native-header-name::from_static; 'accept'
+    return (((request.headers;).get_all; move name).iter;).fold; move combined, append-accept-ranges
+
+private function append-accept-ranges string; combined string, header ref native-header-value
+    # Reject malformed ranges independently instead of decoding the whole value.
+    return (header.as_bytes;).append-utf8-ranges; move combined, 44, ',', accept-range-octet
+
+private function accept-range-octet bool; octet uint8
+    return octet == 9 or (octet >= 32 and octet <= 126)
 
 class decoded-text
     value string = ''

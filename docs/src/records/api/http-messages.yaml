@@ -50,6 +50,8 @@ documentation:
         `path-value`, `query-value`, `accept-value`, and `json-body` belong to the
         incoming-request transport used by generated adapters and low-level
         `application.route` handlers; they are not request-context methods.
+        `accept-value` keeps the wire order of valid comma-delimited ranges across
+        repeated header values and skips malformed ranges individually.
         `header-byte-count` sums header-name and raw-value bytes, including repetitions.
         The count traverses borrowed header entries without making a snapshot.
         The request context is an immutable metadata
