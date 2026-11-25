@@ -37,7 +37,9 @@ documentation:
         uses Axum's original URI when available; otherwise it uses the current request URI.
         `target()` uses the same URI selection, includes the query, and returns `/`
         if the selected URI has no path and query. `authority()` prefers the current
-        URI's authority and otherwise accepts a `Host` value that HTTP can decode as text.
+        URI's authority and otherwise uses `Host` if its bytes pass the HTTP
+        header text check (ASCII space through `~`, or horizontal tab), not
+        general UTF-8 decoding.
         `header-value(name) -> string|none` returns the first valid text value;
         `header-values(name) -> list of string` returns repeated valid text values.
         Invalid UTF-8 header values are omitted from text accessors but retained by

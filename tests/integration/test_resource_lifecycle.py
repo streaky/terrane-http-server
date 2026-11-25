@@ -39,9 +39,11 @@ class ResourceLifecycleTests(unittest.TestCase):
     def running_server(self):
         with tempfile.TemporaryDirectory(prefix="http-resources-") as directory:
             root = Path(directory)
+            uploads = root / "uploads"
+            uploads.mkdir()
             with (root / "stderr").open("w+") as errors:
                 server = subprocess.Popen([self.binary], stdout=subprocess.PIPE, stderr=errors,
-                                          text=True, env={**os.environ, "TMPDIR": directory})
+                                          text=True, env={**os.environ, "TMPDIR": str(uploads)})
                 try:
                     with selectors.DefaultSelector() as ready:
                         ready.register(server.stdout, selectors.EVENT_READ)
@@ -56,6 +58,7 @@ class ResourceLifecycleTests(unittest.TestCase):
 
     def test_disconnect_removes_completed_and_partial_uploads(self):
         with self.running_server() as (address, root):
+            uploads = root / "uploads"
             host, port = address
             partial = (
                 b'--stage\r\nContent-Disposition: form-data; name="file"; filename="first"\r\n\r\n'
@@ -68,9 +71,9 @@ class ResourceLifecycleTests(unittest.TestCase):
                     "Content-Type: multipart/form-data; boundary=stage\r\n"
                     f"Content-Length: {len(partial) + 4096}\r\n\r\n"
                 ).encode() + partial)
-                wait_for(lambda: len(list(root.glob("terrane-upload-*/*"))) == 2,
+                wait_for(lambda: sum(path.is_file() for path in uploads.glob("*/*")) == 2,
                          "did not stage both uploads before the body completed")
-            wait_for(lambda: not list(root.glob("terrane-upload-*")),
+            wait_for(lambda: not any(uploads.iterdir()),
                      "disconnect leaked a temporary upload")
 
     def open_websocket(self, address, path):

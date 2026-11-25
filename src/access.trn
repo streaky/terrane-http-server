@@ -3,6 +3,7 @@ namespace streaky/http-server
 from /deps/ipnet import IpNet as ip-net
 from /deps/ipnet import IpAddr as ip-addr
 from /core/networking/native import native-socket-address as socket-addr
+# Projection exposes std::net::SocketAddr through Tokio's signatures, not a tokio::net re-export.
 from /deps/tokio/net import SocketAddr as projected-socket-addr
 from /deps/axum/extract import ConnectInfo as connect-info
 from /deps/axum-core/extract import Request as native-request

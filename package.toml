@@ -49,6 +49,10 @@ multipart = "rust/multipart.rs"
 version = "=3.1.0"
 effects = ["build"]
 
+[rust-dependencies.tempfile]
+version = "=3.27.0"
+effects = ["build", "filesystem"]
+
 [rust-dependencies.futures-util]
 version = "=0.3.34"
 effects = ["build"]
