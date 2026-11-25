@@ -13,12 +13,12 @@ from /core/documents import document-value, document-map-entries, make-document-
 from /core/documents/json import parse-json, default-json-options
 from /core/urls import url-query, parse-url
 from /core/errors import throwable, coercion-error, decode-error
-from /deps/tempfile import TempDir as temp-dir, TempPath as temp-path
+from /core/filesystem import temporary-path
 from /core/encodings import utf8
 
 public class uploaded-file
-    private temporary temp-path|none = none
-    private directory temp-dir|none = none
+    private temporary temporary-path|none = none
+    private directory temporary-path|none = none
     filename string = ''
     media-type string|none = none
     size uint64 = 0
@@ -26,25 +26,23 @@ public class uploaded-file
     mutable function claim string throws throwable;
         if this.temporary == none or this.directory == none
             throw coercion-error
+        # The native streaming bridge can stage under a non-UTF-8 host TMPDIR.
+        # Inspect the native path before transferring cleanup to a string caller.
         valid-path bool = rust
-            self.temporary.as_ref().expect("checked temporary").to_str().is_some()
+            self.temporary.as_ref().and_then(|temporary| temporary.entry.as_ref())
+                .and_then(|entry| entry.as_ref().ok())
+                .is_some_and(|entry| entry.path().to_str().is_some())
         if not valid-path
             throw http-error; 500, 'Multipart upload path is not valid UTF-8'
         # Transfer the two non-Clone cleanup owners only after validation.
         # The initialized optional fields need consuming extraction together.
-        path string|none = rust
+        claimed string = rust
             let temporary = self.temporary.take().expect("checked temporary");
             let directory = self.directory.take().expect("checked directory");
-            match temporary.keep() {
-                Ok(path) => {
-                    directory.keep();
-                    Some(path.into_os_string().into_string().expect("path checked before transfer"))
-                }
-                Err(_) => { drop(directory); None }
-            }
-        if path != none
-            return path
-        throw http-error; 500, 'Unable to transfer multipart upload'
+            let path = temporary.keep().text;
+            directory.keep();
+            path
+        return claimed
 
 public class multipart-part
     name string = ''
@@ -331,7 +329,8 @@ private async function stage-multipart-body multipart-stage-result throws throwa
                     let bytes_read = staged.bytes_read;
                     let parts = staged.parts.into_iter().map(|part| {
                         let file = part.temporary.map(|(temporary, directory)| UploadedFile {
-                            temporary: Some(temporary), directory: Some(directory),
+                            temporary: Some(TemporaryPath::terrane_construct(Ok(temporary))),
+                            directory: Some(TemporaryPath::terrane_construct(Ok(directory))),
                             filename: part.filename.unwrap_or_default(),
                             media_type: part.media_type, size: part.size,
                         });

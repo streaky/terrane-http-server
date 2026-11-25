@@ -265,21 +265,26 @@ private function upload-with-non-utf8-path uploaded-file;
     # Source paths cannot represent the non-UTF-8 Unix filename this test needs.
     return rust
         use std::{ffi::OsStr, os::unix::ffi::OsStrExt as _};
-        let directory = ::tempfile::tempdir().unwrap();
-        let file = ::tempfile::Builder::new()
-            .prefix(OsStr::from_bytes(b"upload-\xff"))
-            .tempfile_in(directory.path()).unwrap()
-            .into_temp_path();
+        use terrane_platform_support::temporary::TemporaryPath as NativeTemporaryPath;
+        let directory = NativeTemporaryPath::directory(None).unwrap();
+        let parent = directory.path().join(OsStr::from_bytes(b"upload-\xff"));
+        std::fs::create_dir(&parent).unwrap();
+        let (file, _) = NativeTemporaryPath::file(Some(&parent)).unwrap();
         UploadedFile {
-            temporary: Some(file), directory: Some(directory),
+            temporary: Some(TemporaryPath::terrane_construct(Ok(file))),
+            directory: Some(TemporaryPath::terrane_construct(Ok(directory))),
             filename: String::new(), media_type: None, size: 0,
         }
 
 private function upload-still-staged bool; file ref uploaded-file
     # Inspect both native cleanup owners after rejection, before either is dropped.
     return rust
-        file.temporary.as_ref().is_some_and(|path| path.is_file()) &&
-            file.directory.as_ref().is_some_and(|directory| directory.path().is_dir())
+        let exists = |temporary: &TemporaryPath, directory: bool| {
+            let entry = temporary.entry.as_ref().unwrap().as_ref().unwrap();
+            if directory { entry.path().is_dir() } else { entry.path().is_file() }
+        };
+        file.temporary.as_ref().is_some_and(|entry| exists(entry, false)) &&
+            file.directory.as_ref().is_some_and(|entry| exists(entry, true))
 
 function test-multipart-claim-rejection-retains-staged-file throws throwable;
     file = upload-with-non-utf8-path;

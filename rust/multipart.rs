@@ -1,21 +1,20 @@
 //! Streaming multipart decoding and private temporary-file staging.
 //!
-//! Terrane does not currently expose a source-level streaming multipart field
-//! parser or private tempfile ownership API. This module owns that host boundary;
-//! request policy and surfaced errors remain in `internal/request.trn`. Remove it
-//! when those streaming and TempPath/TempDir ownership operations are expressible.
+//! Rust owns the boundary to Multer's streaming field parser and writes through
+//! the descriptor returned by the core temporary-file implementation. Remove
+//! this bridge once the field stream and its asynchronous file sink are
+//! expressible in Terrane. Request policy and surfaced errors stay in Terrane.
 
 use axum::body::{Body, Bytes};
 use futures_util::{Stream, StreamExt};
 use http_body::Body as _;
 use multer::{Constraints, Error as MultipartError, Multipart, SizeLimit};
 use std::{
-    os::unix::fs::PermissionsExt,
     pin::Pin,
     task::{Context, Poll},
     time::Duration,
 };
-use tempfile::{NamedTempFile, TempDir, TempPath};
+use terrane_platform_support::temporary::TemporaryPath;
 use tokio::io::AsyncWriteExt;
 
 pub struct StagedPart {
@@ -24,7 +23,7 @@ pub struct StagedPart {
     pub filename: Option<String>,
     pub media_type: Option<String>,
     pub size: u64,
-    pub temporary: Option<(TempPath, TempDir)>,
+    pub temporary: Option<(TemporaryPath, TemporaryPath)>,
 }
 
 pub struct StagedForm {
@@ -110,13 +109,9 @@ async fn stage_inner(
         }
         // Each upload gets a private, exclusively-created directory. Client filenames
         // are metadata only; the random server-generated name is used on disk.
-        let directory = tempfile::Builder::new()
-            .prefix("terrane-upload-")
-            .permissions(std::fs::Permissions::from_mode(0o700))
-            .tempdir()
-            .map_err(|_| StageError::Storage)?;
-        let file = NamedTempFile::new_in(directory.path()).map_err(|_| StageError::Storage)?;
-        let (native_file, temporary) = file.into_parts();
+        let directory = TemporaryPath::directory(None).map_err(|_| StageError::Storage)?;
+        let (temporary, native_file) =
+            TemporaryPath::file(Some(directory.path())).map_err(|_| StageError::Storage)?;
         let mut file = tokio::fs::File::from_std(native_file);
         let mut size = 0u64;
         let mut field = field;
