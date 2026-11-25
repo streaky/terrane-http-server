@@ -9,4 +9,5 @@ prelude = true
 path = "../../.."
 
 [rust-modules]
+# Pinned Body with externally released frames and a host-time shutdown gate.
 fixture = "fixture.rs"

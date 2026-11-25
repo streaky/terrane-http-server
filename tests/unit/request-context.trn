@@ -1,12 +1,61 @@
 namespace streaky/http-server
 
+from /deps/axum/extract import OriginalUri as original-uri
 from /deps/axum-core/extract import Request as native-request
 from /deps/ipnet import IpAddr as ip-addr
 from /deps/axum-core/body import Body as native-body
 from /deps/http/request import Builder as request-builder
-from /deps/http import HeaderValue as native-header-value, HeaderName as native-header-name
+from /deps/http import HeaderValue as native-header-value, HeaderName as native-header-name, Uri as native-uri
 from /core/collections import list
 from /core/testing import assert-equal-bool, assert-equal-string, assert-equal-int
+
+function test-request-path-prefers-original-uri-and-excludes-query;
+    builder = request-builder::new;
+    builder = builder.uri; '/item%20one?active=true'
+    request = builder.body; (native-body::empty;)
+    direct = capture-request-context; request, '/item'
+    assert-equal-string; (direct.path;), '/item%20one'
+    assert-equal-string; (direct.target;), '/item%20one?active=true'
+
+    uri = native-uri::from_str; '/mounted/item%20one?active=true'
+    original = instance original-uri; move uri
+    (request.extensions_mut;).insert; move original
+    mounted = capture-request-context; request, '/item'
+    assert-equal-string; (mounted.path;), '/mounted/item%20one'
+    assert-equal-string; (mounted.target;), '/mounted/item%20one?active=true'
+
+    authority-only = native-uri::from_str; 'example.test:443'
+    original = instance original-uri; move authority-only
+    (request.extensions_mut;).insert; move original
+    mounted = capture-request-context; request, '/item'
+    assert-equal-string; (mounted.target;), '/'
+
+function test-request-authority-prefers-uri-and-rejects-non-ascii-host;
+    builder = request-builder::new;
+    builder = builder.uri; '/item'
+    builder = builder.header; 'host', 'example.test'
+    request = builder.body; (native-body::empty;)
+    direct = capture-request-context; request, '/item'
+    authority = direct.authority;
+    assert-equal-bool; authority != none, true
+    if authority != none
+        assert-equal-string; authority, 'example.test'
+
+    name = native-header-name::from_str; 'host'
+    invalid = native-header-value::from_bytes; (list; 195, 169)
+    (request.headers_mut;).insert; name, invalid
+    direct = capture-request-context; request, '/item'
+    assert-equal-bool; (direct.authority;) == none, true
+
+    builder = request-builder::new;
+    builder = builder.uri; 'http://uri.test/item'
+    builder = builder.header; 'host', 'ignored.test'
+    request = builder.body; (native-body::empty;)
+    direct = capture-request-context; request, '/item'
+    authority = direct.authority;
+    assert-equal-bool; authority != none, true
+    if authority != none
+        assert-equal-string; authority, 'uri.test'
 
 function context-with-forwarding request-context; forwarded string, legacy string, trusted bool
     builder = request-builder::new;
@@ -43,11 +92,12 @@ function test-forwarded-scheme-respects-trust-and-standard-precedence;
         assert-equal-string; scheme, 'https'
 
 function test-undecodable-rightmost-legacy-scheme-fails-closed;
-    built native-request = rust
-        let mut request = ::http::Request::builder().uri("/metadata").body(::axum_core::body::Body::empty()).unwrap();
-        request.headers_mut().append("x-forwarded-proto", ::http::HeaderValue::from_static("https"));
-        request.headers_mut().append("x-forwarded-proto", ::http::HeaderValue::from_bytes(b"\xff").unwrap());
-        request
+    builder = request-builder::new;
+    builder = builder.uri; '/metadata'
+    builder = builder.header; 'x-forwarded-proto', 'https'
+    invalid = native-header-value::from_bytes; (list; 255)
+    builder = builder.header; 'x-forwarded-proto', invalid
+    built = builder.body; (native-body::empty;)
     native = trust-test-request; move built, true
     context = capture-request-context; native, '/metadata'
     assert-equal-bool; (context.scheme;) == none, true
@@ -72,13 +122,15 @@ function test-unrelated-bool-and-ip-extensions-do-not-collide;
     assert-equal-bool; (context.client-ip;) == none, true
 
 function test-request-snapshot-retains-invalid-bytes-without-fabricating-text;
-    native native-request = rust
-        let mut request = ::http::Request::builder().uri("/metadata?x=1").body(::axum_core::body::Body::empty()).unwrap();
-        request.headers_mut().append("x-tag", ::http::HeaderValue::from_static("first"));
-        request.headers_mut().append("x-tag", ::http::HeaderValue::from_bytes(b"\xff").unwrap());
-        request.headers_mut().append("x-tag", ::http::HeaderValue::from_static("last"));
-        request
+    builder = request-builder::new;
+    builder = builder.uri; '/metadata?x=1'
+    builder = builder.header; 'x-tag', 'first'
+    invalid-header = native-header-value::from_bytes; (list; 255)
+    builder = builder.header; 'x-tag', invalid-header
+    builder = builder.header; 'x-tag', 'last'
+    native = builder.body; (native-body::empty;)
     context = capture-request-context; native, '/metadata'
+    assert-equal-int; (context.header-byte-count;), 25
     values = context.header-values; 'X-Tag'
     assert-equal-int; values.length, 2
     assert-equal-string; values[0], 'first'
@@ -92,17 +144,20 @@ function test-request-snapshot-retains-invalid-bytes-without-fabricating-text;
     assert-equal-bool; (context.url;) == none, true
 
 function test-header-snapshot-owns-values-and-detaches-accessor-results;
-    native native-request = rust
-        let mut request = ::http::Request::builder().body(::axum_core::body::Body::empty()).unwrap();
-        request.headers_mut().append("x-tag", ::http::HeaderValue::from_bytes(b"\xff").unwrap());
-        request.headers_mut().append("x-tag", ::http::HeaderValue::from_bytes("café".as_bytes()).unwrap());
-        request.headers_mut().append("x-tag", ::http::HeaderValue::from_static("last"));
-        request
+    builder = request-builder::new;
+    invalid-header = native-header-value::from_bytes; (list; 255)
+    accent = native-header-value::from_bytes; (list; 99, 97, 102, 195, 169)
+    builder = builder.header; 'x-tag', invalid-header
+    builder = builder.header; 'x-tag', accent
+    builder = builder.header; 'x-tag', 'last'
+    native = builder.body; (native-body::empty;)
     original = capture-request-context; native, '/'
     key = native-header-name::from_str; 'x-tag'
     value = native-header-value::from_str; 'changed'
     (native.headers_mut;).insert; key, value
     successor = capture-request-context; native, '/'
+    assert-equal-int; (original.header-byte-count;), 25
+    assert-equal-int; (successor.header-byte-count;), 12
     first = original.header-value; 'X-TAG'
     assert-equal-bool; first != none, true
     if first != none

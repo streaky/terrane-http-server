@@ -86,6 +86,7 @@ function test-response-sequence-head-cancels-without-polling throws throwable;
     assert-equal-int; second.cancels, 1
 
 private async function start-and-drop-body bool; body mutable ref (native-body|none), counts shared ref sequence-counts
+    # Direct frame polling distinguishes pending from ready before dropping the body.
     return rust
         use ::http_body::Body as _;
         use std::{future::poll_fn, pin::Pin, task::Poll};

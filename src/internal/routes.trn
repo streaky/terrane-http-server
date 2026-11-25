@@ -66,10 +66,10 @@ private function request-is-head bool; request ref native-request
     return ((request.method;).as_str;) == 'HEAD'
 
 private function status-reason string; code status-code
-    # Remove when borrowed optional text can materialize correctly in source:
-    # unwrap_or remains chain-only (T0112); map lowers &String instead of &str.
-    return rust
-        code.canonical_reason().unwrap_or("HTTP error").to_owned()
+    reason string|none = code.canonical_reason;
+    if reason != none
+        return move reason
+    return 'HTTP error'
 
 private function http-error-native native-response; error throwable, vary bool, is-head bool
     try

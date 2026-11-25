@@ -120,6 +120,7 @@ private function checked-header; name string, value string
         throw coercion-error
 
 private function check-cookie; name string, value string
+    # Check the exact ASCII token and cookie-octet ranges in one borrowed pass.
     valid bool = rust
         !name.is_empty() && name.bytes().all(|b| b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b))
             && value.bytes().all(|b| b == 0x21 || (0x23..=0x2b).contains(&b)

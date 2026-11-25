@@ -4,7 +4,7 @@ from /deps/axum/body import Bytes as native-bytes
 from /deps/axum-core/extract import Request as native-request
 from /deps/axum-core/body import Body as native-body
 from /deps/axum-core/response import Response as native-response
-from /deps/http import StatusCode as status-code
+from /deps/http import HeaderName as native-header-name, HeaderValue as native-header-value, StatusCode as status-code
 from /deps/http/response import Builder as response-builder
 from /deps/http/uri import PathAndQuery as path-and-query
 from /streaky/http-server import request-context, response-context, capture-request-context, response-media-type, encode-response-document, http-error, response-stream, request-body-limit, request-body-timeout
@@ -12,8 +12,9 @@ from /core/collections import list, map, unordered-map
 from /core/documents import document-value, document-map-entries, make-document-map, make-document-list, make-document-string
 from /core/documents/json import parse-json, default-json-options
 from /core/urls import url-query, parse-url
-from /core/errors import throwable, coercion-error
+from /core/errors import throwable, coercion-error, decode-error
 from /deps/tempfile import TempDir as temp-dir, TempPath as temp-path
+from /core/encodings import utf8
 
 public class uploaded-file
     private temporary temp-path|none = none
@@ -25,22 +26,23 @@ public class uploaded-file
     mutable function claim string throws throwable;
         if this.temporary == none or this.directory == none
             throw coercion-error
+        # The native streaming bridge can stage under a non-UTF-8 host TMPDIR.
+        # Inspect the native path before transferring cleanup to a string caller.
         valid-path bool = rust
-            self.temporary.as_ref().expect("checked temporary").to_str().is_some()
+            self.temporary.as_ref().is_some_and(|path| path.to_str().is_some())
         if not valid-path
             throw http-error; 500, 'Multipart upload path is not valid UTF-8'
-        path string|none = rust
+        # Transfer the two non-Clone cleanup owners only after validation.
+        # The initialized optional fields need consuming extraction together.
+        claimed string|none = rust
             let temporary = self.temporary.take().expect("checked temporary");
             let directory = self.directory.take().expect("checked directory");
-            match temporary.keep() {
-                Ok(path) => {
-                    directory.keep();
-                    Some(path.into_os_string().into_string().expect("path checked before transfer"))
-                }
-                Err(_) => { drop(directory); None }
-            }
-        if path != none
-            return path
+            temporary.keep().ok().map(|path| {
+                directory.keep();
+                path.into_os_string().into_string().expect("path checked before transfer")
+            })
+        if claimed != none
+            return claimed
         throw http-error; 500, 'Unable to transfer multipart upload'
 
 public class multipart-part
@@ -131,7 +133,7 @@ public class incoming-request
         body = move this.body
         buffered = await bounded-body-to-bytes; body, maximum-bytes, timeout-ms
         this.bytes-read = buffered.len;
-        source = buffer-into-text; buffered
+        source = buffer-into-text; move buffered
         if not source.failed
             options = default-json-options;
             options.max-depth = maximum-depth
@@ -146,7 +148,7 @@ public class incoming-request
         body = move this.body
         buffered = await bounded-body-to-bytes; body, maximum-bytes, timeout-ms
         this.bytes-read = buffered.len;
-        source = buffer-into-text; buffered
+        source = buffer-into-text; move buffered
         if source.failed
             throw coercion-error
         if format == 'json'
@@ -247,12 +249,11 @@ public function into-native-response native-response throws throwable; response 
     return builder.body; (body-from-text; move response.body)
 
 public function native-status-response native-response; status status-code, vary bool
-    response native-response = rust
-        let mut response = ::axum::response::IntoResponse::into_response(status);
-        if vary {
-            response.headers_mut().append(::http::header::VARY, ::http::HeaderValue::from_static("Accept"));
-        }
-        response
+    response native-response = status.into_response;
+    if vary
+        name = native-header-name::from_static; 'vary'
+        value = native-header-value::from_static; 'Accept'
+        (response.headers_mut;).append; name, value
     return move response
 
 private function body-byte-length int; text ref string
@@ -269,19 +270,16 @@ private function request-has-accept-header bool; request ref native-request
     return (request.headers;).contains_key; 'accept'
 
 private function request-accept-header string; request ref native-request
-    result string = rust
-        let mut combined = String::new();
-        for value in request.headers().get_all("accept").iter() {
-            for range in value.as_bytes().split(|byte| *byte == b',') {
-                if !range.iter().all(|byte| *byte == b'\t' || (b' '..=b'~').contains(byte)) { continue; }
-                if let Ok(text) = std::str::from_utf8(range) {
-                    if !combined.is_empty() { combined.push(','); }
-                    combined.push_str(text);
-                }
-            }
-        }
-        combined
-    return result
+    combined string = ''
+    name = native-header-name::from_static; 'accept'
+    return (((request.headers;).get_all; move name).iter;).fold; move combined, append-accept-ranges
+
+private function append-accept-ranges string; combined string, header ref native-header-value
+    # Reject malformed ranges independently instead of decoding the whole value.
+    return (header.as_bytes;).append-utf8-ranges; move combined, 44, ',', accept-range-octet
+
+private function accept-range-octet bool; octet uint8
+    return octet == 9 or (octet >= 32 and octet <= 126)
 
 class decoded-text
     value string = ''
@@ -296,6 +294,7 @@ class body-read-result
 # The optional slot makes ownership explicit without reading an owned non-Clone
 # native body directly from inline Rust.
 private async function bounded-body-to-bytes native-bytes throws throwable; body mutable ref (native-body|none), maximum uint64, timeout-ms uint64
+    # Take a non-Clone Body once and keep the native collector's outcome categories.
     result body-read-result = rust
         match body.take() {
             None => BodyReadResult { buffer: ::axum::body::Bytes::new(), failed: false, timed_out: false, limited: false, missing: true },
@@ -322,6 +321,7 @@ class multipart-stage-result
     error-status uint16 = 0
 
 private async function stage-multipart-body multipart-stage-result throws throwable; body mutable ref (native-body|none), content-type ref string, maximum uint64, maximum-parts uint32, timeout-ms uint64
+    # Bridge native streaming output and move both temporary owners into each file.
     result multipart-stage-result = rust
         match body.take() {
             None => MultipartStageResult { form: None, bytes_read: 0, error_status: 400 },
@@ -365,25 +365,31 @@ private async function stage-multipart-body multipart-stage-result throws throwa
     return result
 
 private function body-from-stream native-body; next async function to (string|none) throws throwable, cancel function to none
+    # The native poll-driven body needs the exact async callable ABI and drop hook.
     return rust
         crate::conversions::streaming_body(move || next(), move || cancel())
 
 private function body-from-text native-body; text string
-    return rust
-        crate::conversions::body_from_text(text)
+    return native-body::from; move text
 
 private function metadata-only-body native-body;
+    # HEAD without an explicit length requires an unknown native Body size hint.
     return rust
         crate::conversions::metadata_only_body()
 
 private function buffer-into-text decoded-text; buffer native-bytes
-    return rust
-        match crate::conversions::buffer_into_text(buffer) {
-            Some(value) => DecodedText { value, failed: false },
-            None => DecodedText { value: String::new(), failed: true },
+    octets bytes = (move buffer).into;
+    try
+        text = (move octets).decode; utf8
+        return instance decoded-text; {
+            value = move text
+            failed = false
         }
+    catch decode-error
+        return instance decoded-text;
 
 private function decode-path-component decoded-text; value string
+    # Keep Cow's unchanged branch as the original owned text and reject invalid UTF-8.
     return rust
         match crate::conversions::decode_path_component(value) {
             Some(value) => DecodedText { value, failed: false },

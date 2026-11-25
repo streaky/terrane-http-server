@@ -19,12 +19,14 @@ class shutdown-error implements throwable
 
 class test-controller implements controller
     consuming function routes routes; registered-routes routes
+        # The fixture supplies independently gated native Body frames.
         router native-router = rust
             crate::fixture::router()
         registered-routes.router = router
         return registered-routes
 
 async function shutdown none throws throwable;
+    # The external test process controls the host-time shutdown gate.
     failed bool = rust
         crate::fixture::shutdown().await
     if failed

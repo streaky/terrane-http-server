@@ -198,6 +198,7 @@ private function apply-access-policy native-router; router native-router, direct
     return router.layer; (from-fn; middleware)
 
 # Transfer unique backing into the native accept/drain coordinator.
+# The coordinator retains pinned native connection futures while signalling drain.
 private async function serve-gracefully none throws throwable; listeners mutable ref ((list of native-tcp-listener)|none), router native-router, maximum uint32, shutdown async function to none throws throwable
     failure throwable|none = rust
         crate::shutdown_serving::serve_listeners_until(

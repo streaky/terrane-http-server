@@ -33,16 +33,29 @@ documentation:
         `route-pattern() -> string`, `http-version() -> string`, `scheme() -> string|none`,
         `authority() -> string|none`, `url() -> string|none`, `peer-ip() -> string|none`,
         `client-ip() -> string|none`, and `via-trusted-proxy() -> bool`.
+        `path()` excludes the query and preserves percent escapes. On a mounted route it
+        uses Axum's original URI when available; otherwise it uses the current request URI.
+        `target()` uses the same URI selection, includes the query, and returns `/`
+        if the selected URI has no path and query. `authority()` prefers the current
+        URI's authority and otherwise uses `Host` if its bytes pass the HTTP
+        header text check (ASCII space through `~`, or horizontal tab), not
+        general UTF-8 decoding.
         `header-value(name) -> string|none` returns the first valid text value;
         `header-values(name) -> list of string` returns repeated valid text values.
         Invalid UTF-8 header values are omitted from text accessors but retained by
         `header-bytes(name) -> list of bytes`. `cookie-value(name) -> string|none`
         returns the first matching raw cookie value without URL decoding.
+        The accessors scan borrowed values under one map guard. First-value lookup stops
+        at the first valid text value; the list accessors preserve the order of the
+        values they return. Invalid UTF-8 is never copied into a text result.
 
         `path-value`, `query-value`, `accept-value`, and `json-body` belong to the
         incoming-request transport used by generated adapters and low-level
         `application.route` handlers; they are not request-context methods.
+        `accept-value` keeps the wire order of valid comma-delimited ranges across
+        repeated header values and skips malformed ranges individually.
         `header-byte-count` sums header-name and raw-value bytes, including repetitions.
+        The count traverses borrowed header entries without making a snapshot.
         The request context is an immutable metadata
         snapshot and does not own or buffer the body.
         Header capture retains an owned native header map behind a shared handle, rather
@@ -162,7 +175,7 @@ documentation:
 
         Typed result encoding is performed by generated adapters. YAML emits JSON-compatible scalar quoting. XML uses a `response` root, named fields, wrapped `item` array elements, and `xsi:nil="true"` for null. Invalid XML names and control characters fail rather than producing malformed output.
 
-        Throw `http-error` with a status from 400 through 599 and optional detail text to produce that HTTP error response. The server renders detail as plain text, using the canonical status reason when detail is empty. Malformed payloads fail closed as HTTP 500. Unrelated failures remain HTTP 500 without exposing internal exception details.
+        Throw `http-error` with a status from 400 through 599 and optional detail text to produce that HTTP error response. The server renders detail as plain text. When detail is empty, it uses the canonical status reason, or `HTTP error` if the status has no canonical reason. Malformed payloads fail closed as HTTP 500. Unrelated failures remain HTTP 500 without exposing internal exception details.
 
     - type: example
       id: response-context

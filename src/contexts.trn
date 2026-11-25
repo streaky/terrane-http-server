@@ -1,11 +1,15 @@
 namespace streaky/http-server
 
 from /core/collections import list
-from /core/errors import coercion-error
+from /core/encodings import utf8
+from /core/errors import coercion-error, decode-error
 from /deps/axum-core/extract import Request as native-request
 from /deps/ipnet import IpAddr as ip-addr
-from /deps/axum/extract import MatchedPath as matched-path
+from /deps/axum/extract import MatchedPath as matched-path, OriginalUri as original-uri
 from /deps/http import HeaderMap as native-header-map, HeaderValue as native-header-value
+from /deps/http import HeaderName as native-header-name
+from /deps/http/header import ToStrError as header-text-error
+from /deps/http/uri import Authority as native-authority, PathAndQuery as native-path-and-query
 
 /// Adds optional invocation context without imposing a base class or handler parameters.
 public trait api
@@ -35,10 +39,7 @@ public class request-context
         this.peer = direct-address; request
         this.client = client-address; request
         this.trusted = request-proxy-trust; request
-        # headers() currently projects unapplied HeaderMap, not HeaderMap<HeaderValue>.
-        # Keep this typed snapshot until projected generic defaults unify in source.
-        captured native-header-map of native-header-value = rust
-            request.headers().clone()
+        captured native-header-map of native-header-value = (request.headers;).clone;
         this.headers = shared ref captured
         this.origin-authority = request-authority; request
         this.origin-scheme = 'http'
@@ -117,21 +118,42 @@ private function request-method string; request ref native-request
     return (request.method;).as_str;
 
 private function address-text string; address ip-addr
-    value string = rust
+    # Projection does not expose Display formatting for this native IpAddr.
+    return rust
         address.to_string()
-    return value
 
 private function request-target string; request ref native-request
-    value string = rust
-        let uri = request.extensions().get::<::axum::extract::OriginalUri>().map(|v| &v.0).unwrap_or(request.uri());
-        uri.path_and_query().map(|v| v.as_str()).unwrap_or("/").to_owned()
-    return value
+    target string|none = request.extensions;
+        .get of original-uri;
+        .map; original-uri-target
+    if target != none
+        return move target
+    current string|none = (request.uri;).path_and_query;
+        .map; path-and-query-text
+    if current != none
+        return move current
+    return '/'
+
+private function original-uri-target string; original ref original-uri
+    target string|none = (original.n0).path_and_query;
+        .map; path-and-query-text
+    if target != none
+        return move target
+    return '/'
+
+private function path-and-query-text string; path-and-query ref native-path-and-query
+    return path-and-query.as_str;
 
 private function request-path string; request ref native-request
-    value string = rust
-        let uri = request.extensions().get::<::axum::extract::OriginalUri>().map(|v| &v.0).unwrap_or(request.uri());
-        uri.path().to_owned()
-    return value
+    path string|none = request.extensions;
+        .get of original-uri;
+        .map; original-uri-path
+    if path != none
+        return move path
+    return (request.uri;).path;
+
+private function original-uri-path string; original ref original-uri
+    return (original.n0).path;
 
 private function request-route-pattern string; request ref native-request, fallback string
     matched string|none = request.extensions;
@@ -145,26 +167,27 @@ private function matched-path-text string; value ref matched-path
     return value.as_str;
 
 private function request-version string; request ref native-request
+    # Preserve the native Debug spelling until projected Version formatting is available.
     value string = rust
         format!("{:?}", request.version())
     return value
 
-class optional-text
-    value string = ''
-    present bool = false
-
 private function request-authority string|none; request ref native-request
-    decoded optional-text = rust
-        let value = request.uri().authority().map(|v| v.as_str().to_owned()).or_else(|| {
-            request.headers().get("host").and_then(|v| v.to_str().ok()).map(str::to_owned)
-        });
-        match value {
-            Some(value) => OptionalText { value, present: true },
-            None => OptionalText { value: String::new(), present: false },
-        }
-    if decoded.present
-        return decoded.value
-    return none
+    authority string|none = (request.uri;).authority;
+        .map; authority-text
+    if authority != none
+        return move authority
+    return (request.headers;).get; 'host'
+        .and_then; decode-host
+
+private function authority-text string; authority ref native-authority
+    return authority.as_str;
+
+private function decode-host string|none; value ref native-header-value
+    try
+        return value.to_str;
+    catch header-text-error
+        return none
 
 private function request-proxy-trust bool; request ref native-request
     return request-proxy-metadata-trusted; request
@@ -173,27 +196,22 @@ private function request-proxy-trust bool; request ref native-request
 # Borrow the native map under the shared handle's short-lived guard, not a clone.
 # A source `ref` to this shared native value currently lowers to Weak, not &HeaderMap.
 private function read-header-bytes list of bytes; headers shared ref (native-header-map of native-header-value), name ref string
-    values list of bytes = rust
-        let headers = headers.lock().expect("shared reference lock poisoned");
-        terrane_collection_support::List::new(headers.get_all(name.as_str()).iter().map(|value| value.as_bytes().to_vec()).collect())
-    return values
+    return ((headers.get_all; name).iter;).map_collect; copy-header-bytes
 
 private function read-header-values list of string; headers shared ref (native-header-map of native-header-value), name ref string
-    values list of string = rust
-        let headers = headers.lock().expect("shared reference lock poisoned");
-        terrane_collection_support::List::new(headers.get_all(name.as_str()).iter().filter_map(|value| std::str::from_utf8(value.as_bytes()).ok().map(str::to_owned)).collect())
-    return values
+    return ((headers.get_all; name).iter;).filter_map_collect; decode-header-text
+
+private function copy-header-bytes bytes; header ref native-header-value
+    return header.as_bytes;
 
 private function read-header-value string|none; headers shared ref (native-header-map of native-header-value), name ref string
-    decoded optional-text = rust
-        let headers = headers.lock().expect("shared reference lock poisoned");
-        match headers.get_all(name.as_str()).iter().find_map(|value| std::str::from_utf8(value.as_bytes()).ok()) {
-            Some(value) => OptionalText { value: value.to_owned(), present: true },
-            None => OptionalText { value: String::new(), present: false },
-        }
-    if decoded.present
-        return decoded.value
-    return none
+    return ((headers.get_all; name).iter;).find_map; decode-header-text
+
+private function decode-header-text string|none; header ref native-header-value
+    try
+        return (header.as_bytes;).decode; utf8
+    catch decode-error
+        return none
 
 # Split only outside quoted Forwarded parameter values. Unsupported quoted-pair
 # escapes fail closed rather than treating their punctuation as trusted metadata.
@@ -264,10 +282,12 @@ private function forwarded-scheme string|none; context request-context
     return none
 
 private function count-header-bytes int; headers shared ref (native-header-map of native-header-value)
-    result int = rust
-        let headers = headers.lock().expect("shared reference lock poisoned");
-        let count = headers.iter().fold(0usize, |total, (name, value)| {
-            total.saturating_add(name.as_str().len()).saturating_add(value.as_bytes().len())
-        });
-        (count as i128).into()
-    return result
+    initial uint64 = 0
+    total uint64 = (headers.iter;).fold; initial, add-header-bytes
+    return total
+
+private function add-header-bytes uint64; total uint64, name ref native-header-name, value ref native-header-value
+    name-length uint64 = (name.as_str;).bytes.length
+    value-length uint64 = (value.as_bytes;).length
+    subtotal = total.add.saturate; name-length
+    return subtotal.add.saturate; value-length

@@ -1,9 +1,8 @@
 //! Streaming multipart decoding and private temporary-file staging.
 //!
-//! Terrane does not currently expose a source-level streaming multipart field
-//! parser or private tempfile ownership API. This module owns that host boundary;
-//! request policy and surfaced errors remain in `internal/request.trn`. Remove it
-//! when those streaming and TempPath/TempDir ownership operations are expressible.
+//! Multer's field stream writes through the descriptor from exclusive creation.
+//! Keep the projected tempfile owners until core exposes both that descriptor
+//! and a supported way to transfer cleanup without reopening a path.
 
 use axum::body::{Body, Bytes};
 use futures_util::{Stream, StreamExt};

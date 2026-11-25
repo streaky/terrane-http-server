@@ -12,6 +12,7 @@ async function upload wire-response throws throwable; request incoming-request
     return encoded-response; 200, 'text/plain', ('' + form.parts.length)
 
 function log-observation; event string
+    # Preserve the fixture's synchronous stderr line for the external observer test.
     rust
         eprintln!("observer {event}");
 
@@ -66,6 +67,7 @@ async function read-body wire-response throws throwable; request incoming-reques
     return encoded-response; 200, 'text/plain', 'read'
 
 private async function cancel-idle-receive bool; session mutable ref websocket-session, subscription mutable ref websocket-subscription
+    # Drop a pending receive under a real native timeout without losing either owner.
     return rust
         ::tokio::time::timeout(
             std::time::Duration::from_millis(10), session.receive_managed(subscription),

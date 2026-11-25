@@ -1,6 +1,7 @@
 namespace streaky/http-server/internal
 
 from /deps/axum-core/body import Body as native-body
+from /deps/axum/body import Bytes as native-bytes
 from /deps/axum-core/extract import Request as native-request
 from /deps/http/request import Builder as request-builder
 from /core/testing import assert-equal-bool, assert-equal-string, assert-equal-int
@@ -38,6 +39,17 @@ async function test-request-decodes-a-json-body throws throwable;
     assert-equal-bool; quantity.failed, false
     assert-equal-string; quantity.value.kind, 'integer'
     assert-equal-string; quantity.value.scalar, '3'
+
+async function test-request-rejects-invalid-utf8-body throws throwable;
+    invalid = native-bytes::from; b'{}\xff'
+    native = native-request::new; (native-body::from; move invalid)
+    request = instance incoming-request; move native, '/'
+    failed bool = false
+    try
+        await request.json-body;
+    catch coercion-error
+        failed = true
+    assert-equal-bool; failed, true
 
 async function test-request-rejects-malformed-json;
     native = native-request::new; (body-from-text; '{broken')
@@ -99,6 +111,8 @@ async function test-body-read-over-limit-keeps-limit-error;
     assert-equal-bool; limited, true
 
 private function failing-body native-body;
+    # Inject a native stream error rather than returning a large successful body.
+    # The test needs a projected error item and an Axum body-stream constructor.
     return rust
         ::axum::body::Body::from_stream(::futures_util::stream::once(async {
             Err::<::axum::body::Bytes, std::io::Error>(std::io::Error::other("test body failure"))
@@ -190,6 +204,7 @@ function test-missing-and-empty-accept-headers-have-distinct-preferences throws 
     assert-equal-string; (select-response-format; (empty.accept-value;), (list; 'json', 'yaml'), 'yaml'), ''
 
 private function mixed-byte-accept-request native-request; exclude bool
+    # Construct a header with native obs-text amid valid Accept ranges.
     request native-request = rust
         let source: &[u8] = if exclude {
             b"application/json;q=0, text/\xe9, */*;q=1"
@@ -197,15 +212,21 @@ private function mixed-byte-accept-request native-request; exclude bool
             b"application/json, text/\xe9"
         };
         let accept = ::http::HeaderValue::from_bytes(source).expect("valid raw HTTP header bytes");
-        ::http::Request::builder().header("accept", accept).body(::axum::body::Body::empty()).expect("request")
+        ::http::Request::builder().header("accept", accept).header("accept", ", application/yaml;q=0.2,").body(::axum::body::Body::empty()).expect("request")
     return move request
 
 function test-invalid-byte-range-does-not-hide-valid-ranges-or-exclusions throws throwable;
     for exclude in (list; false, true)
         request = instance incoming-request; (mixed-byte-accept-request; exclude), '/'
         expected = 'json'
+        expected-raw = 'application/json,, application/yaml;q=0.2,'
         if exclude
             expected = 'yaml'
+            expected-raw = 'application/json;q=0, */*;q=1,, application/yaml;q=0.2,'
+        raw = request.accept-value;
+        assert-equal-bool; raw != none, true
+        if raw != none
+            assert-equal-string; raw, expected-raw
         assert-equal-string; (select-response-format; (request.accept-value;), (list; 'json', 'yaml'), 'json'), expected
 
 async function test-multipart-stages-fields-and-files-in-wire-order throws throwable;
@@ -230,6 +251,8 @@ async function test-multipart-stages-fields-and-files-in-wire-order throws throw
         path = file.claim;
         includes-client-name = (path.contains; 'unsafe.txt')
         assert-equal-bool; includes-client-name, false
+        # Clean up only the claimed file and its immediate host parent. The
+        # source path-parent helper normalizes path components before removal.
         cleaned bool = rust
             let path = std::path::Path::new(path.as_str());
             let content = std::fs::read(path);
@@ -239,6 +262,7 @@ async function test-multipart-stages-fields-and-files-in-wire-order throws throw
         assert-equal-bool; cleaned, true
 
 private function upload-with-non-utf8-path uploaded-file;
+    # Source paths cannot represent the non-UTF-8 Unix filename this test needs.
     return rust
         use std::{ffi::OsStr, os::unix::ffi::OsStrExt as _};
         let directory = ::tempfile::tempdir().unwrap();
@@ -252,6 +276,7 @@ private function upload-with-non-utf8-path uploaded-file;
         }
 
 private function upload-still-staged bool; file ref uploaded-file
+    # Inspect both native cleanup owners after rejection, before either is dropped.
     return rust
         file.temporary.as_ref().is_some_and(|path| path.is_file()) &&
             file.directory.as_ref().is_some_and(|directory| directory.path().is_dir())
